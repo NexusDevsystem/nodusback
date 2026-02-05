@@ -9,19 +9,19 @@ import leadRoutes from './routes/leadRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-const corsOptions = {
-    origin: [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        'https://noduscc.com',
-        'https://www.noduscc.com'
-    ],
+// Middleware - Temporarily allow all origins for debugging
+app.use(cors({
+    origin: true, // Allow all origins temporarily
     credentials: true,
     optionsSuccessStatus: 200
-};
-app.use(cors(corsOptions));
+}));
 app.use(express.json({ limit: '50mb' })); // Increased limit for base64 images
+
+// Logging middleware
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path} - Origin: ${req.get('origin')}`);
+    next();
+});
 
 // Routes
 app.use('/api/profile', profileRoutes);
