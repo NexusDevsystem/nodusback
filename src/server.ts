@@ -10,7 +10,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://noduscc.com',
+        'https://www.noduscc.com'
+    ],
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' })); // Increased limit for base64 images
 
 // Routes
