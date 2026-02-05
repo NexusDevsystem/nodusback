@@ -9,17 +9,19 @@ import leadRoutes from './routes/leadRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware - Temporarily allow all origins for debugging
+// CORS Configuration - Allow all for now, restrict later if needed
 app.use(cors({
-    origin: true, // Allow all origins temporarily
-    credentials: true,
-    optionsSuccessStatus: 200
+    origin: '*', // Allow ALL origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false // Changed to false when using wildcard
 }));
-app.use(express.json({ limit: '50mb' })); // Increased limit for base64 images
 
-// Logging middleware
+app.use(express.json({ limit: '50mb' }));
+
+// Request logging
 app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path} - Origin: ${req.get('origin')}`);
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
 
@@ -35,11 +37,18 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Nodus Backend API',
+        version: '1.0.0',
+        endpoints: ['/health', '/api/profile', '/api/links', '/api/products', '/api/analytics', '/api/leads']
+    });
+});
+
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 Nodus Backend API running on port ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
-    if (process.env.RAILWAY_STATIC_URL) {
-        console.log(`🌐 Production URL: https://${process.env.RAILWAY_STATIC_URL}`);
-    }
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
