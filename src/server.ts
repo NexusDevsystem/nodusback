@@ -27,6 +27,9 @@ app.get('/health', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`🚀 Nodus Backend API running on http://localhost:${PORT}`);
+    console.log(`🚀 Nodus Backend API running on port ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    if (process.env.RAILWAY_STATIC_URL) {
+        console.log(`🌐 Production URL: https://${process.env.RAILWAY_STATIC_URL}`);
+    }
 });
