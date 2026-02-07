@@ -1,7 +1,8 @@
 import Stripe from 'stripe';
 import 'dotenv/config';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+const stripeKey = (process.env.STRIPE_SECRET_KEY || '').trim();
+const stripe = new Stripe(stripeKey, {
     apiVersion: '2023-10-16' as any
 });
 
