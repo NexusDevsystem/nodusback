@@ -1,46 +1,112 @@
-import { db } from '../config/database.js';
-import { Product } from '../models/types.js';
-import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../config/supabaseClient.js';
+import { Product, ProductDB, productDbToApi, productApiToDb } from '../models/types.js';
 
 export const productService = {
-    async getAllProducts(): Promise<Product[]> {
-        await db.read();
-        return db.data.products;
+    // Get all products for a profile (by user_id)
+    async getProductsByProfileId(userId: string): Promise<Product[]> {
+        const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('user_id', userId)  // FK to users(id)
+            .order('position', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching products:', error);
+            return [];
+        }
+
+        const dbProducts = data as ProductDB[];
+        return dbProducts.map(db => productDbToApi(db));
     },
 
-    async createProduct(product: Omit<Product, 'id'>): Promise<Product> {
-        await db.read();
-        const newProduct: Product = {
-            ...product,
-            id: uuidv4()
-        };
-        db.data.products.push(newProduct);
-        await db.write();
-        return newProduct;
+    // Create a new product
+    async createProduct(userId: string, product: Omit<Product, 'id'>): Promise<Product | null> {
+        const dbProduct = productApiToDb(product, userId);
+
+        const { data, error } = await supabase
+            .from('products')
+            .insert(dbProduct)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error creating product:', error);
+            return null;
+        }
+
+        return productDbToApi(data as ProductDB);
     },
 
-    async updateProduct(id: string, updates: Partial<Product>): Promise<Product | null> {
-        await db.read();
-        const index = db.data.products.findIndex(p => p.id === id);
-        if (index === -1) return null;
+    // Update a product
+    async updateProduct(productId: string, updates: Partial<Product>): Promise<Product | null> {
+        const dbUpdates: Partial<ProductDB> = {};
+        if (updates.name !== undefined) dbUpdates.name = updates.name;
+        if (updates.price !== undefined) dbUpdates.price = updates.price;
+        if (updates.image !== undefined) dbUpdates.image = updates.image;
+        if (updates.url !== undefined) dbUpdates.url = updates.url;
+        if (updates.discountCode !== undefined) dbUpdates.discount_code = updates.discountCode;
 
-        db.data.products[index] = { ...db.data.products[index], ...updates };
-        await db.write();
-        return db.data.products[index];
+        const { data, error } = await supabase
+            .from('products')
+            .update(dbUpdates)
+            .eq('id', productId)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error updating product:', error);
+            return null;
+        }
+
+        return productDbToApi(data as ProductDB);
     },
 
-    async deleteProduct(id: string): Promise<boolean> {
-        await db.read();
-        const initialLength = db.data.products.length;
-        db.data.products = db.data.products.filter(p => p.id !== id);
-        await db.write();
-        return db.data.products.length < initialLength;
+    // Delete a product
+    async deleteProduct(productId: string): Promise<boolean> {
+        const { error } = await supabase
+            .from('products')
+            .delete()
+            .eq('id', productId);
+
+        if (error) {
+            console.error('Error deleting product:', error);
+            return false;
+        }
+
+        return true;
     },
 
-    async replaceAllProducts(products: Product[]): Promise<Product[]> {
-        await db.read();
-        db.data.products = products;
-        await db.write();
-        return db.data.products;
+    // Replace all products for a profile (bulk update)
+    async replaceAllProducts(userId: string, products: Product[]): Promise<Product[]> {
+        try {
+            // Delete existing products
+            await supabase
+                .from('products')
+                .delete()
+                .eq('user_id', userId);  // FK to users(id)
+
+            if (products.length === 0) return [];
+
+            // Insert new products with position
+            const dbProducts = products.map((product, index) => ({
+                ...productApiToDb(product, userId),
+                position: index
+            }));
+
+            const { data, error } = await supabase
+                .from('products')
+                .insert(dbProducts)
+                .select();
+
+            if (error) {
+                console.error('Error inserting products in bulk:', error);
+                return [];
+            }
+
+            return (data as ProductDB[]).map(db => productDbToApi(db));
+        } catch (err) {
+            console.error('Unexpected error in replaceAllProducts:', err);
+            return [];
+        }
     }
 };

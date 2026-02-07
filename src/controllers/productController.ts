@@ -1,56 +1,113 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { productService } from '../services/productService.js';
+import { AuthRequest } from '../middleware/authMiddleware.js';
+import { supabase } from '../config/supabaseClient.js';
 
 export const productController = {
-    async getAllProducts(req: Request, res: Response) {
+    // Get all products for authenticated user
+    async getMyProducts(req: AuthRequest, res: Response) {
         try {
-            const products = await productService.getAllProducts();
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const products = await productService.getProductsByProfileId(req.profileId);
             res.json(products);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch products' });
         }
     },
 
-    async createProduct(req: Request, res: Response) {
+    // Get products by username (public access)
+    async getProductsByUsername(req: AuthRequest, res: Response) {
         try {
-            const product = await productService.createProduct(req.body);
+            const { username } = req.params;
+
+            // First get the profile to get user_id
+            const { data: profile } = await supabase
+                .from('users')
+                .select('id')
+                .eq('username', username)
+                .single();
+
+            if (!profile) {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+
+            const products = await productService.getProductsByProfileId(profile.id);
+            res.json(products);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch products' });
+        }
+    },
+
+    // Create a new product
+    async createProduct(req: AuthRequest, res: Response) {
+        try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const product = await productService.createProduct(req.profileId, req.body);
+
+            if (!product) {
+                return res.status(500).json({ error: 'Failed to create product' });
+            }
+
             res.status(201).json(product);
         } catch (error) {
             res.status(500).json({ error: 'Failed to create product' });
         }
     },
 
-    async updateProduct(req: Request, res: Response) {
+    // Update a product
+    async updateProduct(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
             const product = await productService.updateProduct(id, req.body);
+
             if (!product) {
                 return res.status(404).json({ error: 'Product not found' });
             }
+
             res.json(product);
         } catch (error) {
             res.status(500).json({ error: 'Failed to update product' });
         }
     },
 
-    async deleteProduct(req: Request, res: Response) {
+    // Delete a product
+    async deleteProduct(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
             const deleted = await productService.deleteProduct(id);
+
             if (!deleted) {
                 return res.status(404).json({ error: 'Product not found' });
             }
+
             res.status(204).send();
         } catch (error) {
             res.status(500).json({ error: 'Failed to delete product' });
         }
     },
 
-    async replaceAllProducts(req: Request, res: Response) {
+    // Replace all products (bulk update)
+    async replaceAllProducts(req: AuthRequest, res: Response) {
         try {
-            const products = await productService.replaceAllProducts(req.body);
-            res.json(products);
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const { products } = req.body;
+            if (!Array.isArray(products)) {
+                return res.status(400).json({ error: 'Invalid request: products must be an array' });
+            }
+
+            const savedProducts = await productService.replaceAllProducts(req.profileId, products);
+            res.json(savedProducts);
         } catch (error) {
+            console.error('Error replacing products:', error);
             res.status(500).json({ error: 'Failed to replace products' });
         }
     }

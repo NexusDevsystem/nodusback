@@ -1,31 +1,55 @@
-import { db } from '../config/database.js';
+import { supabase } from '../config/supabaseClient.js';
 import { NewsletterLead } from '../models/types.js';
-import { v4 as uuidv4 } from 'uuid';
 
 export const leadService = {
-    async getAllLeads(): Promise<NewsletterLead[]> {
-        await db.read();
-        return db.data.leads;
+    // Get all leads for a profile (by user_id)
+    async getLeadsByProfileId(userId: string): Promise<NewsletterLead[]> {
+        const { data, error } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('user_id', userId)  // FK to users(id)
+            .order('timestamp', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching leads:', error);
+            return [];
+        }
+
+        return (data || []) as NewsletterLead[];
     },
 
-    async createLead(email: string, name?: string): Promise<NewsletterLead> {
-        await db.read();
-        const newLead: NewsletterLead = {
-            id: uuidv4(),
-            email,
-            name,
-            timestamp: new Date().toISOString()
-        };
-        db.data.leads.push(newLead);
-        await db.write();
-        return newLead;
+    // Create a new lead
+    async createLead(userId: string, email: string, name?: string): Promise<NewsletterLead | null> {
+        const { data, error } = await supabase
+            .from('leads')
+            .insert({
+                user_id: userId,
+                email,
+                name,
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error creating lead:', error);
+            return null;
+        }
+
+        return data as NewsletterLead;
     },
 
-    async deleteLead(id: string): Promise<boolean> {
-        await db.read();
-        const initialLength = db.data.leads.length;
-        db.data.leads = db.data.leads.filter(l => l.id !== id);
-        await db.write();
-        return db.data.leads.length < initialLength;
+    // Delete a lead
+    async deleteLead(leadId: string): Promise<boolean> {
+        const { error } = await supabase
+            .from('newsletter_leads')
+            .delete()
+            .eq('id', leadId);
+
+        if (error) {
+            console.error('Error deleting lead:', error);
+            return false;
+        }
+
+        return true;
     }
 };

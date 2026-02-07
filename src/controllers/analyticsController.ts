@@ -1,18 +1,22 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { analyticsService } from '../services/analyticsService.js';
 import { linkService } from '../services/linkService.js';
+import { AuthRequest } from '../middleware/authMiddleware.js';
 
 export const analyticsController = {
-    async getAllAnalytics(req: Request, res: Response) {
+    async getAllAnalytics(req: AuthRequest, res: Response) {
         try {
-            const analytics = await analyticsService.getAllAnalytics();
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+            const analytics = await analyticsService.getAnalyticsByProfileId(req.profileId);
             res.json(analytics);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch analytics' });
         }
     },
 
-    async trackClick(req: Request, res: Response) {
+    async trackClick(req: AuthRequest, res: Response) {
         try {
             const { linkId } = req.body;
             if (!linkId) {
@@ -20,7 +24,7 @@ export const analyticsController = {
             }
 
             // Track in analytics
-            await analyticsService.trackClick(linkId);
+            await analyticsService.trackClick(req.profileId || '', linkId);
 
             // Increment link clicks
             await linkService.incrementClicks(linkId);
