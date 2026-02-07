@@ -1,7 +1,20 @@
 import Stripe from 'stripe';
 import 'dotenv/config';
 
-const stripeKey = (process.env.STRIPE_SECRET_KEY || '').trim();
+const getCleanedKey = (key: string) => {
+    let cleaned = (key || '').trim();
+    // Remove accidental '=' prefix often caused by copy-pasting from .env files
+    if (cleaned.startsWith('=')) {
+        cleaned = cleaned.substring(1).trim();
+    }
+    // Remove accidental variable name prefix if present
+    if (cleaned.startsWith('STRIPE_SECRET_KEY=')) {
+        cleaned = cleaned.replace('STRIPE_SECRET_KEY=', '').trim();
+    }
+    return cleaned;
+};
+
+const stripeKey = getCleanedKey(process.env.STRIPE_SECRET_KEY || '');
 const stripe = new Stripe(stripeKey, {
     apiVersion: '2023-10-16' as any
 });
