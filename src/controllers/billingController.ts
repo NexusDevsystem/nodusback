@@ -109,18 +109,29 @@ export const billingController = {
 
                 if (userId && planId) {
                     console.log(`Final identified user: ${userId}, plan: ${planId}`);
+
+                    // Calculate expiry date
+                    const expiryDate = new Date();
+                    if (planId === 'monthly') {
+                        expiryDate.setDate(expiryDate.getDate() + 30);
+                    } else if (planId === 'annual') {
+                        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+                    }
+
                     const updated = await profileService.updateProfile(userId, {
                         planType: planId as any,
                         subscriptionStatus: 'active',
-                        stripeCustomerId: session.customer as string
+                        stripeCustomerId: session.customer as string,
+                        subscriptionExpiryDate: expiryDate.toISOString()
                     });
+
                     if (updated) {
-                        console.log('Profile updated successfully.');
+                        console.log(`SUCCESS: Profile ${userId} upgraded to ${planId}. Expiry: ${expiryDate.toISOString()}`);
                     } else {
-                        console.error('Failed to update profile.');
+                        console.error(`DATABASE ERROR: Failed to update profile ${userId} to ${planId}`);
                     }
                 } else {
-                    console.warn(`Webhook ignored: Could not identify User (${userId}) or Plan (${planId})`);
+                    console.warn(`WEBHOOK IGNORED: Could not identify User (${userId}) or Plan (${planId})`);
                 }
                 break;
             }
