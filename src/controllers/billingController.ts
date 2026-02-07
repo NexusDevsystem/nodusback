@@ -157,5 +157,50 @@ export const billingController = {
         }
 
         res.json({ received: true });
+    },
+
+    async createPortalSession(req: AuthRequest, res: Response) {
+        try {
+            const userId = req.userId;
+            if (!userId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const profile = await profileService.getProfileByUserId(userId);
+            if (!profile || !profile.stripeCustomerId) {
+                return res.status(400).json({ error: 'Nenhuma assinatura ativa encontrada' });
+            }
+
+            const session = await stripeService.createPortalSession(
+                profile.stripeCustomerId,
+                `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin`
+            );
+
+            res.json({ url: session.url });
+        } catch (error: any) {
+            console.error('Stripe Portal Error:', error);
+            res.status(500).json({ error: error.message || 'Falha ao criar sessão do portal' });
+        }
+    },
+
+    async getInvoices(req: AuthRequest, res: Response) {
+        try {
+            const userId = req.userId;
+            if (!userId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const profile = await profileService.getProfileByUserId(userId);
+            if (!profile || !profile.stripeCustomerId) {
+                // If no stripe customer, return empty list instead of error for cleaner UI
+                return res.json({ data: [] });
+            }
+
+            const invoices = await stripeService.listInvoices(profile.stripeCustomerId);
+            res.json(invoices);
+        } catch (error: any) {
+            console.error('Fetch Invoices Error:', error);
+            res.status(500).json({ error: error.message || 'Falha ao buscar faturas' });
+        }
     }
 };

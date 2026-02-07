@@ -58,5 +58,19 @@ export const stripeService = {
         return stripe.checkout.sessions.retrieve(sessionId, {
             expand: ['line_items']
         });
+    },
+
+    async createPortalSession(customerId: string, returnUrl: string) {
+        return stripe.billingPortal.sessions.create({
+            customer: customerId,
+            return_url: returnUrl,
+        });
+    },
+
+    async listInvoices(customerId: string) {
+        return stripe.invoices.list({
+            customer: customerId,
+            limit: 12
+        });
     }
 };
