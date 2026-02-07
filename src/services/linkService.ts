@@ -96,6 +96,7 @@ export const linkService = {
         if (updates.type !== undefined) dbUpdates.type = updates.type;
         if (updates.highlight !== undefined) dbUpdates.highlight = updates.highlight;
         if (updates.embedType !== undefined) dbUpdates.embed_type = updates.embedType;
+        if (updates.subtitle !== undefined) dbUpdates.subtitle = updates.subtitle;
 
         const { data, error } = await supabase
             .from('links')

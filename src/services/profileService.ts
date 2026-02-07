@@ -34,6 +34,38 @@ export const profileService = {
         return dbToApi(data as UserProfileDB);
     },
 
+    // Get profile by email
+    async getProfileByEmail(email: string): Promise<UserProfile | null> {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching profile by email:', error);
+            return null;
+        }
+
+        return data ? dbToApi(data as UserProfileDB) : null;
+    },
+
+    // Get profile by stripe_customer_id
+    async getProfileByStripeCustomerId(customerId: string): Promise<UserProfile | null> {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('stripe_customer_id', customerId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching profile by stripe_customer_id:', error);
+            return null;
+        }
+
+        return data ? dbToApi(data as UserProfileDB) : null;
+    },
+
     // Update profile
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
         const dbUpdates = apiToDb(updates);

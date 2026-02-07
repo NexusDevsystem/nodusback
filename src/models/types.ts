@@ -11,6 +11,8 @@ export interface UserProfileDB {
     subscription_status?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
     subscription_expiry_date?: string | null;
     stripe_customer_id?: string | null;
+    tax_id?: string | null;
+    cellphone?: string | null;
     theme_id: string;
     font_family: string;
     button_style?: 'rounded' | 'soft-rect';
@@ -36,6 +38,7 @@ export interface LinkItemDB {
     type?: string;
     highlight?: string;
     embed_type?: string;
+    subtitle?: string;
     position?: number;
     created_at?: string;
     updated_at?: string;
@@ -85,6 +88,8 @@ export interface UserProfile {
     subscriptionStatus?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
     subscriptionExpiryDate?: string | null;
     stripeCustomerId?: string | null;
+    taxId?: string | null;
+    cellphone?: string | null;
     themeId: string;
     fontFamily: string;
     buttonStyle?: 'rounded' | 'soft-rect';
@@ -105,7 +110,8 @@ export interface LinkItem {
     type?: 'link' | 'collection';
     children?: LinkItem[];
     highlight?: 'none' | 'pulse' | 'bounce' | 'shake' | 'glow' | 'wobble';
-    embedType?: 'none' | 'youtube' | 'spotify';
+    embedType?: 'none' | 'youtube' | 'spotify' | 'deezer';
+    subtitle?: string;
 }
 
 export interface Product {
@@ -131,6 +137,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         subscriptionStatus: dbProfile.subscription_status,
         subscriptionExpiryDate: dbProfile.subscription_expiry_date,
         stripeCustomerId: dbProfile.stripe_customer_id,
+        taxId: dbProfile.tax_id,
+        cellphone: dbProfile.cellphone,
         themeId: dbProfile.theme_id,
         fontFamily: dbProfile.font_family,
         buttonStyle: dbProfile.button_style,
@@ -154,6 +162,8 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.subscriptionStatus !== undefined) dbProfile.subscription_status = apiProfile.subscriptionStatus;
     if (apiProfile.subscriptionExpiryDate !== undefined) dbProfile.subscription_expiry_date = apiProfile.subscriptionExpiryDate;
     if (apiProfile.stripeCustomerId !== undefined) dbProfile.stripe_customer_id = apiProfile.stripeCustomerId;
+    if (apiProfile.taxId !== undefined) dbProfile.tax_id = apiProfile.taxId;
+    if (apiProfile.cellphone !== undefined) dbProfile.cellphone = apiProfile.cellphone;
     if (apiProfile.themeId !== undefined) dbProfile.theme_id = apiProfile.themeId;
     if (apiProfile.fontFamily !== undefined) dbProfile.font_family = apiProfile.fontFamily;
     if (apiProfile.buttonStyle !== undefined) dbProfile.button_style = apiProfile.buttonStyle;
@@ -177,7 +187,8 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         layout: db.layout as any,
         type: db.type as any,
         highlight: db.highlight as any,
-        embedType: db.embed_type as any
+        embedType: db.embed_type as any,
+        subtitle: db.subtitle
     };
 }
 
@@ -192,7 +203,8 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         layout: api.layout,
         type: api.type,
         highlight: api.highlight,
-        embed_type: api.embedType
+        embed_type: api.embedType,
+        subtitle: api.subtitle
     };
 
     // IMPORTANT: Do NOT include the id field here

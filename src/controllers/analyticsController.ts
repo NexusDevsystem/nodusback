@@ -16,6 +16,19 @@ export const analyticsController = {
         }
     },
 
+    async getSummary(req: AuthRequest, res: Response) {
+        try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+            const summary = await analyticsService.getAnalyticsSummary(req.profileId);
+            res.json(summary);
+        } catch (error) {
+            console.error('Summary error:', error);
+            res.status(500).json({ error: 'Failed to fetch analytics summary' });
+        }
+    },
+
     async trackClick(req: AuthRequest, res: Response) {
         try {
             const { linkId } = req.body;
@@ -32,6 +45,23 @@ export const analyticsController = {
             res.status(201).json({ success: true });
         } catch (error) {
             res.status(500).json({ error: 'Failed to track click' });
+        }
+    },
+
+    async trackView(req: AuthRequest, res: Response) {
+        try {
+            const { profileId } = req.body;
+            if (!profileId) {
+                return res.status(400).json({ error: 'profileId is required' });
+            }
+
+            await analyticsService.trackView(profileId, {
+                ua: req.headers['user-agent']
+            });
+
+            res.status(201).json({ success: true });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to track view' });
         }
     }
 };
