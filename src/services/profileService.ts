@@ -91,6 +91,11 @@ export const profileService = {
         const dbData = apiToDb(profileData);
         dbData.id = userId;
 
+        // Default settings
+        if (dbData.show_newsletter === undefined) {
+            dbData.show_newsletter = false;
+        }
+
         const { data, error } = await supabase
             .from('users')
             .insert(dbData)
