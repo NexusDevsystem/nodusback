@@ -22,6 +22,7 @@ export interface UserProfileDB {
     custom_solid_color?: string;
     custom_button_color?: string;
     is_verified?: boolean;
+    enable_blur?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -100,6 +101,7 @@ export interface UserProfile {
     customSolidColor?: string;
     customButtonColor?: string;
     isVerified?: boolean;
+    enableBlur?: boolean;
 }
 
 export interface LinkItem {
@@ -150,6 +152,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         customSolidColor: dbProfile.custom_solid_color,
         customButtonColor: dbProfile.custom_button_color,
         isVerified: !!(dbProfile.is_verified || (dbProfile.username && dbProfile.username.trim().toLowerCase() === 'noduscc') || (dbProfile.name && dbProfile.name.trim().toLowerCase() === 'nodus.cc')),
+        enableBlur: dbProfile.enable_blur
     };
 }
 
@@ -177,6 +180,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.customButtonColor !== undefined) dbProfile.custom_button_color = apiProfile.customButtonColor;
     if (apiProfile.username !== undefined) dbProfile.username = apiProfile.username;
     if (apiProfile.isVerified !== undefined) dbProfile.is_verified = apiProfile.isVerified;
+    if (apiProfile.enableBlur !== undefined) dbProfile.enable_blur = apiProfile.enableBlur;
 
     return dbProfile;
 }
