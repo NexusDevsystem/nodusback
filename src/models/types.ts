@@ -125,6 +125,7 @@ export interface Product {
     image: string;
     url: string;
     discountCode?: string;
+    collection?: string;
 }
 
 // Mapping Functions
@@ -223,9 +224,13 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
 }
 
 export function productDbToApi(db: ProductDB): Product {
+    const nameParts = db.name.split('||');
+    const hasCollection = nameParts.length > 1;
+
     return {
         id: db.id || '',
-        name: db.name,
+        name: hasCollection ? nameParts[1].trim() : db.name,
+        collection: hasCollection ? nameParts[0].trim() : undefined,
         price: db.price,
         image: db.image,
         url: db.url,
@@ -234,9 +239,13 @@ export function productDbToApi(db: ProductDB): Product {
 }
 
 export function productApiToDb(api: Partial<Product>, userId: string): Partial<ProductDB> {
+    const dbName = api.collection
+        ? `${api.collection} || ${api.name}`
+        : api.name;
+
     return {
         user_id: userId,  // FK to users(id)
-        name: api.name,
+        name: dbName,
         price: api.price,
         image: api.image,
         url: api.url,
