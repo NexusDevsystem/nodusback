@@ -115,6 +115,16 @@ export const linkService = {
 
     // Delete a link
     async deleteLink(linkId: string): Promise<boolean> {
+        // Manually cascade delete clicks
+        const { error: clicksError } = await supabase
+            .from('clicks')
+            .delete()
+            .eq('link_id', linkId);
+
+        if (clicksError) {
+            console.error('Error pruning clicks for link deletion:', clicksError);
+        }
+
         const { error } = await supabase
             .from('links')
             .delete()
@@ -142,78 +152,40 @@ export const linkService = {
     // Replace all links for a profile (bulk update)
     async replaceAllLinks(userId: string, links: LinkItem[]): Promise<LinkItem[]> {
         try {
-            console.log(`[bulkSave] Replacing ${links.length} top-level links for user ${userId}`);
+            console.log(`[bulkSave] Replacing links for user ${userId}`);
 
-            // 1. Get ALL existing link IDs for this user to determine what to delete
+            // 1. Fetch ALL currently existing link IDs for this user
             const { data: existingLinks, error: fetchError } = await supabase
                 .from('links')
                 .select('id')
                 .eq('user_id', userId);
 
-            if (fetchError) {
-                console.error('[bulkSave] Error fetching existing links:', fetchError);
-                throw fetchError;
-            }
+            if (fetchError) throw fetchError;
+            const existingIds = new Set((existingLinks || []).map(l => l.id));
 
-            const existingIds = (existingLinks || []).map(l => l.id);
-
-            // Helper to extract all IDs from the input nested structure
-            const getAllInputIds = (items: LinkItem[]): string[] => {
-                let ids: string[] = [];
-                for (const item of items) {
-                    if (item.id && !item.id.startsWith('temp-')) { // Avoid temp IDs if any
-                        ids.push(item.id);
-                    }
-                    if (item.children && item.children.length > 0) {
-                        ids = [...ids, ...getAllInputIds(item.children)];
-                    }
-                }
-                return ids;
-            };
-
-            const inputIds = getAllInputIds(links);
-
-            // 2. Identify IDs to delete (In DB but not in Input)
-            const idsToDelete = existingIds.filter(id => !inputIds.includes(id));
-
-            if (idsToDelete.length > 0) {
-                console.log(`[bulkSave] Deleting ${idsToDelete.length} removed links`);
-                const { error: delError } = await supabase
-                    .from('links')
-                    .delete()
-                    .in('id', idsToDelete);
-
-                if (delError) {
-                    console.error('[bulkSave] Error deleting removed links:', delError);
-                    // We continue even if delete fails, strict consistency is less critical than data loss
-                }
-            }
-
-            // 3. Recursive Upsert Loop
-            // We use 'upsert' to update existing or insert new.
-            // Problem: 'upsert' requires conflict resolution on Primary Key.
-            // If we have an ID, we use it. If not, we let DB generate (but we need to map children).
-            // Actually, for a tree, it's safer to just upsert.
+            // 2. Recursive function to Upsert items and collect Active IDs
+            const activeIds = new Set<string>();
 
             const upsertRecursive = async (items: LinkItem[], parentId: string | null = null): Promise<LinkItem[]> => {
-                if (items.length === 0) return [];
-
                 const result: LinkItem[] = [];
 
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     const dbLink = linkApiToDb(item, userId);
 
-                    // Explicitly set parent_id and position
                     dbLink.parent_id = parentId;
                     dbLink.position = i;
 
-                    // If it's a new item (no ID or temp ID), remove ID to let DB generate
-                    // If it has a valid UUID, include it for upsert
-                    if (!dbLink.id || dbLink.id.startsWith('temp-')) {
-                        delete dbLink.id;
+                    // ID Handling:
+                    // If it looks like a UUID, keep it. Otherwise remove to let DB gen new one.
+                    const isUUID = item.id && item.id.length > 20 && !item.id.startsWith('temp-');
+                    if (isUUID) {
+                        dbLink.id = item.id;
+                    } else {
+                        delete dbLink.id; // DB will generate new UUID
                     }
 
+                    // Upsert (Update if ID exists, Insert if not)
                     const { data, error } = await supabase
                         .from('links')
                         .upsert(dbLink)
@@ -221,28 +193,53 @@ export const linkService = {
                         .single();
 
                     if (error) {
-                        console.error('[bulkSave] Error upserting link:', error);
-                        // If one fails, we log but continue? Or throw?
-                        // Throwing is safer to signal partial failure, but let's try to save as much as possible
+                        console.error('[bulkSave] Upsert failed:', error);
                         continue;
                     }
 
                     const savedDbLink = data as LinkItemDB;
+                    activeIds.add(savedDbLink.id!); // Mark this ID as active/kept
+
                     const apiLink = linkDbToApi(savedDbLink);
 
-                    // Recurse for children
+                    // Process chidlren
                     if (item.children && item.children.length > 0) {
                         apiLink.children = await upsertRecursive(item.children, savedDbLink.id!);
                     }
 
                     result.push(apiLink);
                 }
-
                 return result;
             };
 
             const savedTree = await upsertRecursive(links);
-            console.log(`[bulkSave] Successfully synched tree for user ${userId}`);
+
+            // 3. Delete any link that was in DB (`existingIds`) but NOT in `activeIds`
+            const idsToDelete = Array.from(existingIds).filter(id => !activeIds.has(id));
+
+            if (idsToDelete.length > 0) {
+                console.log(`[bulkSave] Pruning ${idsToDelete.length} obsolete links`);
+
+                // CRITICAL: Delete related "clicks" first to avoid Foreign Key violations if Cascade is missing
+                const { error: clicksError } = await supabase
+                    .from('clicks')
+                    .delete()
+                    .in('link_id', idsToDelete);
+
+                if (clicksError) {
+                    console.error('[bulkSave] Failed to prune dependent clicks:', clicksError);
+                }
+
+                const { error: delError } = await supabase
+                    .from('links')
+                    .delete()
+                    .in('id', idsToDelete);
+
+                if (delError) {
+                    console.error('[bulkSave] Prune failed:', delError);
+                }
+            }
+
             return savedTree;
 
         } catch (err) {
