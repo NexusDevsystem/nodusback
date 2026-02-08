@@ -21,6 +21,7 @@ export interface UserProfileDB {
     custom_text_color?: string;
     custom_solid_color?: string;
     custom_button_color?: string;
+    is_verified?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -98,6 +99,7 @@ export interface UserProfile {
     customTextColor?: string;
     customSolidColor?: string;
     customButtonColor?: string;
+    isVerified?: boolean;
 }
 
 export interface LinkItem {
@@ -147,6 +149,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         customTextColor: dbProfile.custom_text_color,
         customSolidColor: dbProfile.custom_solid_color,
         customButtonColor: dbProfile.custom_button_color,
+        isVerified: !!(dbProfile.is_verified || (dbProfile.username && dbProfile.username.trim().toLowerCase() === 'noduscc') || (dbProfile.name && dbProfile.name.trim().toLowerCase() === 'nodus.cc')),
     };
 }
 
@@ -173,6 +176,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.customSolidColor !== undefined) dbProfile.custom_solid_color = apiProfile.customSolidColor;
     if (apiProfile.customButtonColor !== undefined) dbProfile.custom_button_color = apiProfile.customButtonColor;
     if (apiProfile.username !== undefined) dbProfile.username = apiProfile.username;
+    if (apiProfile.isVerified !== undefined) dbProfile.is_verified = apiProfile.isVerified;
 
     return dbProfile;
 }
