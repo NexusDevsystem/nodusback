@@ -8,6 +8,7 @@ import analyticsRoutes from './routes/analyticsRoutes.js';
 import leadRoutes from './routes/leadRoutes.js';
 import musicRoutes from './routes/musicRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
+import integrationRoutes from './routes/integrationRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -43,6 +44,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/music', musicRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/integrations', integrationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

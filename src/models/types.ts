@@ -252,3 +252,20 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
         discount_code: api.discountCode
     };
 }
+
+export interface SocialIntegrationDB {
+    id?: string;
+    user_id: string; // FK to users(id)
+    provider: 'youtube' | 'instagram' | 'tiktok' | 'twitch';
+    access_token: string;
+    refresh_token?: string;
+    expires_at?: string;
+    profile_data?: {
+        username?: string;
+        follower_count?: number;
+        avatar_url?: string;
+        channel_id?: string;
+    };
+    created_at?: string;
+    updated_at?: string;
+}
