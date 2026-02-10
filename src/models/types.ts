@@ -16,6 +16,8 @@ export interface UserProfileDB {
     theme_id: string;
     font_family: string;
     button_style?: 'rounded' | 'soft-rect';
+    button_style_type?: 'solid' | 'glass' | 'outline';
+    button_roundness?: 'square' | 'round' | 'rounder' | 'full';
     show_newsletter?: boolean;
     custom_background?: string;
     custom_text_color?: string;
@@ -95,6 +97,8 @@ export interface UserProfile {
     themeId: string;
     fontFamily: string;
     buttonStyle?: 'rounded' | 'soft-rect';
+    buttonStyleType?: 'solid' | 'glass' | 'outline';
+    buttonRoundness?: 'square' | 'round' | 'rounder' | 'full';
     showNewsletter?: boolean;
     customBackground?: string;
     customTextColor?: string;
@@ -147,6 +151,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         themeId: dbProfile.theme_id,
         fontFamily: dbProfile.font_family,
         buttonStyle: dbProfile.button_style,
+        buttonStyleType: dbProfile.button_style_type,
+        buttonRoundness: dbProfile.button_roundness,
         showNewsletter: dbProfile.show_newsletter,
         customBackground: dbProfile.custom_background,
         customTextColor: dbProfile.custom_text_color,
@@ -174,6 +180,8 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.themeId !== undefined) dbProfile.theme_id = apiProfile.themeId;
     if (apiProfile.fontFamily !== undefined) dbProfile.font_family = apiProfile.fontFamily;
     if (apiProfile.buttonStyle !== undefined) dbProfile.button_style = apiProfile.buttonStyle;
+    if (apiProfile.buttonStyleType !== undefined) dbProfile.button_style_type = apiProfile.buttonStyleType;
+    if (apiProfile.buttonRoundness !== undefined) dbProfile.button_roundness = apiProfile.buttonRoundness;
     if (apiProfile.showNewsletter !== undefined) dbProfile.show_newsletter = apiProfile.showNewsletter;
     if (apiProfile.customBackground !== undefined) dbProfile.custom_background = apiProfile.customBackground;
     if (apiProfile.customTextColor !== undefined) dbProfile.custom_text_color = apiProfile.customTextColor;
