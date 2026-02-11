@@ -1,0 +1,17 @@
+-- Migration to add advanced typography columns to users table
+-- Created on 2026-02-10
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'font_size') THEN
+        ALTER TABLE users ADD COLUMN font_size INTEGER DEFAULT 16;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'font_weight') THEN
+        ALTER TABLE users ADD COLUMN font_weight TEXT DEFAULT '400';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'font_italic') THEN
+        ALTER TABLE users ADD COLUMN font_italic BOOLEAN DEFAULT FALSE;
+    END IF;
+END $$;

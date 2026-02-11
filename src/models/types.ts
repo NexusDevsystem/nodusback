@@ -25,6 +25,9 @@ export interface UserProfileDB {
     custom_button_color?: string;
     is_verified?: boolean;
     enable_blur?: boolean;
+    font_size?: number;
+    font_weight?: string;
+    font_italic?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -107,6 +110,9 @@ export interface UserProfile {
     customButtonColor?: string;
     isVerified?: boolean;
     enableBlur?: boolean;
+    fontSize?: number;
+    fontWeight?: string;
+    fontItalic?: boolean;
 }
 
 export interface LinkItem {
@@ -161,7 +167,10 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         customSolidColor: dbProfile.custom_solid_color,
         customButtonColor: dbProfile.custom_button_color,
         isVerified: !!(dbProfile.is_verified || (dbProfile.username && dbProfile.username.trim().toLowerCase() === 'noduscc') || (dbProfile.name && dbProfile.name.trim().toLowerCase() === 'nodus.cc')),
-        enableBlur: dbProfile.enable_blur
+        enableBlur: dbProfile.enable_blur,
+        fontSize: dbProfile.font_size,
+        fontWeight: dbProfile.font_weight,
+        fontItalic: dbProfile.font_italic
     };
 }
 
@@ -192,6 +201,9 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.username !== undefined) dbProfile.username = apiProfile.username;
     if (apiProfile.isVerified !== undefined) dbProfile.is_verified = apiProfile.isVerified;
     if (apiProfile.enableBlur !== undefined) dbProfile.enable_blur = apiProfile.enableBlur;
+    if (apiProfile.fontSize !== undefined) dbProfile.font_size = apiProfile.fontSize;
+    if (apiProfile.fontWeight !== undefined) dbProfile.font_weight = apiProfile.fontWeight;
+    if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
 
     return dbProfile;
 }
