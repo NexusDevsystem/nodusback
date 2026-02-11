@@ -43,6 +43,7 @@ export interface LinkItemDB {
     highlight?: string;
     embed_type?: string;
     subtitle?: string;
+    is_archived: boolean;
     position?: number;
     created_at?: string;
     updated_at?: string;
@@ -120,6 +121,7 @@ export interface LinkItem {
     highlight?: 'none' | 'pulse' | 'bounce' | 'shake' | 'glow' | 'wobble';
     embedType?: 'none' | 'youtube' | 'spotify' | 'deezer';
     subtitle?: string;
+    isArchived?: boolean;
 }
 
 export interface Product {
@@ -205,7 +207,8 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         type: db.type as any,
         highlight: db.highlight as any,
         embedType: db.embed_type as any,
-        subtitle: db.subtitle
+        subtitle: db.subtitle,
+        isArchived: db.is_archived
     };
 }
 
@@ -221,7 +224,8 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         type: api.type,
         highlight: api.highlight,
         embed_type: api.embedType,
-        subtitle: api.subtitle
+        subtitle: api.subtitle,
+        is_archived: api.isArchived ?? false
     };
 
     // IMPORTANT: Do NOT include the id field here
