@@ -16,7 +16,7 @@ export interface UserProfileDB {
     theme_id: string;
     font_family: string;
     button_style?: 'rounded' | 'soft-rect';
-    button_style_type?: 'solid' | 'glass' | 'outline';
+    button_style_type?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient';
     button_roundness?: 'square' | 'round' | 'rounder' | 'full';
     show_newsletter?: boolean;
     custom_background?: string;
@@ -97,7 +97,7 @@ export interface UserProfile {
     themeId: string;
     fontFamily: string;
     buttonStyle?: 'rounded' | 'soft-rect';
-    buttonStyleType?: 'solid' | 'glass' | 'outline';
+    buttonStyleType?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient';
     buttonRoundness?: 'square' | 'round' | 'rounder' | 'full';
     showNewsletter?: boolean;
     customBackground?: string;
