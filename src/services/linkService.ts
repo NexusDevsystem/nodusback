@@ -153,7 +153,7 @@ export const linkService = {
     // Replace all links for a profile (bulk update)
     async replaceAllLinks(userId: string, links: LinkItem[]): Promise<LinkItem[]> {
         try {
-            console.log(`[bulkSave] Replacing links for user ${userId}`);
+            console.log(`[bulkSave] Replacing links for user ${userId}. Total: ${links.length}. First layout: ${links[0]?.layout}`);
 
             // 1. Fetch ALL currently existing link IDs for this user
             const { data: existingLinks, error: fetchError } = await supabase

@@ -16,13 +16,13 @@ export interface UserProfileDB {
     theme_id: string;
     font_family: string;
     button_style?: 'rounded' | 'soft-rect';
-    button_style_type?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient';
-    button_roundness?: 'square' | 'round' | 'rounder' | 'full';
+    button_style_type?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient' | 'cyber' | 'neon' | 'skeuo' | 'minimal-hover' | 'paper' | 'liquid' | null;
+    button_roundness?: 'square' | 'round' | 'rounder' | 'full' | null;
     show_newsletter?: boolean;
-    custom_background?: string;
-    custom_text_color?: string;
-    custom_solid_color?: string;
-    custom_button_color?: string;
+    custom_background?: string | null;
+    custom_text_color?: string | null;
+    custom_solid_color?: string | null;
+    custom_button_color?: string | null;
     is_verified?: boolean;
     enable_blur?: boolean;
     font_size?: number;
@@ -47,6 +47,7 @@ export interface LinkItemDB {
     embed_type?: string;
     subtitle?: string;
     is_archived: boolean;
+    platform?: string;
     position?: number;
     created_at?: string;
     updated_at?: string;
@@ -101,13 +102,13 @@ export interface UserProfile {
     themeId: string;
     fontFamily: string;
     buttonStyle?: 'rounded' | 'soft-rect';
-    buttonStyleType?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient';
-    buttonRoundness?: 'square' | 'round' | 'rounder' | 'full';
+    buttonStyleType?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient' | 'cyber' | 'neon' | 'skeuo' | 'minimal-hover' | 'paper' | 'liquid' | null;
+    buttonRoundness?: 'square' | 'round' | 'rounder' | 'full' | null;
     showNewsletter?: boolean;
-    customBackground?: string;
-    customTextColor?: string;
-    customSolidColor?: string;
-    customButtonColor?: string;
+    customBackground?: string | null;
+    customTextColor?: string | null;
+    customSolidColor?: string | null;
+    customButtonColor?: string | null;
     isVerified?: boolean;
     enableBlur?: boolean;
     fontSize?: number;
@@ -121,13 +122,14 @@ export interface LinkItem {
     url: string;
     image?: string;
     isActive: boolean;
-    layout?: 'classic' | 'social';
-    type?: 'link' | 'collection';
+    layout?: 'classic' | 'social' | 'card' | 'icon' | 'grid' | 'carousel' | 'stacked';
+    type?: 'link' | 'collection' | 'social';
     children?: LinkItem[];
     highlight?: 'none' | 'pulse' | 'bounce' | 'shake' | 'glow' | 'wobble';
     embedType?: 'none' | 'youtube' | 'spotify' | 'deezer';
     subtitle?: string;
     isArchived?: boolean;
+    platform?: string;
 }
 
 export interface Product {
@@ -220,7 +222,8 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         highlight: db.highlight as any,
         embedType: db.embed_type as any,
         subtitle: db.subtitle,
-        isArchived: db.is_archived
+        isArchived: db.is_archived,
+        platform: db.platform
     };
 }
 
@@ -237,7 +240,8 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         highlight: api.highlight,
         embed_type: api.embedType,
         subtitle: api.subtitle,
-        is_archived: api.isArchived ?? false
+        is_archived: api.isArchived ?? false,
+        platform: api.platform
     };
 
     // IMPORTANT: Do NOT include the id field here
