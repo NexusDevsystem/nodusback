@@ -24,7 +24,9 @@ app.use(cors({
 app.use(express.json({
     limit: '50mb',
     verify: (req: any, res, buf) => {
-        if (req.originalUrl.startsWith('/api/billing/webhook')) {
+        // More robust path checking for webhooks
+        const url = req.originalUrl || req.url || '';
+        if (url.includes('/billing/webhook')) {
             req.rawBody = buf;
         }
     }

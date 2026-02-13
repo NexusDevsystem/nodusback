@@ -14,19 +14,15 @@ const getCleanedKey = (key: string) => {
     return cleaned;
 };
 
-// Determine Environment
-const isLive = process.env.STRIPE_ENV === 'live';
-
-const secretKey = isLive
-    ? process.env.STRIPE_SECRET_KEY_LIVE
-    : (process.env.STRIPE_SECRET_KEY_TEST || process.env.STRIPE_SECRET_KEY);
+// Determine Environment - Locked to LIVE
+const secretKey = process.env.STRIPE_SECRET_KEY_LIVE || process.env.STRIPE_SECRET_KEY;
 
 const stripeKey = getCleanedKey(secretKey || '');
 const stripe = new Stripe(stripeKey, {
     apiVersion: '2023-10-16' as any
 });
 
-console.log(`💳 Stripe initialized in ${isLive ? 'LIVE' : 'TEST'} mode`);
+console.log(`💳 Stripe initialized in PRODUCTION mode`);
 
 export const stripeService = {
     async createCheckoutSession(params: {
@@ -36,18 +32,13 @@ export const stripeService = {
         successUrl: string;
         cancelUrl: string;
     }) {
-        const monthlyPriceId = isLive
-            ? process.env.STRIPE_MONTHLY_PRICE_ID_LIVE
-            : (process.env.STRIPE_MONTHLY_PRICE_ID_TEST || process.env.STRIPE_MONTHLY_PRICE_ID);
-
-        const annualPriceId = isLive
-            ? process.env.STRIPE_ANNUAL_PRICE_ID_LIVE
-            : (process.env.STRIPE_ANNUAL_PRICE_ID_TEST || process.env.STRIPE_ANNUAL_PRICE_ID);
+        const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
+        const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
 
         const priceId = params.planId === 'monthly' ? monthlyPriceId : annualPriceId;
 
         if (!priceId) {
-            throw new Error(`Price ID not configured for ${params.planId} in ${isLive ? 'LIVE' : 'TEST'} mode.`);
+            throw new Error(`Price ID not configured for ${params.planId} in PRODUCTION mode.`);
         }
 
         return stripe.checkout.sessions.create({
@@ -94,8 +85,6 @@ export const stripeService = {
     },
 
     getWebhookSecret() {
-        return isLive
-            ? process.env.STRIPE_WEBHOOK_SECRET_LIVE
-            : (process.env.STRIPE_WEBHOOK_SECRET_TEST || process.env.STRIPE_WEBHOOK_SECRET);
+        return process.env.STRIPE_WEBHOOK_SECRET_LIVE || process.env.STRIPE_WEBHOOK_SECRET;
     }
 };

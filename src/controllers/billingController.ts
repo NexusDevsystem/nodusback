@@ -43,19 +43,22 @@ export const billingController = {
 
         console.log('--- STRIPE WEBHOOK RECEIVED ---');
         console.log('Signature:', sig ? 'Present' : 'Missing');
-        console.log('Secret Configured:', webhookSecret && !webhookSecret.startsWith('whsec_...') ? 'Yes' : 'No (Using placeholder?)');
+        console.log('Secret Configured:', webhookSecret ? 'Yes' : 'No');
+        console.log('Event Version:', req.body?.api_version || 'Unknown');
 
         let event;
 
         try {
             if (!req.rawBody) {
-                console.error('Webhook Error: req.rawBody is missing. Check Express middleware.');
+                console.error('CRITICAL: Webhook Error: req.rawBody is missing. Stripe signature verification will fail.');
+                console.error('Path:', req.originalUrl);
+                return res.status(400).send('Webhook Error: Raw body missing');
             }
             // req.rawBody must be provided by express.raw() or similar middleware
-            event = await stripeService.constructEvent(req.rawBody, sig, webhookSecret || '');
-            console.log('Event Type:', event.type);
+            event = await stripeService.constructEvent(req.rawBody, sig as string, webhookSecret || '');
+            console.log('✅ Webhook Verified. Event Type:', event.type);
         } catch (err: any) {
-            console.error(`Webhook Signature Error: ${err.message}`);
+            console.error(`❌ Webhook Signature Error: ${err.message}`);
             return res.status(400).send(`Webhook Error: ${err.message}`);
         }
 
@@ -91,13 +94,8 @@ export const billingController = {
                         const priceId = fullSession.line_items?.data?.[0]?.price?.id;
                         console.log(`Detected Price ID: ${priceId}`);
 
-                        const monthlyPriceId = process.env.STRIPE_ENV === 'live'
-                            ? process.env.STRIPE_MONTHLY_PRICE_ID_LIVE
-                            : (process.env.STRIPE_MONTHLY_PRICE_ID_TEST || process.env.STRIPE_MONTHLY_PRICE_ID);
-
-                        const annualPriceId = process.env.STRIPE_ENV === 'live'
-                            ? process.env.STRIPE_ANNUAL_PRICE_ID_LIVE
-                            : (process.env.STRIPE_ANNUAL_PRICE_ID_TEST || process.env.STRIPE_ANNUAL_PRICE_ID);
+                        const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
+                        const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
 
                         if (priceId === monthlyPriceId) {
                             planId = 'monthly';
@@ -115,8 +113,18 @@ export const billingController = {
                     }
                 }
 
+                // 3. Identification Fallback: Stripe Customer ID
+                if (!userId && session.customer) {
+                    console.log(`Metadata missing userId. Searching user by Stripe Customer ID: ${session.customer}`);
+                    const profile = await profileService.getProfileByStripeCustomerId(session.customer as string);
+                    if (profile) {
+                        userId = profile.id;
+                        console.log('Found user via Stripe Customer ID:', userId);
+                    }
+                }
+
                 if (userId && planId) {
-                    console.log(`Final identified user: ${userId}, plan: ${planId}`);
+                    console.log(`🚀 PROCESSING UPGRADE: User: ${userId}, Plan: ${planId}`);
 
                     // Calculate expiry date
                     const expiryDate = new Date();

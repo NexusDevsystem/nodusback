@@ -139,14 +139,67 @@ export const linkService = {
         return true;
     },
 
-    // Increment clicks
-    async incrementClicks(linkId: string): Promise<void> {
-        const { error } = await supabase.rpc('increment_link_clicks', {
-            link_id: linkId
-        });
+    // Increment clicks and track event
+    async incrementClicks(id: string): Promise<void> {
+        try {
+            // 1. Try to find if it's a link or product and get user_id
+            let userId: string | null = null;
+            let type: 'link' | 'product' = 'link';
 
-        if (error) {
-            console.error('Error incrementing clicks:', error);
+            // Check links table
+            const { data: linkData } = await supabase
+                .from('links')
+                .select('user_id')
+                .eq('id', id)
+                .single();
+
+            if (linkData) {
+                userId = linkData.user_id;
+                type = 'link';
+            } else {
+                // Check products table
+                const { data: productData } = await supabase
+                    .from('products')
+                    .select('user_id')
+                    .eq('id', id)
+                    .single();
+
+                if (productData) {
+                    userId = productData.user_id;
+                    type = 'product';
+                }
+            }
+
+            if (!userId) {
+                console.warn(`Could not find owner for ID ${id} to track click.`);
+                return;
+            }
+
+            // 2. Increment clicks in the respective table
+            const table = type === 'link' ? 'links' : 'products';
+            const { error: incError } = await supabase.rpc(
+                type === 'link' ? 'increment_link_clicks' : 'increment_product_clicks',
+                { [type === 'link' ? 'link_id' : 'product_id']: id }
+            );
+
+            // Fallback if RPC is missing (common in development)
+            if (incError) {
+                console.log(`RPC failed, falling back to manual increment for ${table}`);
+                const { data: item } = await supabase.from(table).select('clicks').eq('id', id).single();
+                await supabase.from(table).update({ clicks: (item?.clicks || 0) + 1 }).eq('id', id);
+            }
+
+            // 3. Log event in analytics table 'clicks'
+            await supabase.from('clicks').insert({
+                user_id: userId,
+                link_id: type === 'link' ? id : null,
+                product_id: type === 'product' ? id : null,
+                event_type: 'click',
+                timestamp: new Date().toISOString()
+            });
+
+        } catch (error) {
+            console.error('Error in complex incrementClicks:', error);
         }
     },
 
