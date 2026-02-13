@@ -84,6 +84,53 @@ export const stripeService = {
         });
     },
 
+    async findActiveSubscriptionByEmail(email: string) {
+        // 1. Find customers with this email
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        if (customers.data.length === 0) return null;
+
+        const customer = customers.data[0];
+
+        // 2. Find active subscriptions for this customer
+        const subscriptions = await stripe.subscriptions.list({
+            customer: customer.id,
+            status: 'active',
+            limit: 1,
+            expand: ['data.default_payment_method']
+        });
+
+        if (subscriptions.data.length > 0) {
+            const sub = subscriptions.data[0] as any;
+            return {
+                subscriptionId: sub.id,
+                customerId: customer.id,
+                status: sub.status,
+                planId: sub.items.data[0].price.id,
+                expiryDate: new Date(sub.current_period_end * 1000).toISOString()
+            };
+        }
+
+        // 3. Fallback: Check trialing subscriptions
+        const trialing = await stripe.subscriptions.list({
+            customer: customer.id,
+            status: 'trialing',
+            limit: 1
+        });
+
+        if (trialing.data.length > 0) {
+            const sub = trialing.data[0] as any;
+            return {
+                subscriptionId: sub.id,
+                customerId: customer.id,
+                status: sub.status,
+                planId: sub.items.data[0].price.id,
+                expiryDate: new Date(sub.current_period_end * 1000).toISOString()
+            };
+        }
+
+        return null;
+    },
+
     getWebhookSecret() {
         return process.env.STRIPE_WEBHOOK_SECRET_LIVE || process.env.STRIPE_WEBHOOK_SECRET;
     }

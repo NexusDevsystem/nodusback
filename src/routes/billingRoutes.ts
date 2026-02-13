@@ -16,4 +16,7 @@ router.post('/portal', authMiddleware, billingController.createPortalSession);
 // List invoices (authenticated)
 router.get('/invoices', authMiddleware, billingController.getInvoices);
 
+// Auto-reconcile subscription (authenticated)
+router.post('/auto-reconcile', authMiddleware, billingController.autoReconcile);
+
 export default router;

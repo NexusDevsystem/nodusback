@@ -218,5 +218,56 @@ export const billingController = {
             console.error('Fetch Invoices Error:', error);
             res.status(500).json({ error: error.message || 'Falha ao buscar faturas' });
         }
+    },
+
+    async autoReconcile(req: AuthRequest, res: Response) {
+        try {
+            const userId = req.userId;
+            if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+            // 1. Get current profile
+            const profile = await profileService.getProfileByUserId(userId);
+            if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
+
+            // 2. If already Pro, just return it
+            if (profile.planType && profile.planType !== 'free' && profile.subscriptionStatus === 'active') {
+                return res.json(profile);
+            }
+
+            console.log(`🔍 Auto-reconciling for user: ${profile.email}`);
+
+            // 3. Search for active subscriptions on Stripe
+            const subscription = await stripeService.findActiveSubscriptionByEmail(profile.email);
+
+            if (subscription) {
+                console.log(`✅ Found active subscription for ${profile.email} on Stripe: ${subscription.subscriptionId}`);
+
+                // Map Price ID to planId
+                const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
+                const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
+
+                let planId: 'monthly' | 'annual' = 'monthly';
+                if (subscription.planId === annualPriceId) {
+                    planId = 'annual';
+                }
+
+                // 4. Update Profile
+                const updatedProfile = await profileService.updateProfile(userId, {
+                    planType: planId,
+                    subscriptionStatus: 'active',
+                    stripeCustomerId: subscription.customerId,
+                    subscriptionExpiryDate: subscription.expiryDate
+                });
+
+                console.log(`🚀 Automated Recovery: Profile ${userId} restored to ${planId}`);
+                return res.json(updatedProfile);
+            }
+
+            // No subscription found, return existing profile
+            res.json(profile);
+        } catch (error: any) {
+            console.error('Auto Reconcile Error:', error);
+            res.status(500).json({ error: error.message || 'Erro durante a reconciliação automática' });
+        }
     }
 };
