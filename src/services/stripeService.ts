@@ -91,5 +91,11 @@ export const stripeService = {
             customer: customerId,
             limit: 12
         });
+    },
+
+    getWebhookSecret() {
+        return isLive
+            ? process.env.STRIPE_WEBHOOK_SECRET_LIVE
+            : (process.env.STRIPE_WEBHOOK_SECRET_TEST || process.env.STRIPE_WEBHOOK_SECRET);
     }
 };

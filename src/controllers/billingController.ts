@@ -39,7 +39,7 @@ export const billingController = {
 
     async handleWebhook(req: any, res: Response) {
         const sig = req.headers['stripe-signature'];
-        const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+        const webhookSecret = stripeService.getWebhookSecret();
 
         console.log('--- STRIPE WEBHOOK RECEIVED ---');
         console.log('Signature:', sig ? 'Present' : 'Missing');
@@ -91,16 +91,24 @@ export const billingController = {
                         const priceId = fullSession.line_items?.data?.[0]?.price?.id;
                         console.log(`Detected Price ID: ${priceId}`);
 
-                        if (priceId === process.env.STRIPE_MONTHLY_PRICE_ID) {
+                        const monthlyPriceId = process.env.STRIPE_ENV === 'live'
+                            ? process.env.STRIPE_MONTHLY_PRICE_ID_LIVE
+                            : (process.env.STRIPE_MONTHLY_PRICE_ID_TEST || process.env.STRIPE_MONTHLY_PRICE_ID);
+
+                        const annualPriceId = process.env.STRIPE_ENV === 'live'
+                            ? process.env.STRIPE_ANNUAL_PRICE_ID_LIVE
+                            : (process.env.STRIPE_ANNUAL_PRICE_ID_TEST || process.env.STRIPE_ANNUAL_PRICE_ID);
+
+                        if (priceId === monthlyPriceId) {
                             planId = 'monthly';
                             console.log('Mapped to Monthly plan');
-                        } else if (priceId === process.env.STRIPE_ANNUAL_PRICE_ID) {
+                        } else if (priceId === annualPriceId) {
                             planId = 'annual';
                             console.log('Mapped to Annual plan');
                         } else {
                             console.log('Price ID did not match any internal plan IDs.');
-                            console.log('Internal Monthly ID:', process.env.STRIPE_MONTHLY_PRICE_ID);
-                            console.log('Internal Annual ID:', process.env.STRIPE_ANNUAL_PRICE_ID);
+                            console.log('Internal Monthly ID:', monthlyPriceId);
+                            console.log('Internal Annual ID:', annualPriceId);
                         }
                     } catch (e) {
                         console.error('Error fetching session line items:', e);
