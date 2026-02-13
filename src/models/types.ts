@@ -72,8 +72,8 @@ export interface AnalyticsEvent {
     user_id: string;  // FK to users(id)
     link_id?: string;
     product_id?: string;
-    event_type: string;
-    timestamp: string;
+    type: string;
+    created_at: string;
 }
 
 export interface NewsletterLead {

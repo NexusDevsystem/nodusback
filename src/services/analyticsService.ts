@@ -38,18 +38,17 @@ export const analyticsService = {
         const linkStats = new Map(); // link_id -> clicks count
 
         events?.forEach(event => {
-            // Support both 'timestamp' and 'created_at' (Supabase default)
-            const ts = event.created_at || event.timestamp;
+            const ts = event.created_at;
             if (!ts) return;
 
             const dateStr = new Date(ts).toISOString().split('T')[0];
             const dayData = dailyMap.get(dateStr);
 
             if (dayData) {
-                if (event.event_type === 'view') {
+                if (event.type === 'view') {
                     dayData.views++;
                     totalViews++;
-                } else if (event.event_type === 'click') {
+                } else if (event.type === 'click') {
                     dayData.clicks++;
                     totalClicks++;
 
@@ -87,8 +86,8 @@ export const analyticsService = {
             .from('clicks')
             .select('*')
             .eq('user_id', userId)  // FK to users(id)
-            .not('timestamp', 'is', null)
-            .order('timestamp', { ascending: false });
+            .not('created_at', 'is', null)
+            .order('created_at', { ascending: false });
 
         if (error) {
             console.error('Error fetching analytics:', error);
@@ -106,7 +105,7 @@ export const analyticsService = {
                 user_id: userId,
                 link_id: linkId || null,
                 product_id: productId || null,
-                event_type: 'click'
+                type: 'click'
             });
 
         if (error) {
@@ -120,7 +119,7 @@ export const analyticsService = {
             .from('clicks')
             .insert({
                 user_id: userId,
-                event_type: 'view',
+                type: 'view',
                 metadata: metadata || {}
             });
 
@@ -143,7 +142,7 @@ export const analyticsService = {
                 user_id: userId,
                 link_id: linkId || null,
                 product_id: productId || null,
-                event_type: eventType,
+                type: eventType,
                 ...metadata
             });
 

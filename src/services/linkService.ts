@@ -194,8 +194,7 @@ export const linkService = {
                 user_id: userId,
                 link_id: type === 'link' ? id : null,
                 product_id: type === 'product' ? id : null,
-                event_type: 'click',
-                timestamp: new Date().toISOString()
+                type: 'click'
             });
 
         } catch (error) {
