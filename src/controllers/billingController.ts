@@ -229,8 +229,8 @@ export const billingController = {
             const profile = await profileService.getProfileByUserId(userId);
             if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
 
-            // 2. If already Pro, just return it
-            if (profile.planType && profile.planType !== 'free' && profile.subscriptionStatus === 'active') {
+            // 2. If already Pro (by manual edit or successful sync), just return it
+            if (profile.planType && profile.planType !== 'free') {
                 return res.json(profile);
             }
 
