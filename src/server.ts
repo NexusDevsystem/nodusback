@@ -13,36 +13,30 @@ import integrationRoutes from './routes/integrationRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS Configuration - Allow all for now, restrict later if needed
+// 1. CORS Configuration (MUST BE FIRST)
 app.use(cors({
-    origin: '*', // Allow ALL origins
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: false // Changed to false when using wildcard
+    credentials: false
 }));
 
-// Webhook route - MUST come before express.json()
-// Use express.raw() to get the buffer directly
-app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), (req: any, res, next) => {
-    req.rawBody = req.body;
-    next();
-});
-
-// For all other routes, use express.json()
-// We use a middleware wrapper to skip json parsing for the webhook route if it was already handled
-app.use((req, res, next) => {
-    if (req.path === '/api/billing/webhook') {
-        next();
-    } else {
-        express.json({ limit: '50mb' })(req, res, next);
-    }
-});
-
-// Request logging
+// 2. Request logging
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
+
+// 2. Body Parser with Webhook Support
+app.use(express.json({
+    limit: '50mb',
+    verify: (req: any, res, buf) => {
+        // Stripe Webhook needs the raw body
+        if (req.originalUrl.includes('/billing/webhook') || req.path.includes('/billing/webhook')) {
+            req.rawBody = buf;
+        }
+    }
+}));
 
 // Routes
 app.use('/api/profile', profileRoutes);
@@ -65,6 +59,19 @@ app.get('/', (req, res) => {
         message: 'Nodus Backend API',
         version: '1.0.0',
         endpoints: ['/health', '/api/profile', '/api/links', '/api/products', '/api/analytics', '/api/leads', '/api/music', '/api/billing']
+    });
+});
+
+// GLOBAL ERROR HANDLER - Must be last
+// Ensures all errors return JSON instead of HTML to prevent frontend crashes
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('❌ SEVERE ERROR:', err.message);
+    if (err.stack) console.error(err.stack);
+
+    res.status(err.status || 500).json({
+        error: true,
+        message: err.message || 'Internal Server Error',
+        path: req.path
     });
 });
 
