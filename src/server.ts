@@ -21,16 +21,22 @@ app.use(cors({
     credentials: false // Changed to false when using wildcard
 }));
 
-app.use(express.json({
-    limit: '50mb',
-    verify: (req: any, res, buf) => {
-        // More robust path checking for webhooks
-        const url = req.originalUrl || req.url || '';
-        if (url.includes('/billing/webhook')) {
-            req.rawBody = buf;
-        }
+// Webhook route - MUST come before express.json()
+// Use express.raw() to get the buffer directly
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), (req: any, res, next) => {
+    req.rawBody = req.body;
+    next();
+});
+
+// For all other routes, use express.json()
+// We use a middleware wrapper to skip json parsing for the webhook route if it was already handled
+app.use((req, res, next) => {
+    if (req.originalUrl === '/api/billing/webhook') {
+        next();
+    } else {
+        express.json({ limit: '50mb' })(req, res, next);
     }
-}));
+});
 
 // Request logging
 app.use((req, res, next) => {

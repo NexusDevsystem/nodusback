@@ -132,6 +132,7 @@ export const stripeService = {
     },
 
     getWebhookSecret() {
-        return process.env.STRIPE_WEBHOOK_SECRET_LIVE || process.env.STRIPE_WEBHOOK_SECRET;
+        const secret = process.env.STRIPE_WEBHOOK_SECRET_LIVE || process.env.STRIPE_WEBHOOK_SECRET;
+        return getCleanedKey(secret || '');
     }
 };
