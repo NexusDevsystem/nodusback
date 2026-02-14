@@ -18,11 +18,21 @@ const getCleanedKey = (key: string) => {
 const secretKey = process.env.STRIPE_SECRET_KEY_LIVE || process.env.STRIPE_SECRET_KEY;
 
 const stripeKey = getCleanedKey(secretKey || '');
-const stripe = new Stripe(stripeKey, {
-    apiVersion: '2023-10-16' as any
-});
+let stripe: Stripe;
 
-console.log(`💳 Stripe initialized in PRODUCTION mode`);
+try {
+    stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash_on_import', {
+        apiVersion: '2023-10-16' as any
+    });
+    if (!stripeKey) {
+        console.warn('⚠️ Stripe Secret Key MISSING! Billing features will fail.');
+    } else {
+        console.log(`💳 Stripe initialized in PRODUCTION mode`);
+    }
+} catch (err: any) {
+    console.error('CRITICAL: Stripe initialization failed:', err.message);
+    stripe = new Stripe('sk_test_dummy_key_to_prevent_crash_on_import', { apiVersion: '2023-10-16' as any });
+}
 
 export const stripeService = {
     async createCheckoutSession(params: {
