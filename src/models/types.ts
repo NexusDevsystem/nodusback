@@ -29,6 +29,7 @@ export interface UserProfileDB {
     font_weight?: string;
     font_italic?: boolean;
     custom_secondary_color?: string | null;
+    custom_button_text_color?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -116,6 +117,7 @@ export interface UserProfile {
     fontWeight?: string;
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
+    customButtonTextColor?: string | null;
 }
 
 export interface LinkItem {
@@ -167,15 +169,16 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         buttonRoundness: dbProfile.button_roundness,
         showNewsletter: dbProfile.show_newsletter,
         customBackground: dbProfile.custom_background,
-        customTextColor: dbProfile.custom_text_color,
-        customSolidColor: dbProfile.custom_solid_color,
-        customButtonColor: dbProfile.custom_button_color,
+        customTextColor: dbProfile.custom_text_color || null,
+        customSolidColor: dbProfile.custom_solid_color || null,
+        customButtonColor: dbProfile.custom_button_color || null,
         isVerified: !!(dbProfile.is_verified || (dbProfile.username && dbProfile.username.trim().toLowerCase() === 'noduscc') || (dbProfile.name && dbProfile.name.trim().toLowerCase() === 'nodus.cc')),
         enableBlur: dbProfile.enable_blur,
         fontSize: dbProfile.font_size,
         fontWeight: dbProfile.font_weight,
         fontItalic: dbProfile.font_italic,
-        customSecondaryColor: dbProfile.custom_secondary_color
+        customSecondaryColor: dbProfile.custom_secondary_color || null,
+        customButtonTextColor: dbProfile.custom_button_text_color || null
     };
 }
 
@@ -210,6 +213,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.fontWeight !== undefined) dbProfile.font_weight = apiProfile.fontWeight;
     if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
     if (apiProfile.customSecondaryColor !== undefined) dbProfile.custom_secondary_color = apiProfile.customSecondaryColor;
+    if (apiProfile.customButtonTextColor !== undefined) dbProfile.custom_button_text_color = apiProfile.customButtonTextColor;
 
     return dbProfile;
 }
