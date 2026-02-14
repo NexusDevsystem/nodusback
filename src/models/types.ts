@@ -13,6 +13,7 @@ export interface UserProfileDB {
     stripe_customer_id?: string | null;
     tax_id?: string | null;
     cellphone?: string | null;
+    user_category?: 'creator' | 'personal' | 'business' | null;
     theme_id: string;
     font_family: string;
     button_style?: 'rounded' | 'soft-rect';
@@ -101,6 +102,7 @@ export interface UserProfile {
     stripeCustomerId?: string | null;
     taxId?: string | null;
     cellphone?: string | null;
+    userCategory?: 'creator' | 'personal' | 'business' | null;
     themeId: string;
     fontFamily: string;
     buttonStyle?: 'rounded' | 'soft-rect';

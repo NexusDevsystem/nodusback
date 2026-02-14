@@ -31,7 +31,7 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), (req
 // For all other routes, use express.json()
 // We use a middleware wrapper to skip json parsing for the webhook route if it was already handled
 app.use((req, res, next) => {
-    if (req.originalUrl === '/api/billing/webhook') {
+    if (req.path === '/api/billing/webhook') {
         next();
     } else {
         express.json({ limit: '50mb' })(req, res, next);
