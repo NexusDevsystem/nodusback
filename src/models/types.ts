@@ -28,6 +28,7 @@ export interface UserProfileDB {
     font_size?: number;
     font_weight?: string;
     font_italic?: boolean;
+    custom_secondary_color?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -114,6 +115,7 @@ export interface UserProfile {
     fontSize?: number;
     fontWeight?: string;
     fontItalic?: boolean;
+    customSecondaryColor?: string | null;
 }
 
 export interface LinkItem {
@@ -172,7 +174,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         enableBlur: dbProfile.enable_blur,
         fontSize: dbProfile.font_size,
         fontWeight: dbProfile.font_weight,
-        fontItalic: dbProfile.font_italic
+        fontItalic: dbProfile.font_italic,
+        customSecondaryColor: dbProfile.custom_secondary_color
     };
 }
 
@@ -206,6 +209,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.fontSize !== undefined) dbProfile.font_size = apiProfile.fontSize;
     if (apiProfile.fontWeight !== undefined) dbProfile.font_weight = apiProfile.fontWeight;
     if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
+    if (apiProfile.customSecondaryColor !== undefined) dbProfile.custom_secondary_color = apiProfile.customSecondaryColor;
 
     return dbProfile;
 }
