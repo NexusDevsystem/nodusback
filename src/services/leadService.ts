@@ -1,9 +1,9 @@
 import { supabase } from '../config/supabaseClient.js';
-import { NewsletterLead } from '../models/types.js';
+// import { NewsletterLead } from '../models/types.js';
 
 export const leadService = {
     // Get all leads for a profile (by user_id)
-    async getLeadsByProfileId(userId: string): Promise<NewsletterLead[]> {
+    async getLeadsByProfileId(userId: string): Promise<any[]> {
         const { data, error } = await supabase
             .from('leads')
             .select('*')
@@ -15,11 +15,11 @@ export const leadService = {
             return [];
         }
 
-        return (data || []) as NewsletterLead[];
+        return (data || []) as any[];
     },
 
     // Create a new lead
-    async createLead(userId: string, email: string, name?: string): Promise<NewsletterLead | null> {
+    async createLead(userId: string, email: string, name?: string): Promise<any | null> {
         const { data, error } = await supabase
             .from('leads')
             .insert({
@@ -35,7 +35,7 @@ export const leadService = {
             return null;
         }
 
-        return data as NewsletterLead;
+        return data as any;
     },
 
     // Delete a lead
