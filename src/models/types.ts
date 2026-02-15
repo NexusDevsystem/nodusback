@@ -164,6 +164,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         stripeCustomerId: dbProfile.stripe_customer_id,
         taxId: dbProfile.tax_id,
         cellphone: dbProfile.cellphone,
+        userCategory: dbProfile.user_category || null,
         themeId: dbProfile.theme_id,
         fontFamily: dbProfile.font_family,
         buttonStyle: dbProfile.button_style,
@@ -198,6 +199,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.stripeCustomerId !== undefined) dbProfile.stripe_customer_id = apiProfile.stripeCustomerId;
     if (apiProfile.taxId !== undefined) dbProfile.tax_id = apiProfile.taxId;
     if (apiProfile.cellphone !== undefined) dbProfile.cellphone = apiProfile.cellphone;
+    if (apiProfile.userCategory !== undefined) dbProfile.user_category = apiProfile.userCategory;
     if (apiProfile.themeId !== undefined) dbProfile.theme_id = apiProfile.themeId;
     if (apiProfile.fontFamily !== undefined) dbProfile.font_family = apiProfile.fontFamily;
     if (apiProfile.buttonStyle !== undefined) dbProfile.button_style = apiProfile.buttonStyle;

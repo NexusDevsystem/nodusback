@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabaseClient.js';
+import axios from 'axios';
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -22,15 +23,11 @@ export const authMiddleware = async (
 
         // Verify the token with Google directly
         // This avoids needing to enable the Google provider in Supabase Dashboard
-        const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
             headers: { Authorization: `Bearer ${token}` }
         });
 
-        if (!googleRes.ok) {
-            return res.status(401).json({ error: 'Invalid or expired Google token' });
-        }
-
-        const googleUser = await googleRes.json() as { email?: string };
+        const googleUser = googleRes.data as { email?: string };
         const email = googleUser.email;
 
         if (!email) {
@@ -73,12 +70,12 @@ export const optionalAuthMiddleware = async (
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
 
-            const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            if (googleRes.ok) {
-                const googleUser = await googleRes.json() as { email?: string };
+            if (googleRes.status === 200) {
+                const googleUser = googleRes.data as { email?: string };
                 const email = googleUser.email;
 
                 if (email) {
