@@ -21,7 +21,8 @@ export const analyticsController = {
             if (!req.profileId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const summary = await analyticsService.getAnalyticsSummary(req.profileId);
+            const days = req.query.days ? parseInt(req.query.days as string) : 14;
+            const summary = await analyticsService.getAnalyticsSummary(req.profileId, days);
             res.json(summary);
         } catch (error) {
             console.error('Summary error:', error);

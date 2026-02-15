@@ -26,7 +26,7 @@ export const billingController = {
                 userId,
                 email: profile.email,
                 planId,
-                successUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+                successUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success`,
                 cancelUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/billing?canceled=true`
             });
 

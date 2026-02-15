@@ -19,7 +19,6 @@ export interface UserProfileDB {
     button_style?: 'rounded' | 'soft-rect';
     button_style_type?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient' | 'cyber' | 'neon' | 'skeuo' | 'minimal-hover' | 'paper' | 'liquid' | null;
     button_roundness?: 'square' | 'round' | 'rounder' | 'full' | null;
-    show_newsletter?: boolean;
     custom_background?: string | null;
     custom_text_color?: string | null;
     custom_solid_color?: string | null;
@@ -79,13 +78,6 @@ export interface AnalyticsEvent {
     created_at: string;
 }
 
-export interface NewsletterLead {
-    id: string;
-    user_id: string;  // FK to users(id)
-    email: string;
-    name?: string;
-    timestamp: string;
-}
 
 // API types (camelCase for frontend compatibility)
 export interface UserProfile {
@@ -108,7 +100,6 @@ export interface UserProfile {
     buttonStyle?: 'rounded' | 'soft-rect';
     buttonStyleType?: 'solid' | 'outline' | 'glass' | 'soft' | 'hard-shadow' | 'push' | 'gradient' | 'cyber' | 'neon' | 'skeuo' | 'minimal-hover' | 'paper' | 'liquid' | null;
     buttonRoundness?: 'square' | 'round' | 'rounder' | 'full' | null;
-    showNewsletter?: boolean;
     customBackground?: string | null;
     customTextColor?: string | null;
     customSolidColor?: string | null;
@@ -170,7 +161,6 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         buttonStyle: dbProfile.button_style,
         buttonStyleType: dbProfile.button_style_type,
         buttonRoundness: dbProfile.button_roundness,
-        showNewsletter: dbProfile.show_newsletter,
         customBackground: dbProfile.custom_background,
         customTextColor: dbProfile.custom_text_color || null,
         customSolidColor: dbProfile.custom_solid_color || null,
@@ -205,7 +195,6 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.buttonStyle !== undefined) dbProfile.button_style = apiProfile.buttonStyle;
     if (apiProfile.buttonStyleType !== undefined) dbProfile.button_style_type = apiProfile.buttonStyleType;
     if (apiProfile.buttonRoundness !== undefined) dbProfile.button_roundness = apiProfile.buttonRoundness;
-    if (apiProfile.showNewsletter !== undefined) dbProfile.show_newsletter = apiProfile.showNewsletter;
     if (apiProfile.customBackground !== undefined) dbProfile.custom_background = apiProfile.customBackground;
     if (apiProfile.customTextColor !== undefined) dbProfile.custom_text_color = apiProfile.customTextColor;
     if (apiProfile.customSolidColor !== undefined) dbProfile.custom_solid_color = apiProfile.customSolidColor;

@@ -3,34 +3,66 @@ import { AnalyticsEvent } from '../models/types.js';
 
 export const analyticsService = {
     // Get analytics summary for a profile
-    async getAnalyticsSummary(userId: string) {
-        // Get events FROM THE LAST 14 DAYS
-        // Using a generous range to ensure we capture everything
-        const fourteenDaysAgo = new Date();
-        fourteenDaysAgo.setHours(0, 0, 0, 0);
-        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    async getAnalyticsSummary(userId: string, days: number = 14) {
+        // If days is 0 (or 'all'), we fetch EVERYTHING
+        // First, let's determine the start date if days > 0
+        let startDate: Date;
+
+        if (days > 0) {
+            startDate = new Date();
+            startDate.setHours(0, 0, 0, 0);
+            startDate.setDate(startDate.getDate() - days);
+        } else {
+            // ALL TIME: Set to a very old date (e.g. 2020) or just null query
+            startDate = new Date('2020-01-01'); // Project inception or reasonable past
+        }
 
         // Fetch events for this user
-        // We query the 'clicks' table which stores both 'view' and 'click' events
-        const { data: events, error } = await supabase
+        const query = supabase
             .from('clicks')
             .select('*')
             .eq('user_id', userId)
-            .gte('created_at', fourteenDaysAgo.toISOString())
             .order('created_at', { ascending: true });
+
+        // Only filter by date if not 'all time' (to be safe, or just use the old date)
+        if (days > 0) {
+            query.gte('created_at', startDate.toISOString());
+        }
+
+        const { data: events, error } = await query;
 
         if (error) {
             console.error('Error fetching analytics summary:', error);
             return { totalViews: 0, totalClicks: 0, ctr: 0, dailyData: [], topLinks: [] };
         }
 
-        // Initialize daily map with zeros for the last 14 days
+        // If All Time (days=0), we need to determine the actual range from the first event
+        let actualDays = days;
+        if (days <= 0 && events && events.length > 0) {
+            const firstEventDate = new Date(events[0].created_at);
+            const now = new Date();
+            const timeDiff = now.getTime() - firstEventDate.getTime();
+            actualDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include today
+            startDate = firstEventDate;
+        } else if (days <= 0) {
+            actualDays = 30; // Default if no data
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30);
+        }
+
+        // Initialize daily map
         const dailyMap = new Map();
-        for (let i = 0; i < 14; i++) {
+        // For All Time, we might want to group differently if too large, but for now stick to daily
+        // Limit to reasonable max (e.g. 365*2) to prevent UI crash?
+        // Let's stick to generating days for the actual range found
+        for (let i = 0; i < actualDays; i++) {
             const date = new Date();
             date.setDate(date.getDate() - i);
             const dateStr = date.toISOString().split('T')[0];
-            dailyMap.set(dateStr, { date: dateStr, views: 0, clicks: 0 });
+            // Only add if it's >= startDate (to be clean)
+            if (date >= startDate || days > 0) { // Simple logic: just populate
+                dailyMap.set(dateStr, { date: dateStr, views: 0, clicks: 0 });
+            }
         }
 
         let totalViews = 0;
