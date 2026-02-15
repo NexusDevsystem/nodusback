@@ -51,6 +51,8 @@ export const authMiddleware = async (
         req.userId = profile.id;
         req.profileId = profile.id;
 
+        console.log(`✅ Auth: Request authorized for ${email}`);
+
         next();
     } catch (error) {
         console.error('Auth middleware error:', error);
