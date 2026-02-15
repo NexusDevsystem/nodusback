@@ -13,6 +13,8 @@ import integrationRoutes from './routes/integrationRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+console.log('🚀 Starting Nodus Backend initialized at:', new Date().toISOString());
+
 // 1. CORS Configuration (MUST BE FIRST)
 app.use(cors({
     origin: '*',
@@ -58,19 +60,30 @@ app.get('/', (req, res) => {
     res.json({
         message: 'Nodus Backend API',
         version: '1.0.0',
-        endpoints: ['/health', '/api/profile', '/api/links', '/api/products', '/api/analytics', '/api/leads', '/api/music', '/api/billing']
+        env: process.env.NODE_ENV || 'development'
+    });
+});
+
+// 404 HANDLER - Catch all unmatched routes
+app.use((req, res) => {
+    console.warn(`⚠️ 404 - Not Found: ${req.method} ${req.path}`);
+    res.status(404).json({
+        error: true,
+        message: `Rota ${req.method} ${req.path} não encontrada no Servidor Nodus.`,
+        code: 'ROUTE_NOT_FOUND'
     });
 });
 
 // GLOBAL ERROR HANDLER - Must be last
 // Ensures all errors return JSON instead of HTML to prevent frontend crashes
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('❌ SEVERE ERROR:', err.message);
+    console.error('❌ ERRO CRÍTICO NO SERVIDOR:', err.message);
     if (err.stack) console.error(err.stack);
 
+    // Safety check to avoid sending HTML even on crash
     res.status(err.status || 500).json({
         error: true,
-        message: err.message || 'Internal Server Error',
+        message: err.message || 'Erro Interno do Servidor',
         path: req.path
     });
 });
