@@ -37,9 +37,6 @@ export const analyticsController = {
                 return res.status(400).json({ error: 'linkId is required' });
             }
 
-            // Track in analytics
-            await analyticsService.trackClick(req.profileId || '', linkId);
-
             // Increment link clicks
             await linkService.incrementClicks(linkId);
 

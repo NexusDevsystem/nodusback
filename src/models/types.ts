@@ -119,6 +119,7 @@ export interface LinkItem {
     url: string;
     image?: string;
     isActive: boolean;
+    clicks?: number;
     layout?: 'classic' | 'social' | 'card' | 'icon' | 'grid' | 'carousel' | 'stacked';
     type?: 'link' | 'collection' | 'social';
     children?: LinkItem[];
@@ -218,6 +219,7 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         url: db.url,
         image: db.icon, // Map icon to image
         isActive: db.is_active,
+        clicks: db.clicks || 0, // Map clicks
         layout: db.layout as any,
         type: db.type as any,
         highlight: db.highlight as any,
