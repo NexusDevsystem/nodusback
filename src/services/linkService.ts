@@ -3,7 +3,7 @@ import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.
 
 export const linkService = {
     // Get all links for a profile (by user_id)
-    async getLinksByProfileId(userId: string): Promise<LinkItem[]> {
+    async getLinksByProfileId(userId: string, publicView = false): Promise<LinkItem[]> {
         const { data, error } = await supabase
             .from('links')
             .select('*')
@@ -17,21 +17,40 @@ export const linkService = {
         }
 
         const dbLinks = data as LinkItemDB[];
+        const now = new Date();
 
-        // Fetch children for each link and map to API format
+        // Filter and Map
         const linksWithChildren = await Promise.all(
             dbLinks.map(async (dbLink) => {
                 const apiLink = linkDbToApi(dbLink);
-                const children = await this.getChildLinks(dbLink.id!);
+
+                // --- SCHEDULE LOGIC ---
+                // If it's a public view, apply schedule filtering
+                if (publicView) {
+                    // 1. If start data is set and FUTURE (start > now), Hide it.
+                    if (apiLink.scheduleStart && new Date(apiLink.scheduleStart) > now) {
+                        return null;
+                    }
+                    // 2. If end date is set and PAST (end < now), Hide it.
+                    if (apiLink.scheduleEnd && new Date(apiLink.scheduleEnd) < now) {
+                        return null;
+                    }
+                }
+                // ----------------------
+
+                const children = await this.getChildLinks(dbLink.id!, publicView);
+
+                // If the item itself is valid but has children, update children list
                 return { ...apiLink, children };
             })
         );
 
-        return linksWithChildren;
+        // Remove nulls (filtered out links)
+        return linksWithChildren.filter(l => l !== null) as LinkItem[];
     },
 
     // Get child links (for collections)
-    async getChildLinks(parentId: string): Promise<LinkItem[]> {
+    async getChildLinks(parentId: string, publicView = false): Promise<LinkItem[]> {
         const { data, error } = await supabase
             .from('links')
             .select('*')
@@ -44,7 +63,21 @@ export const linkService = {
         }
 
         const dbLinks = data as LinkItemDB[];
-        return dbLinks.map(db => linkDbToApi(db));
+        const now = new Date();
+
+        // Filter for schedule if public view
+        const filtered = dbLinks.filter(dbLink => {
+            if (!publicView) return true;
+
+            const start = dbLink.schedule_start ? new Date(dbLink.schedule_start) : null;
+            const end = dbLink.schedule_end ? new Date(dbLink.schedule_end) : null;
+
+            if (start && start > now) return false; // Future
+            if (end && end < now) return false;   // Expired
+            return true;
+        });
+
+        return filtered.map(db => linkDbToApi(db));
     },
 
     // Get links by username (public)
@@ -61,7 +94,8 @@ export const linkService = {
             return [];
         }
 
-        return this.getLinksByProfileId(profileData.id);
+        // Pass 'true' to enable Public View filtering (Schedule)
+        return this.getLinksByProfileId(profileData.id, true);
     },
 
     // Create a new link
@@ -98,6 +132,10 @@ export const linkService = {
         if (updates.embedType !== undefined) dbUpdates.embed_type = updates.embedType;
         if (updates.subtitle !== undefined) dbUpdates.subtitle = updates.subtitle;
         if (updates.isArchived !== undefined) dbUpdates.is_archived = updates.isArchived;
+
+        // Schedule Updates
+        if (updates.scheduleStart !== undefined) dbUpdates.schedule_start = updates.scheduleStart;
+        if (updates.scheduleEnd !== undefined) dbUpdates.schedule_end = updates.scheduleEnd;
 
         const { data, error } = await supabase
             .from('links')

@@ -51,6 +51,8 @@ export interface LinkItemDB {
     is_archived: boolean;
     platform?: string;
     position?: number;
+    schedule_start?: string | null;
+    schedule_end?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -128,6 +130,8 @@ export interface LinkItem {
     subtitle?: string;
     isArchived?: boolean;
     platform?: string;
+    scheduleStart?: string | null;
+    scheduleEnd?: string | null;
 }
 
 export interface Product {
@@ -226,7 +230,9 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         embedType: db.embed_type as any,
         subtitle: db.subtitle,
         isArchived: db.is_archived,
-        platform: db.platform
+        platform: db.platform,
+        scheduleStart: db.schedule_start,
+        scheduleEnd: db.schedule_end
     };
 }
 
@@ -244,7 +250,9 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         embed_type: api.embedType,
         subtitle: api.subtitle,
         is_archived: api.isArchived ?? false,
-        platform: api.platform
+        platform: api.platform,
+        schedule_start: api.scheduleStart,
+        schedule_end: api.scheduleEnd
     };
 
     // IMPORTANT: Do NOT include the id field here
