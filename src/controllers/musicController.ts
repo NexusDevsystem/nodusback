@@ -132,13 +132,16 @@ export const musicController = {
                                             if (entity && entity.trackList) {
                                                 const albumCover = entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '';
 
-                                                const tracks = entity.trackList.map((t: any) => ({
-                                                    title: t.title,
-                                                    artist: t.subtitle,
-                                                    url: `https://open.spotify.com/track/${t.uid}`,
-                                                    image: albumCover, // Assign album cover to each track
-                                                    duration: t.duration
-                                                }));
+                                                const tracks = entity.trackList.map((t: any) => {
+                                                    const trackId = t.uri ? t.uri.split(':').pop() : t.uid;
+                                                    return {
+                                                        title: t.title,
+                                                        artist: t.subtitle,
+                                                        url: `https://open.spotify.com/track/${trackId}`,
+                                                        image: albumCover, // Assign album cover to each track
+                                                        duration: t.duration
+                                                    };
+                                                });
 
                                                 console.log(`[MusicMetadata] Found ${tracks.length} tracks via Embed __NEXT_DATA__.`);
 
