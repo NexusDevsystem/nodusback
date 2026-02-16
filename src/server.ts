@@ -44,6 +44,7 @@ const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:5173',
     process.env.CORS_ORIGIN || 'http://localhost:5173',
     'http://localhost:3001', // Local Development
+    'http://localhost:3000', // Local Development (Create React App default)
     'https://nodus-frontend.vercel.app', // Example production URL
     'https://nodus.app', // Example production URL
     'https://www.noduscc.com.br',
