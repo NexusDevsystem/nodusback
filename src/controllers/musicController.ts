@@ -130,10 +130,13 @@ export const musicController = {
                                             const entity = jsonData?.props?.pageProps?.state?.data?.entity;
 
                                             if (entity && entity.trackList) {
+                                                const albumCover = entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '';
+
                                                 const tracks = entity.trackList.map((t: any) => ({
                                                     title: t.title,
                                                     artist: t.subtitle,
                                                     url: `https://open.spotify.com/track/${t.uid}`,
+                                                    image: albumCover, // Assign album cover to each track
                                                     duration: t.duration
                                                 }));
 
@@ -142,7 +145,7 @@ export const musicController = {
                                                 return res.json({
                                                     title: entity.title || title || 'Álbum',
                                                     artist: entity.subtitle || artist || '',
-                                                    thumbnailUrl: entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '',
+                                                    thumbnailUrl: albumCover,
                                                     type: 'album',
                                                     platform: 'spotify',
                                                     tracks: tracks
