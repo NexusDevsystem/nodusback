@@ -28,7 +28,7 @@ export const linkController = {
             const { data: profile } = await supabase
                 .from('users')
                 .select('id')
-                .eq('username', username)
+                .ilike('username', username)
                 .single();
 
             if (!profile) {

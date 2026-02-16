@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import * as youtubeService from '../services/youtubeService.js';
 
+
 export const getYouTubeAuthUrl = (req: Request, res: Response) => {
     try {
         const url = youtubeService.getAuthUrl();
@@ -25,3 +26,5 @@ export const handleYouTubeCallback = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+

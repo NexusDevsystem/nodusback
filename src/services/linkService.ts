@@ -86,7 +86,7 @@ export const linkService = {
         const { data: profileData, error: profileError } = await supabase
             .from('users')  // Match actual table name
             .select('id')
-            .eq('username', username)
+            .ilike('username', username)
             .single();
 
         if (profileError || !profileData) {

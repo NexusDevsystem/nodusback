@@ -7,7 +7,7 @@ export const profileService = {
         const { data, error } = await supabase
             .from('users')
             .select('*')
-            .eq('username', username)
+            .ilike('username', username)
             .single();
 
         if (error) {
@@ -115,7 +115,7 @@ export const profileService = {
         const { data, error } = await supabase
             .from('users')
             .select('username')
-            .eq('username', username)
+            .ilike('username', username)
             .maybeSingle();
 
         if (error) {
