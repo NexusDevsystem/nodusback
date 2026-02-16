@@ -100,59 +100,59 @@ export const musicController = {
                         if (!title && ogTitle) title = ogTitle;
                         if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
 
-                        // ALBUM DETECTION & SCRAPING (JSON-LD)
+                        // ALBUM DETECTION & SCRAPING (Embed Method)
                         if (targetUrl.includes('/album/')) {
-                            type = 'album';
-                            const tracks: any[] = [];
-
+                            console.log('[MusicMetadata] Detected Spotify Album, trying Embed scraping...');
                             try {
-                                const ldJsonScript = $('script[type="application/ld+json"]').first().html();
-                                if (ldJsonScript) {
-                                    const ldData = JSON.parse(ldJsonScript);
+                                // Extract Album ID safely
+                                const albumIdMatch = targetUrl.match(/album\/([a-zA-Z0-9]+)/);
+                                const albumId = albumIdMatch ? albumIdMatch[1] : null;
 
-                                    // Check if it's a MusicAlbum
-                                    if (ldData['@type'] === 'MusicAlbum' && ldData.track) {
-                                        const trackList = Array.isArray(ldData.track) ? ldData.track : [ldData.track];
+                                if (albumId) {
+                                    const embedUrl = `https://open.spotify.com/embed/album/${albumId}`;
+                                    console.log(`[MusicMetadata] Fetching Embed URL: ${embedUrl}`);
 
-                                        trackList.forEach((track: any) => {
-                                            if (track['@type'] === 'MusicRecording') {
-                                                let trackArtist = artist; // Default to album artist
+                                    const embedRes = await fetch(embedUrl, {
+                                        headers: {
+                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                            'Referer': 'https://open.spotify.com/'
+                                        }
+                                    });
 
-                                                // Try to find specific track artist
-                                                if (track.byArtist) {
-                                                    const artistObj = Array.isArray(track.byArtist) ? track.byArtist[0] : track.byArtist;
-                                                    trackArtist = artistObj.name;
-                                                }
+                                    if (embedRes.ok) {
+                                        const embedHtml = await embedRes.text();
+                                        const $embed = cheerio.load(embedHtml);
 
-                                                tracks.push({
-                                                    title: track.name,
-                                                    artist: trackArtist,
-                                                    url: track.url ? (track.url.startsWith('http') ? track.url : `https://open.spotify.com${track.url}`) : '',
-                                                    duration: track.duration
+                                        const nextData = $embed('script[id="__NEXT_DATA__"]').html();
+                                        if (nextData) {
+                                            const jsonData = JSON.parse(nextData);
+                                            // Path to entity might vary, but usually props.pageProps.state.data.entity
+                                            const entity = jsonData?.props?.pageProps?.state?.data?.entity;
+
+                                            if (entity && entity.trackList) {
+                                                const tracks = entity.trackList.map((t: any) => ({
+                                                    title: t.title,
+                                                    artist: t.subtitle,
+                                                    url: `https://open.spotify.com/track/${t.uid}`,
+                                                    duration: t.duration
+                                                }));
+
+                                                console.log(`[MusicMetadata] Found ${tracks.length} tracks via Embed __NEXT_DATA__.`);
+
+                                                return res.json({
+                                                    title: entity.title || title || 'Álbum',
+                                                    artist: entity.subtitle || artist || '',
+                                                    thumbnailUrl: entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '',
+                                                    type: 'album',
+                                                    platform: 'spotify',
+                                                    tracks: tracks
                                                 });
                                             }
-                                        });
+                                        }
                                     }
                                 }
                             } catch (e) {
-                                console.error('[MusicMetadata] Failed to parse JSON-LD for album:', e);
-                            }
-
-                            if (tracks.length > 0) {
-                                console.log(`[MusicMetadata] Found ${tracks.length} tracks for album.`);
-                                // Return early with album data
-                                if (!title && ogTitle) title = ogTitle;
-                                if (!artist && musicMusician) artist = musicMusician; // Fallback
-                                if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
-
-                                return res.json({
-                                    title: title || 'Álbum Desconhecido',
-                                    artist: artist || '',
-                                    thumbnailUrl: thumbnailUrl || '',
-                                    type: 'album',
-                                    platform: 'spotify',
-                                    tracks: tracks
-                                });
+                                console.error('[MusicMetadata] Failed to scrape Spotify Embed:', e);
                             }
                         }
 
