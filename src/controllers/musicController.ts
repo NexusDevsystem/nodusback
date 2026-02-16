@@ -31,10 +31,9 @@ export const musicController = {
                 return res.status(400).json({ error: 'Unsupported music platform' });
             }
 
-            // Normalize Spotify URLs (remove /intl-xx/) - REMOVED as it breaks OEmbed
-            // if (isSpotify) {
-            //    targetUrl = targetUrl.replace(/\/intl-[a-z]{2}\//, '/');
-            // }
+            // NOTE: We do NOT strip /intl-xx/ from Spotify URLs anymore because 
+            // the OEmbed API often returns 404 if the URL doesn't match the canonical one, 
+            // or sometimes it needs the locale. Letting it pass through as-is is safer.
 
             let title = '';
             let artist = '';
@@ -62,7 +61,6 @@ export const musicController = {
                     if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
 
                     // Spotify OEmbed returns 'author_name' which is the Artist
-                    // Deezer seems to not strictly return author_name in all cases, but let's check
                     if (data.author_name && data.author_name !== 'Spotify') {
                         artist = data.author_name;
                     }
@@ -75,7 +73,8 @@ export const musicController = {
                 console.error('[MusicMetadata] OEmbed failed:', oembedError);
             }
 
-            // METHOD 2: SCRAPING (Fallback if missing data)
+            // METHOD 2: SCRAPING (Fallback/Enhancement)
+            // If OEmbed missed any piece (especially Artist), try scraping
             if (!title || !artist || !thumbnailUrl) {
                 console.log('[MusicMetadata] Missing data, trying Scraping fallback...');
                 try {
@@ -94,20 +93,76 @@ export const musicController = {
                         const ogTitle = $('meta[property="og:title"]').attr('content');
                         const ogDescription = $('meta[property="og:description"]').attr('content');
                         const ogImage = $('meta[property="og:image"]').attr('content');
+                        const musicMusician = $('meta[property="music:musician"]').attr('content');
+                        const twitterArtist = $('meta[name="twitter:audio:artist_name"]').attr('content'); // Twitter card tag
+                        const pageTitle = $('title').text(); // <title> tag often formatted "Song - Artist | Spotify"
 
                         if (!title && ogTitle) title = ogTitle;
                         if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
 
+                        // Priority 1: Specific Meta Tags
+                        if (!artist) {
+                            if (musicMusician) {
+                                artist = musicMusician;
+                                console.log(`[MusicMetadata] Found artist via music:musician: ${artist}`);
+                            } else if (twitterArtist) {
+                                artist = twitterArtist;
+                                console.log(`[MusicMetadata] Found artist via twitter:audio:artist_name: ${artist}`);
+                            }
+                        }
+
+                        // Priority 2: <title> Tag Parsing
+                        // Format is usually "Song Name - song and lyrics by Artist Name | Spotify" or "Song Name - Single by Artist Name | Spotify"
+                        if (!artist && isSpotify && pageTitle) {
+                            // Remove " | Spotify" suffix
+                            const cleanTitle = pageTitle.replace(' | Spotify', '');
+
+                            // Check for " - song and lyrics by "
+                            if (cleanTitle.includes(' - song and lyrics by ')) {
+                                artist = cleanTitle.split(' - song and lyrics by ')[1];
+                                console.log(`[MusicMetadata] Found artist via <title> (lyrics pattern): ${artist}`);
+                            }
+                            // Check for " - Single by "
+                            else if (cleanTitle.includes(' - Single by ')) {
+                                artist = cleanTitle.split(' - Single by ')[1];
+                                console.log(`[MusicMetadata] Found artist via <title> (single pattern): ${artist}`);
+                            }
+                            // Check for " - EP by "
+                            else if (cleanTitle.includes(' - EP by ')) {
+                                artist = cleanTitle.split(' - EP by ')[1];
+                                console.log(`[MusicMetadata] Found artist via <title> (EP pattern): ${artist}`);
+                            }
+                            // Check for " - Album by "
+                            else if (cleanTitle.includes(' - Album by ')) {
+                                artist = cleanTitle.split(' - Album by ')[1];
+                                console.log(`[MusicMetadata] Found artist via <title> (Album pattern): ${artist}`);
+                            }
+                            // Fallback: Check for simple dash separator if title is known
+                            else if (title && cleanTitle.startsWith(title + ' - ')) {
+                                artist = cleanTitle.substring(title.length + 3); // Remove "Title - "
+                                console.log(`[MusicMetadata] Found artist via <title> (dash pattern): ${artist}`);
+                            }
+                        }
+
+                        // Priority 3: og:description Parsing (Fallback)
                         if (!artist && ogDescription) {
                             if (isSpotify) {
-                                // "Song · Artist · Album" 
+                                // "Listen to [Song] on Spotify. [Artist] · Song · [Year]."
+                                // "Song · Artist · Album"
                                 const parts = ogDescription.split(' · ');
                                 if (parts.length >= 2) {
+                                    // Heuristic: If we have the title, the other part might be the artist
                                     if (parts[0] === title && parts[1]) artist = parts[1];
                                     else if (parts[1] === title && parts[0]) artist = parts[0];
-                                    else artist = parts[0];
+                                    else artist = parts[0]; // Best guess is usually the first part if not title
+                                    console.log(`[MusicMetadata] Found artist via og:description (dot pattern): ${artist}`);
                                 } else if (ogDescription.includes(', a song by ')) {
-                                    artist = ogDescription.split(', a song by ')[1].replace(' on Spotify', '');
+                                    // "Song Name, a song by Artist Name on Spotify"
+                                    const bySplit = ogDescription.split(', a song by ');
+                                    if (bySplit[1]) {
+                                        artist = bySplit[1].replace(' on Spotify', '').split(' on ')[0];
+                                        console.log(`[MusicMetadata] Found artist via og:description (sentence pattern): ${artist}`);
+                                    }
                                 }
                             } else if (isDeezer && ogDescription.includes(' by ')) {
                                 artist = ogDescription.split(' by ')[1].split(' on Deezer')[0];
@@ -123,22 +178,12 @@ export const musicController = {
             if (title) title = title.replace(/ - (Single|EP|Album|Remastered|Radio Edit).*$/i, '').trim();
             if (artist) artist = artist.replace(/ on Spotify| on Deezer.*/i, '').trim();
 
-            // Fallback: If artist is still part of title (common in Deezer APIs sometimes)
-            if (!artist && title.includes(' - ')) {
-                const parts = title.split(' - ');
-                if (parts.length === 2) {
-                    // Usually "Song - Artist" or "Artist - Song" - hard to know for sure without heuristics
-                    // But often Deezer OEmbed title is "Song - Artist"
-                    if (isDeezer) {
-                        title = parts[0];
-                        artist = parts[1];
-                    }
-                }
-            }
+            // Clean up URLs
+            if (thumbnailUrl && thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
 
             return res.json({
                 title: title || 'Música Desconhecida',
-                artist: artist || 'Artista Desconhecido',
+                artist: artist || '', // Empty string to allow frontend placeholder
                 thumbnailUrl: thumbnailUrl || '',
                 type: 'track',
                 platform: isSpotify ? 'spotify' : 'deezer'
