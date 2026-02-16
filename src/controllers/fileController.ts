@@ -4,6 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 
+// Extend Express Request interface to include user and file
+interface MulterRequest extends Request {
+    file?: Express.Multer.File;
+    user?: any;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -15,7 +21,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 // Configure Multer Storage
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
+    destination: (req: Request, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
         const userId = (req as any).user?.id;
         if (!userId) {
             return cb(new Error('User not authenticated'), '');
@@ -27,7 +33,7 @@ const storage = multer.diskStorage({
         }
         cb(null, userDir);
     },
-    filename: (req, file, cb) => {
+    filename: (req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
         // Sanitize filename: remove special chars, keep extension
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const ext = path.extname(file.originalname);
@@ -41,7 +47,7 @@ export const upload = multer({
     limits: {
         fileSize: 10 * 1024 * 1024 // 10MB limit
     },
-    fileFilter: (req, file, cb) => {
+    fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
         // Allowed file types
         const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
         if (allowedTypes.includes(file.mimetype)) {
@@ -56,23 +62,25 @@ const fileController = {
     // Upload File
     uploadFile: async (req: Request, res: Response) => {
         try {
-            if (!req.file) {
+            const multerReq = req as MulterRequest;
+
+            if (!multerReq.file) {
                 return res.status(400).json({ error: true, message: 'No file uploaded' });
             }
 
             const userId = (req as any).user.id;
             const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-            const fileUrl = `${baseUrl}/uploads/files/${userId}/${req.file.filename}`;
+            const fileUrl = `${baseUrl}/uploads/files/${userId}/${multerReq.file.filename}`;
 
             res.json({
                 success: true,
                 message: 'File uploaded successfully',
                 file: {
-                    name: req.file.originalname,
-                    filename: req.file.filename,
-                    size: req.file.size,
+                    name: multerReq.file.originalname,
+                    filename: multerReq.file.filename,
+                    size: multerReq.file.size,
                     url: fileUrl,
-                    mimetype: req.file.mimetype,
+                    mimetype: multerReq.file.mimetype,
                     uploadedAt: new Date().toISOString()
                 }
             });

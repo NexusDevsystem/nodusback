@@ -34,6 +34,7 @@
         "googleapis": "^171.4.0",
         "helmet": "^8.1.0",
         "hpp": "^0.2.3",
+        "multer": "^2.0.2",
         "pg": "^8.18.0",
         "stripe": "^20.3.1",
         "typescript": "^5.3.3",
@@ -41,6 +42,7 @@
         "xss": "^1.0.15"
     },
     "devDependencies": {
+        "@types/multer": "^2.0.0",
         "@types/pg": "^8.16.0",
         "tsx": "^4.7.0"
     }
