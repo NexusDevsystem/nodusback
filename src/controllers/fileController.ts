@@ -22,7 +22,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 // Configure Multer Storage
 const storage = multer.diskStorage({
     destination: (req: Request, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
-        const userId = (req as any).user?.id;
+        const userId = (req as any).userId;
         if (!userId) {
             return cb(new Error('User not authenticated'), '');
         }
@@ -68,7 +68,7 @@ const fileController = {
                 return res.status(400).json({ error: true, message: 'No file uploaded' });
             }
 
-            const userId = (req as any).user.id;
+            const userId = (req as any).userId;
             const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
             const fileUrl = `${baseUrl}/uploads/files/${userId}/${multerReq.file.filename}`;
 
@@ -93,7 +93,7 @@ const fileController = {
     // List Files
     listFiles: async (req: Request, res: Response) => {
         try {
-            const userId = (req as any).user.id;
+            const userId = (req as any).userId;
             const userDir = path.join(UPLOADS_DIR, userId);
 
             if (!fs.existsSync(userDir)) {
@@ -126,7 +126,7 @@ const fileController = {
     // Delete File
     deleteFile: async (req: Request, res: Response) => {
         try {
-            const userId = (req as any).user.id;
+            const userId = (req as any).userId;
             const { filename } = req.params;
 
             // Security check: prevent directory traversal
