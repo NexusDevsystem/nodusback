@@ -100,6 +100,62 @@ export const musicController = {
                         if (!title && ogTitle) title = ogTitle;
                         if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
 
+                        // ALBUM DETECTION & SCRAPING (JSON-LD)
+                        if (targetUrl.includes('/album/')) {
+                            type = 'album';
+                            const tracks: any[] = [];
+
+                            try {
+                                const ldJsonScript = $('script[type="application/ld+json"]').first().html();
+                                if (ldJsonScript) {
+                                    const ldData = JSON.parse(ldJsonScript);
+
+                                    // Check if it's a MusicAlbum
+                                    if (ldData['@type'] === 'MusicAlbum' && ldData.track) {
+                                        const trackList = Array.isArray(ldData.track) ? ldData.track : [ldData.track];
+
+                                        trackList.forEach((track: any) => {
+                                            if (track['@type'] === 'MusicRecording') {
+                                                let trackArtist = artist; // Default to album artist
+
+                                                // Try to find specific track artist
+                                                if (track.byArtist) {
+                                                    const artistObj = Array.isArray(track.byArtist) ? track.byArtist[0] : track.byArtist;
+                                                    trackArtist = artistObj.name;
+                                                }
+
+                                                tracks.push({
+                                                    title: track.name,
+                                                    artist: trackArtist,
+                                                    url: track.url ? (track.url.startsWith('http') ? track.url : `https://open.spotify.com${track.url}`) : '',
+                                                    duration: track.duration
+                                                });
+                                            }
+                                        });
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[MusicMetadata] Failed to parse JSON-LD for album:', e);
+                            }
+
+                            if (tracks.length > 0) {
+                                console.log(`[MusicMetadata] Found ${tracks.length} tracks for album.`);
+                                // Return early with album data
+                                if (!title && ogTitle) title = ogTitle;
+                                if (!artist && musicMusician) artist = musicMusician; // Fallback
+                                if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
+
+                                return res.json({
+                                    title: title || 'Álbum Desconhecido',
+                                    artist: artist || '',
+                                    thumbnailUrl: thumbnailUrl || '',
+                                    type: 'album',
+                                    platform: 'spotify',
+                                    tracks: tracks
+                                });
+                            }
+                        }
+
                         // Priority 1: Specific Meta Tags
                         if (!artist) {
                             if (musicMusician) {
