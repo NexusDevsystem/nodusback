@@ -12,6 +12,12 @@ import leadRoutes from './routes/leadRoutes.js';
 import musicRoutes from './routes/musicRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
 import integrationRoutes from './routes/integrationRoutes.js';
+import fileRoutes from './routes/fileRoutes.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -75,6 +81,10 @@ app.use(express.json({
     }
 }));
 
+// Serve Uploads Static Directory
+const UPLOADS_DIR = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(UPLOADS_DIR));
+
 // Routes
 app.use('/api/profile', profileRoutes);
 app.use('/api/links', linkRoutes);
@@ -83,7 +93,9 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/music', musicRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api/integrations', integrationRoutes);
+app.use('/api/files', fileRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
