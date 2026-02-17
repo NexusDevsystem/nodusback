@@ -20,8 +20,8 @@ export const getAuthUrl = (userId: string) => {
     // Store verifier in the state to retrieve it later (csrf_userId_verifier)
     const state = `${csrfState}_${userId}_${verifier}`;
 
-    // Auth URL (Note: No trailing slash on v2)
-    const baseUrl = 'https://www.tiktok.com/v2/auth/authorize';
+    // Auth URL (Note: Re-adding trailing slash as per official docs)
+    const baseUrl = 'https://www.tiktok.com/v2/auth/authorize/';
 
     const params = new URLSearchParams({
         client_key: CLIENT_KEY || '',
@@ -34,7 +34,8 @@ export const getAuthUrl = (userId: string) => {
     });
 
     const url = `${baseUrl}?${params.toString()}`;
-    console.log('[TikTokService] Generated Auth URL with PKCE for user:', userId);
+    console.log('[TikTokService] getAuthUrl - Inputs:', { CLIENT_KEY, REDIRECT_URI });
+    console.log('[TikTokService] Generated Auth URL with PKCE:', url);
 
     return url;
 };
