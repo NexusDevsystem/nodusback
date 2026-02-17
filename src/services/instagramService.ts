@@ -161,11 +161,45 @@ export const syncFeed = async (userId: string) => {
         }
 
         const mediaList = data.data || [];
+        if (mediaList.length === 0) return [];
 
-        // Save media as links for the user
+        // 1. Ensure "Posts do Instagram" collection exists
+        let collectionId: string;
+        const { data: existingCollection } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('title', 'Posts do Instagram')
+            .eq('type', 'collection')
+            .maybeSingle();
+
+        if (existingCollection) {
+            collectionId = existingCollection.id;
+        } else {
+            const { data: newCollection, error: collError } = await supabase
+                .from('links')
+                .insert({
+                    user_id: userId,
+                    title: 'Posts do Instagram',
+                    url: '#',
+                    is_active: true,
+                    is_archived: false,
+                    type: 'collection',
+                    layout: 'grid', // Useful for showing posts in a grid when clicked
+                    position: 0 // Place at top for visibility
+                })
+                .select()
+                .single();
+
+            if (collError) throw collError;
+            collectionId = newCollection.id;
+        }
+
+        // 2. Save media as links within that collection
         for (const media of mediaList) {
             const linkData = {
                 user_id: userId,
+                parent_id: collectionId,
                 title: media.caption ? media.caption.substring(0, 50) : 'Post no Instagram',
                 url: media.permalink,
                 is_active: true,

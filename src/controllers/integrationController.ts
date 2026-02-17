@@ -156,3 +156,40 @@ export const getMyIntegrations = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+export const disconnectIntegration = async (req: Request, res: Response) => {
+    try {
+        const { user } = (req as any);
+        const { provider } = req.params;
+
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+        if (!provider) return res.status(400).json({ error: 'Missing provider' });
+
+        console.log(`[IntegrationController] Disconnecting ${provider} for user:`, user.id);
+
+        // 1. Delete from social_integrations table
+        const { error: deleteError } = await supabase
+            .from('social_integrations')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('provider', provider);
+
+        if (deleteError) throw deleteError;
+
+        // 2. Update redundant 'integrations' array in 'users' table
+        const { data: remainingIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', user.id);
+
+        await supabase
+            .from('users')
+            .update({ integrations: remainingIntegrations || [] })
+            .eq('id', user.id);
+
+        res.json({ success: true, message: `Disconnected ${provider} successfully` });
+    } catch (error: any) {
+        console.error('Disconnect Integration error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
