@@ -22,40 +22,21 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-console.log('🚀 Starting Nodus Backend initialized at:', new Date().toISOString());
-
-// 0. Security Headers (Helmet) & Parameter Pollution (HPP)
-app.use(helmet());
-app.use(hpp());
-
-// 1. Rate Limiting
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    message: 'Too many requests from this IP, please try again after 15 minutes'
-});
-// Apply to all requests
-app.use(limiter);
-
-// 2. CORS Configuration (Restricted)
+// 1. CORS Configuration (MUST BE FIRST for preflights)
 const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:5173',
     process.env.CORS_ORIGIN || 'http://localhost:5173',
-    'http://localhost:3001', // Local Development
-    'http://localhost:3000', // Local Development (Create React App default)
-    'https://nodus-frontend.vercel.app', // Example production URL
-    'https://nodus.app', // Example production URL
+    'http://localhost:3001',
+    'http://localhost:3000',
+    'https://nodus-frontend.vercel.app',
+    'https://nodus.app',
     'https://www.noduscc.com.br',
     'https://noduscc.com.br'
 ];
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-
         if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.nodus.app') || origin.includes('localhost')) {
             callback(null, true);
         } else {
@@ -67,6 +48,20 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
 }));
+
+// 2. Security Headers (Helmet) & Parameter Pollution (HPP)
+app.use(helmet());
+app.use(hpp());
+
+// 3. Rate Limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000, // Increased for editor/development
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+app.use(limiter);
 
 // 2. Request logging
 app.use((req, res, next) => {
