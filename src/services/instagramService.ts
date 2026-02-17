@@ -1,5 +1,5 @@
-import { supabase } from '../config/supabaseClient';
-import { SocialIntegrationDB } from '../models/types';
+import { supabase } from '../config/supabaseClient.js';
+import { SocialIntegrationDB } from '../models/types.js';
 
 const APP_ID = process.env.INSTAGRAM_APP_ID;
 const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;

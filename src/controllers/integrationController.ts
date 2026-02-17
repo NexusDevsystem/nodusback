@@ -1,8 +1,8 @@
 
 import { Request, Response } from 'express';
-import * as tiktokService from '../services/tiktokService';
-import * as instagramService from '../services/instagramService';
-import { supabase } from '../config/supabaseClient';
+import * as tiktokService from '../services/tiktokService.js';
+import * as instagramService from '../services/instagramService.js';
+import { supabase } from '../config/supabaseClient.js';
 
 export const getTikTokAuthUrl = (req: Request, res: Response) => {
     try {

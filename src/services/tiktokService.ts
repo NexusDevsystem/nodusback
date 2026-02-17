@@ -1,6 +1,6 @@
 import crypto from 'crypto';
-import { supabase } from '../config/supabaseClient';
-import { SocialIntegrationDB } from '../models/types';
+import { supabase } from '../config/supabaseClient.js';
+import { SocialIntegrationDB } from '../models/types.js';
 
 const CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY;
 const CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET;
