@@ -40,7 +40,7 @@ export const musicController = {
                         method: 'GET',
                         redirect: 'follow',
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
                         }
                     });
                     targetUrl = headRes.url;
@@ -66,7 +66,7 @@ export const musicController = {
                     console.log(`[Metadata] Trying OEmbed: ${oembedUrl}`);
                     const response = await fetch(oembedUrl, {
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
                         }
                     });
 
@@ -76,15 +76,12 @@ export const musicController = {
                         if (data.title) title = data.title;
                         if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
 
-                        // Artist extraction
                         if (data.author_name && data.author_name !== 'Spotify' && data.author_name !== 'TikTok') {
                             artist = data.author_name;
                         }
 
-                        // TikTok specific type detection
                         if (isTiktok) {
                             type = targetUrl.includes('/video/') ? 'video' : 'profile';
-                            // TikTok title often contains the description, let's keep it as title
                         }
 
                         console.log(`[Metadata] OEmbed Result - Title: ${title}, Artist: ${artist}, Type: ${type}`);
@@ -97,70 +94,69 @@ export const musicController = {
             }
 
             // METHOD 2: SCRAPING (Fallback/Enhancement)
-            // If OEmbed missed any piece (especially Artist) OR if it's TikTok (to get clean video URL), try scraping
             if (!title || !artist || !thumbnailUrl || isTiktok) {
                 console.log(`[Metadata] Missing data or TikTok video, trying Scraping fallback for: ${targetUrl}`);
                 try {
                     const pageRes = await fetch(targetUrl, {
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                            'Accept-Language': 'en-US,en;q=0.5',
-                            'Cookie': 'tt_webid_v2=7300000000000000000;' // Some dummy cookie might help
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache',
+                            'Referer': 'https://www.tiktok.com/',
+                            'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+                            'Sec-Ch-Ua-Mobile': '?0',
+                            'Sec-Ch-Ua-Platform': '"macOS"',
+                            'Sec-Fetch-Dest': 'document',
+                            'Sec-Fetch-Mode': 'navigate',
+                            'Sec-Fetch-Site': 'same-origin',
+                            'Sec-Fetch-User': '?1',
+                            'Upgrade-Insecure-Requests': '1'
                         }
                     });
 
                     if (pageRes.ok) {
                         const html = await pageRes.text();
+                        console.log(`[Metadata] Scraped HTML length: ${html.length}`);
                         const $ = cheerio.load(html);
 
                         // TikTok specific direct video extraction
                         if (isTiktok && targetUrl.includes('/video/')) {
                             try {
-                                // Plan A: Look for __UNIVERSAL_DATA_FOR_REHYDRATION__
-                                const hydrationData = $('script#\__UNIVERSAL_DATA_FOR_REHYDRATION__').html() ||
-                                    $('script').filter((i, el) => $(el).html()?.includes('playAddr') || false).first().html();
+                                // 1. Check Hydration Data
+                                const hydrationData = $('script#\\__UNIVERSAL_DATA_FOR_REHYDRATION__').html() ||
+                                    $('script#SIGI_STATE').html() ||
+                                    $('script').filter((i: any, el: any) => $(el).html()?.includes('playAddr') || false).first().html();
 
                                 if (hydrationData) {
                                     try {
                                         const json = JSON.parse(hydrationData);
-                                        // Try various paths
-                                        targetVideoUrl = json?.['defaultScope']?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
+                                        targetVideoUrl =
+                                            json?.['defaultScope']?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
                                             json?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
+                                            json?.ItemModule?.[Object.keys(json?.ItemModule || {})[0]]?.video?.playAddr ||
                                             json?.itemInfo?.itemStruct?.video?.playAddr;
-                                    } catch (e) {
-                                        // If JSON parse fails, hydrationData might be raw script content with assignments
-                                    }
+
+                                        if (targetVideoUrl) console.log(`[Metadata] Found TikTok playAddr via JSON.`);
+                                    } catch (e) { }
                                 }
 
-                                // Plan B: SIGI_STATE
+                                // 2. Regex Fallback
                                 if (!targetVideoUrl) {
-                                    const sigiData = $('script#SIGI_STATE').html();
-                                    if (sigiData) {
-                                        const json = JSON.parse(sigiData);
-                                        const itemModule = json?.ItemModule;
-                                        if (itemModule) {
-                                            const firstKey = Object.keys(itemModule)[0];
-                                            const video = itemModule[firstKey]?.video;
-                                            if (video?.playAddr) targetVideoUrl = video.playAddr;
-                                        }
-                                    }
-                                }
-
-                                // Plan C: Aggressive Regex Fallback (The "Last Resort")
-                                if (!targetVideoUrl) {
-                                    const playAddrMatch = html.match(/"playAddr":"(.*?)"/);
+                                    const playAddrMatch = html.match(/"playAddr":"(.*?)"/) || html.match(/playAddr":"(.*?)"/);
                                     if (playAddrMatch && playAddrMatch[1]) {
-                                        // Unescape the URL (TikTok escapes / and :)
-                                        targetVideoUrl = playAddrMatch[1].replace(/\\u002F/g, '/').replace(/\\u003A/g, ':');
-                                        console.log(`[Metadata] Found TikTok playAddr via Regex: ${targetVideoUrl.substring(0, 50)}...`);
+                                        targetVideoUrl = playAddrMatch[1].replace(/\\u002F/g, '/').replace(/\\u003A/g, ':').replace(/\\/g, '');
+                                        console.log(`[Metadata] Found TikTok playAddr via Regex.`);
                                     }
                                 }
 
-                                if (targetVideoUrl) {
-                                    console.log(`[Metadata] Successfully extracted TikTok video URL.`);
-                                } else {
-                                    console.warn(`[Metadata] Could not extract direct video URL for TikTok: ${targetUrl}`);
+                                if (!targetVideoUrl) {
+                                    const mp4Match = html.match(/(https:\/\/v16-webapp-prime\.tiktok\.com\/.*?\.mp4)/);
+                                    if (mp4Match) {
+                                        targetVideoUrl = mp4Match[1];
+                                        console.log(`[Metadata] Found TikTok .mp4 via CDN.`);
+                                    }
                                 }
                             } catch (e) {
                                 console.error('[Metadata] Error parsing TikTok scripts:', e);
@@ -171,114 +167,65 @@ export const musicController = {
                         const ogDescription = $('meta[property="og:description"]').attr('content');
                         const ogImage = $('meta[property="og:image"]').attr('content');
                         const musicMusician = $('meta[property="music:musician"]').attr('content');
-                        const twitterArtist = $('meta[name="twitter:audio:artist_name"]').attr('content'); // Twitter card tag
-                        const pageTitle = $('title').text(); // <title> tag often formatted "Song - Artist | Spotify"
+                        const twitterArtist = $('meta[name="twitter:audio:artist_name"]').attr('content');
+                        const pageTitle = $('title').text();
 
                         if (!title && ogTitle) title = ogTitle;
                         if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
 
-                        // ALBUM DETECTION & SCRAPING (Embed Method)
+                        // ALBUM DETECTION
                         if (targetUrl.includes('/album/')) {
-                            console.log('[Metadata] Detected Spotify Album, trying Embed scraping...');
                             try {
-                                // Extract Album ID safely
                                 const albumIdMatch = targetUrl.match(/album\/([a-zA-Z0-9]+)/);
                                 const albumId = albumIdMatch ? albumIdMatch[1] : null;
-
                                 if (albumId) {
                                     const embedUrl = `https://open.spotify.com/embed/album/${albumId}`;
-                                    console.log(`[Metadata] Fetching Embed URL: ${embedUrl}`);
-
                                     const embedRes = await fetch(embedUrl, {
                                         headers: {
-                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                                             'Referer': 'https://open.spotify.com/'
                                         }
                                     });
-
                                     if (embedRes.ok) {
                                         const embedHtml = await embedRes.text();
                                         const $embed = cheerio.load(embedHtml);
-
                                         const nextData = $embed('script[id="__NEXT_DATA__"]').html();
                                         if (nextData) {
                                             const jsonData = JSON.parse(nextData);
                                             const entity = jsonData?.props?.pageProps?.state?.data?.entity;
-
-                                            if (entity && entity.trackList) {
+                                            if (entity?.trackList) {
                                                 const albumCover = entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '';
-
                                                 const tracks = entity.trackList.map((t: any) => {
                                                     const trackId = t.uri ? t.uri.split(':').pop() : t.uid;
-                                                    return {
-                                                        title: t.title,
-                                                        artist: t.subtitle,
-                                                        url: `https://open.spotify.com/track/${trackId}`,
-                                                        image: albumCover,
-                                                        duration: t.duration
-                                                    };
+                                                    return { title: t.title, artist: t.subtitle, url: `https://open.spotify.com/track/${trackId}`, image: albumCover, duration: t.duration };
                                                 });
-
-                                                console.log(`[Metadata] Found ${tracks.length} tracks via Embed __NEXT_DATA__.`);
-
-                                                return res.json({
-                                                    title: entity.title || title || 'Álbum',
-                                                    artist: entity.subtitle || artist || '',
-                                                    thumbnailUrl: albumCover,
-                                                    type: 'album',
-                                                    platform: 'spotify',
-                                                    tracks: tracks
-                                                });
+                                                return res.json({ title: entity.title || title || 'Álbum', artist: entity.subtitle || artist || '', thumbnailUrl: albumCover, type: 'album', platform: 'spotify', tracks: tracks });
                                             }
                                         }
                                     }
                                 }
                             } catch (e) {
-                                console.error('[Metadata] Failed to scrape Spotify Embed:', e);
+                                console.error('[Metadata] Album scraping failed:', e);
                             }
                         }
 
-                        // Priority 1: Specific Meta Tags
                         if (!artist) {
-                            if (musicMusician) {
-                                artist = musicMusician;
-                                console.log(`[Metadata] Found artist via music:musician: ${artist}`);
-                            } else if (twitterArtist) {
-                                artist = twitterArtist;
-                                console.log(`[Metadata] Found artist via twitter:audio:artist_name: ${artist}`);
-                            }
+                            if (musicMusician) artist = musicMusician;
+                            else if (twitterArtist) artist = twitterArtist;
                         }
 
-                        // Priority 2: <title> Tag Parsing
                         if (!artist && isSpotify && pageTitle) {
                             const cleanTitle = pageTitle.replace(' | Spotify', '');
-                            if (cleanTitle.includes(' - song and lyrics by ')) {
-                                artist = cleanTitle.split(' - song and lyrics by ')[1];
-                            } else if (cleanTitle.includes(' - Single by ')) {
-                                artist = cleanTitle.split(' - Single by ')[1];
-                            } else if (cleanTitle.includes(' - EP by ')) {
-                                artist = cleanTitle.split(' - EP by ')[1];
-                            } else if (cleanTitle.includes(' - Album by ')) {
-                                artist = cleanTitle.split(' - Album by ')[1];
-                            } else if (title && cleanTitle.startsWith(title + ' - ')) {
-                                artist = cleanTitle.substring(title.length + 3);
-                            }
+                            if (cleanTitle.includes(' - song and lyrics by ')) artist = cleanTitle.split(' - song and lyrics by ')[1];
+                            else if (cleanTitle.includes(' - Single by ')) artist = cleanTitle.split(' - Single by ')[1];
+                            else if (cleanTitle.includes(' - EP by ')) artist = cleanTitle.split(' - EP by ')[1];
+                            else if (cleanTitle.includes(' - Album by ')) artist = cleanTitle.split(' - Album by ')[1];
                         }
 
-                        // Priority 3: og:description Parsing (Fallback)
                         if (!artist && ogDescription) {
                             if (isSpotify) {
                                 const parts = ogDescription.split(' · ');
-                                if (parts.length >= 2) {
-                                    if (parts[0] === title && parts[1]) artist = parts[1];
-                                    else if (parts[1] === title && parts[0]) artist = parts[0];
-                                    else artist = parts[0];
-                                } else if (ogDescription.includes(', a song by ')) {
-                                    const bySplit = ogDescription.split(', a song by ');
-                                    if (bySplit[1]) {
-                                        artist = bySplit[1].replace(' on Spotify', '').split(' on ')[0];
-                                    }
-                                }
+                                if (parts.length >= 2) artist = parts[0] === title ? parts[1] : parts[0];
                             } else if (isDeezer && ogDescription.includes(' by ')) {
                                 artist = ogDescription.split(' by ')[1].split(' on Deezer')[0];
                             }
@@ -289,17 +236,14 @@ export const musicController = {
                 }
             }
 
-            // CLEANUP
             if (title) title = title.replace(/ - (Single|EP|Album|Remastered|Radio Edit).*$/i, '').trim();
             if (artist) artist = artist.replace(/ on Spotify| on Deezer.*/i, '').trim();
-
-            // Clean up URLs
             if (thumbnailUrl && thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
 
             let videoId = '';
-            if (isTiktok && targetUrl.includes('/video/')) {
-                const match = targetUrl.match(/\/video\/(\d+)/);
-                if (match) videoId = match[1];
+            if (isTiktok) {
+                const idMatch = targetUrl.match(/\/video\/(\d+)/) || targetUrl.match(/v=(\d+)/) || targetUrl.match(/\/v\/(\d+)/);
+                if (idMatch) videoId = idMatch[1];
             }
 
             return res.json({
