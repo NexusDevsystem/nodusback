@@ -53,6 +53,7 @@ export interface LinkItemDB {
     position?: number;
     schedule_start?: string | null;
     schedule_end?: string | null;
+    video_url?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -132,6 +133,7 @@ export interface LinkItem {
     platform?: string;
     scheduleStart?: string | null;
     scheduleEnd?: string | null;
+    videoUrl?: string;
 }
 
 export interface Product {
@@ -232,7 +234,8 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         isArchived: db.is_archived,
         platform: db.platform,
         scheduleStart: db.schedule_start,
-        scheduleEnd: db.schedule_end
+        scheduleEnd: db.schedule_end,
+        videoUrl: db.video_url || undefined
     };
 }
 
@@ -252,7 +255,8 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         is_archived: api.isArchived ?? false,
         platform: api.platform,
         schedule_start: api.scheduleStart,
-        schedule_end: api.scheduleEnd
+        schedule_end: api.scheduleEnd,
+        video_url: api.videoUrl
     };
 
     // IMPORTANT: Do NOT include the id field here

@@ -132,6 +132,7 @@ export const linkService = {
         if (updates.embedType !== undefined) dbUpdates.embed_type = updates.embedType;
         if (updates.subtitle !== undefined) dbUpdates.subtitle = updates.subtitle;
         if (updates.isArchived !== undefined) dbUpdates.is_archived = updates.isArchived;
+        if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl;
 
         // Schedule Updates
         if (updates.scheduleStart !== undefined) dbUpdates.schedule_start = updates.scheduleStart;

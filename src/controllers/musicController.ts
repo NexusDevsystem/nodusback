@@ -117,19 +117,23 @@ export const musicController = {
                         // TikTok specific direct video extraction
                         if (isTiktok && targetUrl.includes('/video/')) {
                             try {
-                                // Plan A: Look for __UNIVERSAL_DATA_FOR_REHYDRATION__ (Modern TikTok)
-                                const hydrationData = $('script#\__UNIVERSAL_DATA_FOR_REHYDRATION__').html();
+                                // Plan A: Look for __UNIVERSAL_DATA_FOR_REHYDRATION__
+                                const hydrationData = $('script#\__UNIVERSAL_DATA_FOR_REHYDRATION__').html() ||
+                                    $('script').filter((i, el) => $(el).html()?.includes('playAddr') || false).first().html();
+
                                 if (hydrationData) {
-                                    const json = JSON.parse(hydrationData);
-                                    // Path: defaultScope.webapp.video-detail.itemInfo.itemStruct.video.playAddr
-                                    const videoInfo = json?.['defaultScope']?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video'];
-                                    if (videoInfo && videoInfo.playAddr) {
-                                        targetVideoUrl = videoInfo.playAddr;
-                                        console.log(`[Metadata] Found TikTok playAddr via Hydration: ${targetVideoUrl.substring(0, 50)}...`);
+                                    try {
+                                        const json = JSON.parse(hydrationData);
+                                        // Try various paths
+                                        targetVideoUrl = json?.['defaultScope']?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
+                                            json?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
+                                            json?.itemInfo?.itemStruct?.video?.playAddr;
+                                    } catch (e) {
+                                        // If JSON parse fails, hydrationData might be raw script content with assignments
                                     }
                                 }
 
-                                // Plan B: Look for SIGI_STATE (Another common pattern)
+                                // Plan B: SIGI_STATE
                                 if (!targetVideoUrl) {
                                     const sigiData = $('script#SIGI_STATE').html();
                                     if (sigiData) {
@@ -138,12 +142,25 @@ export const musicController = {
                                         if (itemModule) {
                                             const firstKey = Object.keys(itemModule)[0];
                                             const video = itemModule[firstKey]?.video;
-                                            if (video && video.playAddr) {
-                                                targetVideoUrl = video.playAddr;
-                                                console.log(`[Metadata] Found TikTok playAddr via SIGI_STATE: ${targetVideoUrl.substring(0, 50)}...`);
-                                            }
+                                            if (video?.playAddr) targetVideoUrl = video.playAddr;
                                         }
                                     }
+                                }
+
+                                // Plan C: Aggressive Regex Fallback (The "Last Resort")
+                                if (!targetVideoUrl) {
+                                    const playAddrMatch = html.match(/"playAddr":"(.*?)"/);
+                                    if (playAddrMatch && playAddrMatch[1]) {
+                                        // Unescape the URL (TikTok escapes / and :)
+                                        targetVideoUrl = playAddrMatch[1].replace(/\\u002F/g, '/').replace(/\\u003A/g, ':');
+                                        console.log(`[Metadata] Found TikTok playAddr via Regex: ${targetVideoUrl.substring(0, 50)}...`);
+                                    }
+                                }
+
+                                if (targetVideoUrl) {
+                                    console.log(`[Metadata] Successfully extracted TikTok video URL.`);
+                                } else {
+                                    console.warn(`[Metadata] Could not extract direct video URL for TikTok: ${targetUrl}`);
                                 }
                             } catch (e) {
                                 console.error('[Metadata] Error parsing TikTok scripts:', e);
