@@ -31,8 +31,7 @@ const allowedOrigins = [
     'https://nodus-frontend.vercel.app',
     'https://nodus.app',
     'https://www.noduscc.com.br',
-    'https://noduscc.com.br',
-    'http://26.223.198.60:3000'
+    'https://noduscc.com.br'
 ];
 
 app.use(cors({

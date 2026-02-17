@@ -37,7 +37,6 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
 
         // Redirect back to frontend
         const frontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        console.log('[TikTokController] Redirecting back to:', `${frontendUrl}/admin?success=tiktok`);
         res.redirect(`${frontendUrl}/admin?success=tiktok`);
     } catch (error: any) {
         console.error('TikTok Callback error:', error);

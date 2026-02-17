@@ -34,15 +34,12 @@ export const getAuthUrl = (userId: string) => {
     });
 
     const url = `${baseUrl}?${params.toString()}`;
-    console.log('[TikTokService] getAuthUrl - Inputs:', { CLIENT_KEY, REDIRECT_URI });
-    console.log('[TikTokService] Generated Auth URL with PKCE:', url);
 
     return url;
 };
 
 export const handleCallback = async (code: string, userId: string, codeVerifier: string): Promise<SocialIntegrationDB | null> => {
     try {
-        console.log('[TikTokService] Exchanging code for token (v2)...');
 
         // Exchange code for access token (v2 API)
         const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
@@ -69,7 +66,6 @@ export const handleCallback = async (code: string, userId: string, codeVerifier:
         const { access_token, refresh_token, open_id, expires_in } = tokenData;
 
         // Fetch user info (v2 API)
-        console.log('[TikTokService] Fetching user info (v2)...');
         // Define fields to get followers and basic info
         const fields = 'display_name,username,avatar_url,follower_count';
         const userResponse = await fetch(`https://open.tiktokapis.com/v2/user/info/?fields=${fields}`, {
