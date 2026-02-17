@@ -32,10 +32,16 @@ export const musicController = {
                 return res.status(400).json({ error: 'Unsupported platform' });
             }
 
-            // Follow redirects for Deezer and TikTok shortened links
-            if (url.includes('link.deezer.com') || url.includes('vm.tiktok.com') || url.includes('v.tiktok.com') || url.includes('t.tiktok.com')) {
+            // Follow redirects for Deezer and TikTok shortened links (vm, v, t, vt)
+            if (url.includes('link.deezer.com') || url.includes('tiktok.com')) {
                 try {
-                    const headRes = await fetch(url, { method: 'GET', redirect: 'follow' }); // Use GET to ensure resolution
+                    const headRes = await fetch(url, {
+                        method: 'GET',
+                        redirect: 'follow',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                        }
+                    });
                     targetUrl = headRes.url;
                     console.log(`[Metadata] Resolved redirect to: ${targetUrl}`);
                 } catch (e) {
@@ -235,12 +241,20 @@ export const musicController = {
             // Clean up URLs
             if (thumbnailUrl && thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
 
+            let videoId = '';
+            if (isTiktok && targetUrl.includes('/video/')) {
+                const match = targetUrl.match(/\/video\/(\d+)/);
+                if (match) videoId = match[1];
+            }
+
             return res.json({
                 title: title || 'Link Desconhecido',
                 artist: artist || '',
                 thumbnailUrl: thumbnailUrl || '',
                 type: type,
-                platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : 'tiktok'
+                platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : 'tiktok',
+                resolvedUrl: targetUrl,
+                videoId: videoId
             });
 
         } catch (error) {
