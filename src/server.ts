@@ -97,7 +97,6 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/music', musicRoutes);
 app.use('/api/billing', billingRoutes);
-app.use('/api/billing', billingRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/files', fileRoutes);
 
