@@ -9,13 +9,20 @@ const REDIRECT_URI = process.env.TIKTOK_REDIRECT_URI;
 export const getAuthUrl = (userId: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}`;
-    let url = 'https://www.tiktok.com/v2/auth/authorize/';
 
-    url += `?client_key=${CLIENT_KEY}`;
-    url += '&scope=user.info.profile,user.info.stats,video.list';
-    url += '&response_type=code';
-    url += `&redirect_uri=${encodeURIComponent(REDIRECT_URI!)}`;
-    url += `&state=${state}`;
+    // Auth URL (Note: No trailing slash on v2)
+    const baseUrl = 'https://www.tiktok.com/v2/auth/authorize';
+
+    const params = new URLSearchParams({
+        client_key: CLIENT_KEY || '',
+        scope: 'user.info.profile,user.info.stats,video.list',
+        response_type: 'code',
+        redirect_uri: REDIRECT_URI || '',
+        state: state
+    });
+
+    const url = `${baseUrl}?${params.toString()}`;
+    console.log('[TikTokService] Generated Auth URL for user:', userId, url.replace(CLIENT_SECRET || '', '***'));
 
     return url;
 };
