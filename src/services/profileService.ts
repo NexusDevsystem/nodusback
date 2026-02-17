@@ -15,7 +15,19 @@ export const profileService = {
             return null;
         }
 
-        return dbToApi(data as UserProfileDB);
+        const profile = dbToApi(data as UserProfileDB);
+
+        // Fetch active integrations
+        const { data: integrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', data.id);
+
+        if (integrations) {
+            profile.integrations = integrations;
+        }
+
+        return profile;
     },
 
     // Get profile by user_id (authenticated access)
@@ -31,7 +43,19 @@ export const profileService = {
             return null;
         }
 
-        return dbToApi(data as UserProfileDB);
+        const profile = dbToApi(data as UserProfileDB);
+
+        // Fetch active integrations
+        const { data: integrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (integrations) {
+            profile.integrations = integrations;
+        }
+
+        return profile;
     },
 
     // Get profile by email

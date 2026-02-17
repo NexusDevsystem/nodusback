@@ -32,6 +32,7 @@ export interface UserProfileDB {
     custom_button_text_color?: string | null;
     created_at?: string;
     updated_at?: string;
+    integrations?: any[];
 }
 
 export interface LinkItemDB {
@@ -114,6 +115,7 @@ export interface UserProfile {
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
     customButtonTextColor?: string | null;
+    integrations?: any[];
 }
 
 export interface LinkItem {
