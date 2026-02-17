@@ -26,14 +26,22 @@ export const musicController = {
 
             const isSpotify = targetUrl.includes('spotify.com');
             const isDeezer = targetUrl.includes('deezer.com');
+            const isTiktok = targetUrl.includes('tiktok.com');
 
-            if (!isSpotify && !isDeezer) {
-                return res.status(400).json({ error: 'Unsupported music platform' });
+            if (!isSpotify && !isDeezer && !isTiktok) {
+                return res.status(400).json({ error: 'Unsupported platform' });
             }
 
-            // NOTE: We do NOT strip /intl-xx/ from Spotify URLs anymore because 
-            // the OEmbed API often returns 404 if the URL doesn't match the canonical one, 
-            // or sometimes it needs the locale. Letting it pass through as-is is safer.
+            // Follow redirects for Deezer and TikTok shortened links
+            if (url.includes('link.deezer.com') || url.includes('vm.tiktok.com') || url.includes('v.tiktok.com') || url.includes('t.tiktok.com')) {
+                try {
+                    const headRes = await fetch(url, { method: 'GET', redirect: 'follow' }); // Use GET to ensure resolution
+                    targetUrl = headRes.url;
+                    console.log(`[Metadata] Resolved redirect to: ${targetUrl}`);
+                } catch (e) {
+                    console.error('[Metadata] Error following redirect', e);
+                }
+            }
 
             let title = '';
             let artist = '';
@@ -41,42 +49,50 @@ export const musicController = {
             let type = 'track';
 
             // METHOD 1: OEMBED (Primary - Cleanest Data)
-            // Use OEmbed first as it provides structured data including author_name for BOTH Spotify and Deezer
-            const oembedUrl = isSpotify
-                ? `https://open.spotify.com/oembed?url=${encodeURIComponent(targetUrl)}`
-                : `https://api.deezer.com/oembed?url=${encodeURIComponent(targetUrl)}`;
+            let oembedUrl = '';
+            if (isSpotify) oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(targetUrl)}`;
+            else if (isDeezer) oembedUrl = `https://api.deezer.com/oembed?url=${encodeURIComponent(targetUrl)}`;
+            else if (isTiktok) oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(targetUrl)}`;
 
             try {
-                console.log(`[MusicMetadata] Trying OEmbed: ${oembedUrl}`);
-                const response = await fetch(oembedUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                if (oembedUrl) {
+                    console.log(`[Metadata] Trying OEmbed: ${oembedUrl}`);
+                    const response = await fetch(oembedUrl, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json() as any;
+
+                        if (data.title) title = data.title;
+                        if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
+
+                        // Artist extraction
+                        if (data.author_name && data.author_name !== 'Spotify' && data.author_name !== 'TikTok') {
+                            artist = data.author_name;
+                        }
+
+                        // TikTok specific type detection
+                        if (isTiktok) {
+                            type = targetUrl.includes('/video/') ? 'video' : 'profile';
+                            // TikTok title often contains the description, let's keep it as title
+                        }
+
+                        console.log(`[Metadata] OEmbed Result - Title: ${title}, Artist: ${artist}, Type: ${type}`);
+                    } else {
+                        console.warn(`[Metadata] OEmbed failed with status: ${response.status}`);
                     }
-                });
-
-                if (response.ok) {
-                    const data = await response.json() as any;
-
-                    if (data.title) title = data.title;
-                    if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
-
-                    // Spotify OEmbed returns 'author_name' which is the Artist
-                    if (data.author_name && data.author_name !== 'Spotify') {
-                        artist = data.author_name;
-                    }
-
-                    console.log(`[MusicMetadata] OEmbed Result - Title: ${title}, Artist: ${artist}`);
-                } else {
-                    console.warn(`[MusicMetadata] OEmbed failed with status: ${response.status}`);
                 }
             } catch (oembedError) {
-                console.error('[MusicMetadata] OEmbed failed:', oembedError);
+                console.error('[Metadata] OEmbed failed:', oembedError);
             }
 
             // METHOD 2: SCRAPING (Fallback/Enhancement)
             // If OEmbed missed any piece (especially Artist), try scraping
-            if (!title || !artist || !thumbnailUrl) {
-                console.log('[MusicMetadata] Missing data, trying Scraping fallback...');
+            if (!isTiktok && (!title || !artist || !thumbnailUrl)) {
+                console.log('[Metadata] Missing data, trying Scraping fallback...');
                 try {
                     const pageRes = await fetch(targetUrl, {
                         headers: {
@@ -102,7 +118,7 @@ export const musicController = {
 
                         // ALBUM DETECTION & SCRAPING (Embed Method)
                         if (targetUrl.includes('/album/')) {
-                            console.log('[MusicMetadata] Detected Spotify Album, trying Embed scraping...');
+                            console.log('[Metadata] Detected Spotify Album, trying Embed scraping...');
                             try {
                                 // Extract Album ID safely
                                 const albumIdMatch = targetUrl.match(/album\/([a-zA-Z0-9]+)/);
@@ -110,7 +126,7 @@ export const musicController = {
 
                                 if (albumId) {
                                     const embedUrl = `https://open.spotify.com/embed/album/${albumId}`;
-                                    console.log(`[MusicMetadata] Fetching Embed URL: ${embedUrl}`);
+                                    console.log(`[Metadata] Fetching Embed URL: ${embedUrl}`);
 
                                     const embedRes = await fetch(embedUrl, {
                                         headers: {
@@ -126,7 +142,6 @@ export const musicController = {
                                         const nextData = $embed('script[id="__NEXT_DATA__"]').html();
                                         if (nextData) {
                                             const jsonData = JSON.parse(nextData);
-                                            // Path to entity might vary, but usually props.pageProps.state.data.entity
                                             const entity = jsonData?.props?.pageProps?.state?.data?.entity;
 
                                             if (entity && entity.trackList) {
@@ -138,12 +153,12 @@ export const musicController = {
                                                         title: t.title,
                                                         artist: t.subtitle,
                                                         url: `https://open.spotify.com/track/${trackId}`,
-                                                        image: albumCover, // Assign album cover to each track
+                                                        image: albumCover,
                                                         duration: t.duration
                                                     };
                                                 });
 
-                                                console.log(`[MusicMetadata] Found ${tracks.length} tracks via Embed __NEXT_DATA__.`);
+                                                console.log(`[Metadata] Found ${tracks.length} tracks via Embed __NEXT_DATA__.`);
 
                                                 return res.json({
                                                     title: entity.title || title || 'Álbum',
@@ -158,7 +173,7 @@ export const musicController = {
                                     }
                                 }
                             } catch (e) {
-                                console.error('[MusicMetadata] Failed to scrape Spotify Embed:', e);
+                                console.error('[Metadata] Failed to scrape Spotify Embed:', e);
                             }
                         }
 
@@ -166,64 +181,41 @@ export const musicController = {
                         if (!artist) {
                             if (musicMusician) {
                                 artist = musicMusician;
-                                console.log(`[MusicMetadata] Found artist via music:musician: ${artist}`);
+                                console.log(`[Metadata] Found artist via music:musician: ${artist}`);
                             } else if (twitterArtist) {
                                 artist = twitterArtist;
-                                console.log(`[MusicMetadata] Found artist via twitter:audio:artist_name: ${artist}`);
+                                console.log(`[Metadata] Found artist via twitter:audio:artist_name: ${artist}`);
                             }
                         }
 
                         // Priority 2: <title> Tag Parsing
-                        // Format is usually "Song Name - song and lyrics by Artist Name | Spotify" or "Song Name - Single by Artist Name | Spotify"
                         if (!artist && isSpotify && pageTitle) {
-                            // Remove " | Spotify" suffix
                             const cleanTitle = pageTitle.replace(' | Spotify', '');
-
-                            // Check for " - song and lyrics by "
                             if (cleanTitle.includes(' - song and lyrics by ')) {
                                 artist = cleanTitle.split(' - song and lyrics by ')[1];
-                                console.log(`[MusicMetadata] Found artist via <title> (lyrics pattern): ${artist}`);
-                            }
-                            // Check for " - Single by "
-                            else if (cleanTitle.includes(' - Single by ')) {
+                            } else if (cleanTitle.includes(' - Single by ')) {
                                 artist = cleanTitle.split(' - Single by ')[1];
-                                console.log(`[MusicMetadata] Found artist via <title> (single pattern): ${artist}`);
-                            }
-                            // Check for " - EP by "
-                            else if (cleanTitle.includes(' - EP by ')) {
+                            } else if (cleanTitle.includes(' - EP by ')) {
                                 artist = cleanTitle.split(' - EP by ')[1];
-                                console.log(`[MusicMetadata] Found artist via <title> (EP pattern): ${artist}`);
-                            }
-                            // Check for " - Album by "
-                            else if (cleanTitle.includes(' - Album by ')) {
+                            } else if (cleanTitle.includes(' - Album by ')) {
                                 artist = cleanTitle.split(' - Album by ')[1];
-                                console.log(`[MusicMetadata] Found artist via <title> (Album pattern): ${artist}`);
-                            }
-                            // Fallback: Check for simple dash separator if title is known
-                            else if (title && cleanTitle.startsWith(title + ' - ')) {
-                                artist = cleanTitle.substring(title.length + 3); // Remove "Title - "
-                                console.log(`[MusicMetadata] Found artist via <title> (dash pattern): ${artist}`);
+                            } else if (title && cleanTitle.startsWith(title + ' - ')) {
+                                artist = cleanTitle.substring(title.length + 3);
                             }
                         }
 
                         // Priority 3: og:description Parsing (Fallback)
                         if (!artist && ogDescription) {
                             if (isSpotify) {
-                                // "Listen to [Song] on Spotify. [Artist] · Song · [Year]."
-                                // "Song · Artist · Album"
                                 const parts = ogDescription.split(' · ');
                                 if (parts.length >= 2) {
-                                    // Heuristic: If we have the title, the other part might be the artist
                                     if (parts[0] === title && parts[1]) artist = parts[1];
                                     else if (parts[1] === title && parts[0]) artist = parts[0];
-                                    else artist = parts[0]; // Best guess is usually the first part if not title
-                                    console.log(`[MusicMetadata] Found artist via og:description (dot pattern): ${artist}`);
+                                    else artist = parts[0];
                                 } else if (ogDescription.includes(', a song by ')) {
-                                    // "Song Name, a song by Artist Name on Spotify"
                                     const bySplit = ogDescription.split(', a song by ');
                                     if (bySplit[1]) {
                                         artist = bySplit[1].replace(' on Spotify', '').split(' on ')[0];
-                                        console.log(`[MusicMetadata] Found artist via og:description (sentence pattern): ${artist}`);
                                     }
                                 }
                             } else if (isDeezer && ogDescription.includes(' by ')) {
@@ -232,7 +224,7 @@ export const musicController = {
                         }
                     }
                 } catch (scrapeError) {
-                    console.error('[MusicMetadata] Scraping failed:', scrapeError);
+                    console.error('[Metadata] Scraping failed:', scrapeError);
                 }
             }
 
@@ -244,11 +236,11 @@ export const musicController = {
             if (thumbnailUrl && thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
 
             return res.json({
-                title: title || 'Música Desconhecida',
-                artist: artist || '', // Empty string to allow frontend placeholder
+                title: title || 'Link Desconhecido',
+                artist: artist || '',
                 thumbnailUrl: thumbnailUrl || '',
-                type: 'track',
-                platform: isSpotify ? 'spotify' : 'deezer'
+                type: type,
+                platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : 'tiktok'
             });
 
         } catch (error) {
