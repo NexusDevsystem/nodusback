@@ -142,13 +142,13 @@ export const handleInstagramWebhook = async (req: Request, res: Response) => {
 
 export const getMyIntegrations = async (req: Request, res: Response) => {
     try {
-        const { user } = (req as any);
-        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+        const { userId } = (req as any);
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const { data, error } = await supabase
             .from('social_integrations')
             .select('*')
-            .eq('user_id', user.id);
+            .eq('user_id', userId);
 
         if (error) throw error;
         res.json(data);
@@ -159,19 +159,19 @@ export const getMyIntegrations = async (req: Request, res: Response) => {
 
 export const disconnectIntegration = async (req: Request, res: Response) => {
     try {
-        const { user } = (req as any);
+        const { userId } = (req as any);
         const { provider } = req.params;
 
-        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!provider) return res.status(400).json({ error: 'Missing provider' });
 
-        console.log(`[IntegrationController] Disconnecting ${provider} for user:`, user.id);
+        console.log(`[IntegrationController] Disconnecting ${provider} for user:`, userId);
 
         // 1. Delete from social_integrations table
         const { error: deleteError } = await supabase
             .from('social_integrations')
             .delete()
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .eq('provider', provider);
 
         if (deleteError) throw deleteError;
@@ -180,12 +180,12 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
         const { data: remainingIntegrations } = await supabase
             .from('social_integrations')
             .select('provider, profile_data')
-            .eq('user_id', user.id);
+            .eq('user_id', userId);
 
         await supabase
             .from('users')
             .update({ integrations: remainingIntegrations || [] })
-            .eq('id', user.id);
+            .eq('id', userId);
 
         res.json({ success: true, message: `Disconnected ${provider} successfully` });
     } catch (error: any) {

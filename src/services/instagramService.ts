@@ -224,6 +224,30 @@ export const syncFeed = async (userId: string) => {
             }
         }
 
+        // 3. Update the integration profile_data with the latest media for the rich card
+        const updatedProfileData = {
+            ...integration.profile_data,
+            media: mediaList
+        };
+
+        await supabase
+            .from('social_integrations')
+            .update({ profile_data: updatedProfileData })
+            .eq('id', integration.id);
+
+        // 4. Also sync to the main 'users' table so the frontend sees it immediately in the profile object
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
+
         return mediaList;
     } catch (error) {
         console.error('Error syncing Instagram feed:', error);
