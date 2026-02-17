@@ -1,6 +1,6 @@
 import crypto from 'crypto';
-import { supabase } from '../config/supabaseClient.js';
-import { SocialIntegrationDB } from '../models/types.js';
+import { supabase } from '../config/supabaseClient';
+import { SocialIntegrationDB } from '../models/types';
 
 const CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY;
 const CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET;
@@ -13,12 +13,12 @@ const generatePKCE = () => {
     return { verifier, challenge };
 };
 
-export const getAuthUrl = (userId: string) => {
+export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const { verifier, challenge } = generatePKCE();
 
-    // Store verifier in the state to retrieve it later (csrf_userId_verifier)
-    const state = `${csrfState}_${userId}_${verifier}`;
+    // Store verifier in the state to retrieve it later (csrf_userId_verifier_origin)
+    const state = `${csrfState}_${userId}_${verifier}_${origin || 'production'}`;
 
     // Auth URL (Note: Re-adding trailing slash as per official docs)
     const baseUrl = 'https://www.tiktok.com/v2/auth/authorize/';
@@ -101,11 +101,24 @@ export const handleCallback = async (code: string, userId: string, codeVerifier:
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id, provider' })
+            .upsert(integrationData, { onConflict: 'user_id,provider' })
             .select()
             .single();
 
         if (error) throw error;
+
+        // Update the main 'users' table integrations array for redundancy/easier access
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
 
         console.log('[TikTokService] Integration saved successfully for user:', userId);
         return data;

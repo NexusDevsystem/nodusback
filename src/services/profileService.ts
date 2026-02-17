@@ -2,6 +2,22 @@ import { supabase } from '../config/supabaseClient.js';
 import { UserProfile, UserProfileDB, dbToApi, apiToDb } from '../models/types.js';
 
 export const profileService = {
+    // Helper to attach active integrations to a profile
+    async _attachIntegrations(profile: UserProfile): Promise<UserProfile> {
+        if (!profile.id) return profile;
+
+        const { data: integrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', profile.id);
+
+        if (integrations) {
+            profile.integrations = integrations;
+        }
+
+        return profile;
+    },
+
     // Get profile by username (public access)
     async getProfileByUsername(username: string): Promise<UserProfile | null> {
         const { data, error } = await supabase
@@ -16,18 +32,7 @@ export const profileService = {
         }
 
         const profile = dbToApi(data as UserProfileDB);
-
-        // Fetch active integrations
-        const { data: integrations } = await supabase
-            .from('social_integrations')
-            .select('provider, profile_data')
-            .eq('user_id', data.id);
-
-        if (integrations) {
-            profile.integrations = integrations;
-        }
-
-        return profile;
+        return await this._attachIntegrations(profile);
     },
 
     // Get profile by user_id (authenticated access)
@@ -44,18 +49,7 @@ export const profileService = {
         }
 
         const profile = dbToApi(data as UserProfileDB);
-
-        // Fetch active integrations
-        const { data: integrations } = await supabase
-            .from('social_integrations')
-            .select('provider, profile_data')
-            .eq('user_id', userId);
-
-        if (integrations) {
-            profile.integrations = integrations;
-        }
-
-        return profile;
+        return await this._attachIntegrations(profile);
     },
 
     // Get profile by email
@@ -106,7 +100,8 @@ export const profileService = {
             return null;
         }
 
-        return dbToApi(data as UserProfileDB);
+        const profile = dbToApi(data as UserProfileDB);
+        return await this._attachIntegrations(profile);
     },
 
     // Create profile
@@ -131,7 +126,8 @@ export const profileService = {
             return null;
         }
 
-        return dbToApi(data as UserProfileDB);
+        const profile = dbToApi(data as UserProfileDB);
+        return await this._attachIntegrations(profile);
     },
 
     // Check username availability

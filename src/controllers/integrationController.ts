@@ -1,15 +1,15 @@
 
 import { Request, Response } from 'express';
-import * as tiktokService from '../services/tiktokService.js';
-import * as instagramService from '../services/instagramService.js';
-import { supabase } from '../config/supabaseClient.js';
+import * as tiktokService from '../services/tiktokService';
+import * as instagramService from '../services/instagramService';
+import { supabase } from '../config/supabaseClient';
 
 export const getTikTokAuthUrl = (req: Request, res: Response) => {
     try {
-        const { userId } = req.query;
+        const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const url = tiktokService.getAuthUrl(userId as string);
+        const url = tiktokService.getAuthUrl(userId as string, origin as string);
         res.json({ url });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -24,34 +24,39 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Missing code' });
         }
 
-        // Extract userId and verifier from state (format: csrf_userId_verifier)
+        // Extract userId, verifier and origin from state (format: csrf_userId_verifier_origin)
         const parts = (state as string || '').split('_');
         const userId = parts[1];
         const verifier = parts[2];
+        const origin = parts[3];
 
         if (!userId || !verifier) {
             console.error('[TikTokController] Invalid state components:', { userId, verifier });
-            return res.status(400).json({ error: 'Invalid state or missing PCKE verifier' });
+            return res.status(400).json({ error: 'Invalid state or missing PKCE verifier' });
         }
 
         await tiktokService.handleCallback(code as string, userId, verifier);
 
         // Redirect back to frontend
-        const frontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        res.redirect(`${frontendUrl}/admin?success=tiktok`);
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?success=tiktok`);
     } catch (error: any) {
         console.error('TikTok Callback error:', error);
-        const frontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        res.redirect(`${frontendUrl}/admin?error=tiktok`);
+        const state = req.query.state as string;
+        const origin = state?.split('_')[3];
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?error=tiktok`);
     }
 };
 
 export const getInstagramAuthUrl = (req: Request, res: Response) => {
     try {
-        const { userId } = req.query;
+        const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const url = instagramService.getAuthUrl(userId as string);
+        const url = instagramService.getAuthUrl(userId as string, origin as string);
         res.json({ url });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -66,9 +71,10 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Missing code' });
         }
 
-        // Extract userId from state (format: csrf_userId)
+        // Extract userId and origin from state (format: csrf_userId_origin)
         const parts = (state as string || '').split('_');
         const userId = parts[1];
+        const origin = parts[2];
 
         if (!userId) {
             return res.status(400).json({ error: 'Invalid state or missing userId' });
@@ -77,12 +83,16 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
         await instagramService.handleCallback(code as string, userId);
 
         // Redirect back to frontend
-        const frontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        res.redirect(`${frontendUrl}/admin?success=instagram`);
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?success=instagram`);
     } catch (error: any) {
         console.error('Instagram Callback error:', error);
-        const frontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        res.redirect(`${frontendUrl}/admin?error=instagram`);
+        const state = req.query.state as string;
+        const origin = state?.split('_')[2];
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?error=instagram`);
     }
 };
 

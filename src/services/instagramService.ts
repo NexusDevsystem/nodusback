@@ -1,5 +1,5 @@
-import { supabase } from '../config/supabaseClient.js';
-import { SocialIntegrationDB } from '../models/types.js';
+import { supabase } from '../config/supabaseClient';
+import { SocialIntegrationDB } from '../models/types';
 
 const APP_ID = process.env.INSTAGRAM_APP_ID;
 const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;
@@ -8,9 +8,9 @@ const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
 /**
  * Generates the Instagram/Facebook Auth URL
  */
-export const getAuthUrl = (userId: string) => {
+export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
-    const state = `${csrfState}_${userId}`;
+    const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
     // Permissions needed: instagram_basic, pages_show_list, instagram_manage_insights (optional), pages_read_engagement
     const scopes = [
@@ -38,17 +38,6 @@ export const getAuthUrl = (userId: string) => {
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
         // 1. Exchange code for short-lived access token
-        const tokenResponse = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token`, {
-            method: 'GET',
-            body: new URLSearchParams({
-                client_id: APP_ID!,
-                client_secret: APP_SECRET!,
-                redirect_uri: REDIRECT_URI!,
-                code: code,
-            } as any).toString()
-        } as any);
-
-        // Fetch using URL params for GET
         const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`;
         const shortTokenResponse = await fetch(tokenUrl);
         const shortTokenData = await shortTokenResponse.json() as any;
@@ -116,13 +105,26 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id, provider' })
+            .upsert(integrationData, { onConflict: 'user_id,provider' })
             .select()
             .single();
 
         if (error) throw error;
 
-        // 6. Sync initial feed components (posts)
+        // 6. Update the main 'users' table integrations array for redundancy/easier access
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
+
+        // 7. Sync initial feed components (posts)
         await syncFeed(userId);
 
         console.log('[InstagramService] Integration saved successfully for user:', userId);
