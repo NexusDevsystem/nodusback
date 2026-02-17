@@ -12,6 +12,7 @@ export const musicController = {
             console.log(`[MusicMetadata] Fetching for: ${url}`);
 
             let targetUrl = url;
+            let targetVideoUrl = '';
 
             // Follow redirects for Deezer shortened links
             if (url.includes('link.deezer.com')) {
@@ -96,21 +97,58 @@ export const musicController = {
             }
 
             // METHOD 2: SCRAPING (Fallback/Enhancement)
-            // If OEmbed missed any piece (especially Artist), try scraping
-            if (!isTiktok && (!title || !artist || !thumbnailUrl)) {
-                console.log('[Metadata] Missing data, trying Scraping fallback...');
+            // If OEmbed missed any piece (especially Artist) OR if it's TikTok (to get clean video URL), try scraping
+            if (!title || !artist || !thumbnailUrl || isTiktok) {
+                console.log(`[Metadata] Missing data or TikTok video, trying Scraping fallback for: ${targetUrl}`);
                 try {
                     const pageRes = await fetch(targetUrl, {
                         headers: {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                            'Accept-Language': 'en-US,en;q=0.5'
+                            'Accept-Language': 'en-US,en;q=0.5',
+                            'Cookie': 'tt_webid_v2=7300000000000000000;' // Some dummy cookie might help
                         }
                     });
 
                     if (pageRes.ok) {
                         const html = await pageRes.text();
                         const $ = cheerio.load(html);
+
+                        // TikTok specific direct video extraction
+                        if (isTiktok && targetUrl.includes('/video/')) {
+                            try {
+                                // Plan A: Look for __UNIVERSAL_DATA_FOR_REHYDRATION__ (Modern TikTok)
+                                const hydrationData = $('script#\__UNIVERSAL_DATA_FOR_REHYDRATION__').html();
+                                if (hydrationData) {
+                                    const json = JSON.parse(hydrationData);
+                                    // Path: defaultScope.webapp.video-detail.itemInfo.itemStruct.video.playAddr
+                                    const videoInfo = json?.['defaultScope']?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video'];
+                                    if (videoInfo && videoInfo.playAddr) {
+                                        targetVideoUrl = videoInfo.playAddr;
+                                        console.log(`[Metadata] Found TikTok playAddr via Hydration: ${targetVideoUrl.substring(0, 50)}...`);
+                                    }
+                                }
+
+                                // Plan B: Look for SIGI_STATE (Another common pattern)
+                                if (!targetVideoUrl) {
+                                    const sigiData = $('script#SIGI_STATE').html();
+                                    if (sigiData) {
+                                        const json = JSON.parse(sigiData);
+                                        const itemModule = json?.ItemModule;
+                                        if (itemModule) {
+                                            const firstKey = Object.keys(itemModule)[0];
+                                            const video = itemModule[firstKey]?.video;
+                                            if (video && video.playAddr) {
+                                                targetVideoUrl = video.playAddr;
+                                                console.log(`[Metadata] Found TikTok playAddr via SIGI_STATE: ${targetVideoUrl.substring(0, 50)}...`);
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[Metadata] Error parsing TikTok scripts:', e);
+                            }
+                        }
 
                         const ogTitle = $('meta[property="og:title"]').attr('content');
                         const ogDescription = $('meta[property="og:description"]').attr('content');
@@ -254,7 +292,8 @@ export const musicController = {
                 type: type,
                 platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : 'tiktok',
                 resolvedUrl: targetUrl,
-                videoId: videoId
+                videoId: videoId,
+                videoUrl: targetVideoUrl
             });
 
         } catch (error) {
