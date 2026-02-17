@@ -1,4 +1,4 @@
-
+import crypto from 'crypto';
 import { supabase } from '../config/supabaseClient.js';
 import { SocialIntegrationDB } from '../models/types.js';
 
@@ -6,9 +6,19 @@ const CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY;
 const CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET;
 const REDIRECT_URI = process.env.TIKTOK_REDIRECT_URI;
 
+// Helper to generate PKCE challenge
+const generatePKCE = () => {
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    return { verifier, challenge };
+};
+
 export const getAuthUrl = (userId: string) => {
     const csrfState = Math.random().toString(36).substring(7);
-    const state = `${csrfState}_${userId}`;
+    const { verifier, challenge } = generatePKCE();
+
+    // Store verifier in the state to retrieve it later (csrf_userId_verifier)
+    const state = `${csrfState}_${userId}_${verifier}`;
 
     // Auth URL (Note: No trailing slash on v2)
     const baseUrl = 'https://www.tiktok.com/v2/auth/authorize';
@@ -18,16 +28,18 @@ export const getAuthUrl = (userId: string) => {
         scope: 'user.info.profile,user.info.stats,video.list',
         response_type: 'code',
         redirect_uri: REDIRECT_URI || '',
-        state: state
+        state: state,
+        code_challenge: challenge,
+        code_challenge_method: 'S256'
     });
 
     const url = `${baseUrl}?${params.toString()}`;
-    console.log('[TikTokService] Generated Auth URL for user:', userId, url.replace(CLIENT_SECRET || '', '***'));
+    console.log('[TikTokService] Generated Auth URL with PKCE for user:', userId);
 
     return url;
 };
 
-export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
+export const handleCallback = async (code: string, userId: string, codeVerifier: string): Promise<SocialIntegrationDB | null> => {
     try {
         console.log('[TikTokService] Exchanging code for token (v2)...');
 
@@ -43,6 +55,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
                 code,
                 grant_type: 'authorization_code',
                 redirect_uri: REDIRECT_URI!,
+                code_verifier: codeVerifier,
             }),
         });
 
