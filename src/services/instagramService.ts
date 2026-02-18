@@ -12,7 +12,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Permissions for Basic Display API
+    // Permissions for Basic Display API (Consumer)
     const scopes = [
         'user_profile',
         'user_media'
@@ -22,12 +22,14 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
-        state: state,
         scope: scopes,
-        response_type: 'code'
+        response_type: 'code',
+        state: state
     });
 
-    return `${baseUrl}?${params.toString()}`;
+    const finalUrl = `${baseUrl}?${params.toString()}`;
+    console.log(`[InstagramService] URL gerada com ID: ${APP_ID}`);
+    return finalUrl;
 };
 
 /**

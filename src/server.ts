@@ -23,7 +23,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Trust proxy for Railway/Proxies (required for express-rate-limit)
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 
 // 1. CORS Configuration (MUST BE FIRST for preflights)
 const allowedOrigins = [
