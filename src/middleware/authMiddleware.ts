@@ -7,6 +7,10 @@ export interface AuthRequest extends Request {
     profileId?: string;
 }
 
+// Simple in-memory cache to avoid hammering Google API on every concurrent request
+const tokenCache = new Map<string, { email: string, expiry: number }>();
+const CACHE_DURATION = 60 * 1000; // 1 minute cache
+
 export const authMiddleware = async (
     req: AuthRequest,
     res: Response,
@@ -21,17 +25,32 @@ export const authMiddleware = async (
 
         const token = authHeader.substring(7);
 
-        // Verify the token with Google directly
-        // This avoids needing to enable the Google provider in Supabase Dashboard
-        const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        // Check cache first
+        const cached = tokenCache.get(token);
+        let email = '';
 
-        const googleUser = googleRes.data as { email?: string };
-        const email = googleUser.email;
+        if (cached && cached.expiry > Date.now()) {
+            email = cached.email;
+        } else {
+            // Verify the token with Google directly with a 5s timeout
+            const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 5000
+            });
+
+            const googleUser = googleRes.data as { email?: string };
+            email = googleUser.email || '';
+
+            if (email) {
+                tokenCache.set(token, {
+                    email,
+                    expiry: Date.now() + CACHE_DURATION
+                });
+            }
+        }
 
         if (!email) {
-            return res.status(401).json({ error: 'Token does not contain email' });
+            return res.status(401).json({ error: 'Invalid token or email not found' });
         }
 
         // Get the user's profile from DB using email
@@ -54,8 +73,11 @@ export const authMiddleware = async (
         console.log(`✅ Auth: Request authorized for ${email}`);
 
         next();
-    } catch (error) {
-        console.error('Auth middleware error:', error);
+    } catch (error: any) {
+        console.error('Auth middleware error:', error.message);
+        if (error.response?.status === 401) {
+            return res.status(401).json({ error: 'Sessão expirada. Por favor, faça login novamente.' });
+        }
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -72,25 +94,45 @@ export const optionalAuthMiddleware = async (
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
 
-            const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            // Check cache first
+            const cached = tokenCache.get(token);
+            let email = '';
 
-            if (googleRes.status === 200) {
-                const googleUser = googleRes.data as { email?: string };
-                const email = googleUser.email;
+            if (cached && cached.expiry > Date.now()) {
+                email = cached.email;
+            } else {
+                try {
+                    const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                        headers: { Authorization: `Bearer ${token}` },
+                        timeout: 5000
+                    });
 
-                if (email) {
-                    const { data: profile } = await supabase
-                        .from('users')
-                        .select('id')
-                        .eq('email', email)
-                        .maybeSingle();
+                    if (googleRes.status === 200) {
+                        const googleUser = googleRes.data as { email?: string };
+                        email = googleUser.email || '';
 
-                    if (profile) {
-                        req.userId = profile.id;
-                        req.profileId = profile.id;
+                        if (email) {
+                            tokenCache.set(token, {
+                                email,
+                                expiry: Date.now() + CACHE_DURATION
+                            });
+                        }
                     }
+                } catch (e) {
+                    // Ignore errors in optional auth
+                }
+            }
+
+            if (email) {
+                const { data: profile } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('email', email)
+                    .maybeSingle();
+
+                if (profile) {
+                    req.userId = profile.id;
+                    req.profileId = profile.id;
                 }
             }
         }

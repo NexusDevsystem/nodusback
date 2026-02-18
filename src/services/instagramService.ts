@@ -135,12 +135,10 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         if (error) throw error;
 
-        // Run sync in background/safe mode
-        try {
-            await syncFeed(userId);
-        } catch (syncError) {
-            console.error('Initial Instagram sync failed (non-blocking):', syncError);
-        }
+        // Run sync in background (non-blocking)
+        syncFeed(userId).catch(syncError => {
+            console.error('Initial Instagram sync failed (background):', syncError);
+        });
 
         return data;
     } catch (error) {
@@ -225,7 +223,7 @@ export const syncFeed = async (userId: string) => {
 
         // Fetch media from Instagram Graph API (Professional)
         const igUserId = integration.profile_data.channel_id;
-        const mediaUrl = `https://graph.facebook.com/v18.0/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
+        const mediaUrl = `https://graph.facebook.com/v19.0/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
         const response = await fetch(mediaUrl);
         const data = (await response.json()) as any;
 
