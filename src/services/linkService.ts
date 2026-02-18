@@ -133,6 +133,7 @@ export const linkService = {
         if (updates.subtitle !== undefined) dbUpdates.subtitle = updates.subtitle;
         if (updates.isArchived !== undefined) dbUpdates.is_archived = updates.isArchived;
         if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl;
+        if (updates.platform !== undefined) dbUpdates.platform = updates.platform;
 
         // Schedule Updates
         if (updates.scheduleStart !== undefined) dbUpdates.schedule_start = updates.scheduleStart;

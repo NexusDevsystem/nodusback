@@ -6,21 +6,19 @@ const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;
 const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
 
 /**
- * Generates the Instagram/Facebook Auth URL
+ * Generates the Instagram Basic Display Auth URL
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Permissions needed: instagram_basic, pages_show_list, instagram_manage_insights (optional), pages_read_engagement
+    // Permissions for Basic Display API
     const scopes = [
-        'instagram_basic',
-        'pages_show_list',
-        'pages_read_engagement',
-        'business_management' // Sometimes needed for professional account listing
+        'user_profile',
+        'user_media'
     ].join(',');
 
-    const baseUrl = 'https://www.facebook.com/v19.0/dialog/oauth';
+    const baseUrl = 'https://api.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
@@ -37,64 +35,58 @@ export const getAuthUrl = (userId: string, origin?: string) => {
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
-        // 1. Exchange code for short-lived access token
-        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`;
-        const shortTokenResponse = await fetch(tokenUrl);
+        // 1. Exchange code for short-lived access token using Instagram's endpoint
+        const formData = new FormData();
+        formData.append('client_id', APP_ID || '');
+        formData.append('client_secret', APP_SECRET || '');
+        formData.append('grant_type', 'authorization_code');
+        formData.append('redirect_uri', REDIRECT_URI || '');
+        formData.append('code', code);
+
+        const shortTokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
+            method: 'POST',
+            body: formData
+        });
         const shortTokenData = await shortTokenResponse.json() as any;
 
-        if (shortTokenData.error) {
-            throw new Error(`Instagram Token Error: ${shortTokenData.error.message}`);
+        if (shortTokenData.error_message || shortTokenData.error) {
+            throw new Error(`Instagram Token Error: ${shortTokenData.error_message || shortTokenData.error}`);
         }
 
         const shortAccessToken = shortTokenData.access_token;
+        const instagramUserId = shortTokenData.user_id;
 
         // 2. Exchange short-lived token for long-lived token (60 days)
-        const longTokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${shortAccessToken}`;
+        // Basic Display also has a long-lived token endpoint
+        const longTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${shortAccessToken}`;
         const longTokenResponse = await fetch(longTokenUrl);
         const longTokenData = await longTokenResponse.json() as any;
 
+        if (longTokenData.error) {
+            throw new Error(`Instagram Long Token Error: ${longTokenData.error.message}`);
+        }
+
         const accessToken = longTokenData.access_token;
+        // Basic Display tokens usually last 60 days (5184000 seconds)
         const expiresAt = new Date(Date.now() + (longTokenData.expires_in || 5184000) * 1000).toISOString();
 
-        // 3. Get User's Pages to find the linked Instagram Business account
-        const pagesUrl = `https://graph.facebook.com/v19.0/me/accounts?access_token=${accessToken}`;
-        const pagesResponse = await fetch(pagesUrl);
-        const pagesData = await pagesResponse.json() as any;
-
-        const pages = pagesData.data || [];
-        let instagramBusinessId = null;
-        let pageAccessToken = null;
-
-        // We need to find which page has a connected Instagram account
-        for (const page of pages) {
-            const igAccountUrl = `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account&access_token=${accessToken}`;
-            const igResponse = await fetch(igAccountUrl);
-            const igData = await igResponse.json() as any;
-
-            if (igData.instagram_business_account) {
-                instagramBusinessId = igData.instagram_business_account.id;
-                pageAccessToken = accessToken; // Use the user token for now
-                break;
-            }
-        }
-
-        if (!instagramBusinessId) {
-            throw new Error('No Instagram Business account found linked to your Facebook pages.');
-        }
-
-        // 4. Fetch Instagram Profile Info
-        const profileUrl = `https://graph.facebook.com/v19.0/${instagramBusinessId}?fields=username,name,profile_picture_url,followers_count&access_token=${accessToken}`;
+        // 3. Fetch Instagram Profile Info (Basic Display API)
+        const profileUrl = `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${accessToken}`;
         const profileResponse = await fetch(profileUrl);
         const profileInfo = await profileResponse.json() as any;
 
+        if (profileInfo.error) {
+            throw new Error(`Instagram Profile Error: ${profileInfo.error.message}`);
+        }
+
         const profileData = {
             username: profileInfo.username || '',
-            follower_count: profileInfo.followers_count || 0,
-            avatar_url: profileInfo.profile_picture_url || '',
-            channel_id: instagramBusinessId
+            follower_count: 0, // Not available in Basic Display API
+            avatar_url: '', // Not available directly in Basic Display, will use first post or fallback
+            channel_id: profileInfo.id
         };
 
-        // 5. Save to DB
+        // 4. Save to DB
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'instagram',
@@ -111,7 +103,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         if (error) throw error;
 
-        // 6. Update the main 'users' table integrations array for redundancy/easier access
+        // 5. Update the main 'users' table integrations array for redundancy/easier access
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
             .select('provider, profile_data')
@@ -124,10 +116,10 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
                 .eq('id', userId);
         }
 
-        // 7. Sync initial feed components (posts)
+        // 6. Sync initial feed components (posts)
         await syncFeed(userId);
 
-        console.log('[InstagramService] Integration saved successfully for user:', userId);
+        console.log('[InstagramService] Integration (Basic) saved successfully for user:', userId);
         return data;
 
     } catch (error) {
@@ -150,8 +142,8 @@ export const syncFeed = async (userId: string) => {
 
         if (error || !integration) throw new Error('Instagram integration not found');
 
-        // Fetch media from Instagram Graph API
-        const mediaUrl = `https://graph.facebook.com/v19.0/${integration.profile_data.channel_id}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
+        // Fetch media from Instagram Graph API (Basic Display)
+        const mediaUrl = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
         const response = await fetch(mediaUrl);
         const data = (await response.json()) as any;
 
@@ -175,6 +167,11 @@ export const syncFeed = async (userId: string) => {
 
         if (existingCollection) {
             collectionId = existingCollection.id;
+            // Retroactively tag existing collections so the frontend filter works
+            await supabase
+                .from('links')
+                .update({ platform: 'instagram' })
+                .eq('id', collectionId);
         } else {
             const { data: newCollection, error: collError } = await supabase
                 .from('links')
@@ -185,6 +182,7 @@ export const syncFeed = async (userId: string) => {
                     is_active: true,
                     is_archived: false,
                     type: 'collection',
+                    platform: 'instagram',
                     layout: 'grid', // Useful for showing posts in a grid when clicked
                     position: 0 // Place at top for visibility
                 })
