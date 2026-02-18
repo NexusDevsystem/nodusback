@@ -180,7 +180,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         fontWeight: dbProfile.font_weight,
         fontItalic: dbProfile.font_italic,
         customSecondaryColor: dbProfile.custom_secondary_color || null,
-        customButtonTextColor: dbProfile.custom_button_text_color || null
+        customButtonTextColor: dbProfile.custom_button_text_color || null,
+        integrations: dbProfile.integrations || []
     };
 }
 

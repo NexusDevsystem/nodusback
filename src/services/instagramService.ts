@@ -45,7 +45,19 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
             throw new Error(`Facebook Token Error: ${tokenData.error.message}`);
         }
 
-        const userAccessToken = tokenData.access_token;
+        let userAccessToken = tokenData.access_token;
+
+        // Exchange for Long-Lived Token (60 days)
+        try {
+            const longLivedUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${userAccessToken}`;
+            const longLivedRes = await fetch(longLivedUrl);
+            const longLivedData = await longLivedRes.json() as any;
+            if (longLivedData.access_token) {
+                userAccessToken = longLivedData.access_token;
+            }
+        } catch (err) {
+            console.warn('Long-lived token exchange failed, using short-lived token:', err);
+        }
 
         const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${userAccessToken}`;
         const pagesResponse = await fetch(pagesUrl);
@@ -97,7 +109,8 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
             user_id: userId,
             provider: 'instagram',
             access_token: userAccessToken,
-            profile_data: profileData
+            profile_data: profileData,
+            expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // ~60 days
         };
 
         const { data, error } = await supabase
@@ -108,7 +121,12 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         if (error) throw error;
 
-        await syncFeed(userId);
+        // Run sync in background/safe mode
+        try {
+            await syncFeed(userId);
+        } catch (syncError) {
+            console.error('Initial Instagram sync failed (non-blocking):', syncError);
+        }
 
         return data;
     } catch (error) {
