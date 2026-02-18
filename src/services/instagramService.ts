@@ -77,21 +77,28 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
             console.warn('[InstagramService] Long-lived token exchange failed:', err);
         }
 
-        // 3. Get User Profile via Graph API (compatible with Instagram Login tokens)
+        // 3. Get User Profile via Instagram Graph API (Specific for Instagram Login tokens)
+        // Note: For Instagram Login, we use graph.instagram.com/me even for professional data
         const profileFields = 'id,username,name,profile_picture_url,followers_count';
-        const profileUrl = `https://graph.facebook.com/v19.0/${igUserId}?fields=${profileFields}&access_token=${accessToken}`;
+        const profileUrl = `https://graph.instagram.com/me?fields=${profileFields}&access_token=${accessToken}`;
+
+        console.log('[InstagramService] Fetching profile from:', profileUrl.split('access_token=')[0] + 'access_token=***');
+
         const profileRes = await fetch(profileUrl);
         const profileDataRaw = await profileRes.json() as any;
 
         if (profileDataRaw.error) {
-            console.warn('[InstagramService] Could not fetch professional profile details:', profileDataRaw.error.message);
+            console.error('[InstagramService] Profile API Error:', profileDataRaw.error);
+            // Don't throw here, try to use what we have or fallbacks to avoid blocking the integration
         }
+
+        console.log('[InstagramService] Raw profile data received:', JSON.stringify(profileDataRaw));
 
         const profileData = {
             username: profileDataRaw.username || 'instagram_user',
             avatar_url: profileDataRaw.profile_picture_url || null,
             follower_count: profileDataRaw.followers_count || null,
-            channel_id: igUserId || profileDataRaw.id,
+            channel_id: profileDataRaw.id || igUserId,
         };
 
         const integrationData: SocialIntegrationDB = {
@@ -196,10 +203,12 @@ export const syncFeed = async (userId: string) => {
 
         if (error || !integration) throw new Error('Instagram integration not found');
 
-        // Fetch media from Instagram Graph API (Professional)
-        // Tokens from Instagram Login work with the standard Business Media endpoint
-        const igUserId = integration.profile_data.channel_id;
-        const mediaUrl = `https://graph.facebook.com/v19.0/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=24`;
+        // Fetch media from Instagram Graph API (Specific for Instagram Login tokens)
+        // Note: For Instagram Login, we use graph.instagram.com/me/media even for professional data
+        const mediaUrl = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=24`;
+
+        console.log('[InstagramService] Syncing media from:', mediaUrl.split('access_token=')[0] + 'access_token=***');
+
         const response = await fetch(mediaUrl);
         const data = (await response.json()) as any;
 
