@@ -12,23 +12,28 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Permissions for Basic Display API (Consumer)
+    // Scopes for the NEW Instagram Consumer API (Branded Login)
     const scopes = [
+        'instagram_graph_user_profile',
+        'instagram_graph_user_media',
         'user_profile',
         'user_media'
     ].join(',');
 
-    const baseUrl = 'https://api.instagram.com/oauth/authorize';
+    const baseUrl = 'https://www.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
         scope: scopes,
         response_type: 'code',
-        state: state
+        state: state,
+        // force_login is sometimes used to ensure account switching works
+        force_login: 'true'
     });
 
     const finalUrl = `${baseUrl}?${params.toString()}`;
-    console.log(`[InstagramService] URL gerada com ID: ${APP_ID}`);
+    console.log(`[DEBUG] Gerando URL para ID: ${APP_ID}`);
+    console.log(`[DEBUG] Scopes: ${scopes}`);
     return finalUrl;
 };
 
