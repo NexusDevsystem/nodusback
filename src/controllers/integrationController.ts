@@ -193,3 +193,32 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message });
     }
 };
+export const switchInstagramAccount = async (req: Request, res: Response) => {
+    try {
+        const { userId } = (req as any);
+        const { channelId } = req.body;
+
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!channelId) return res.status(400).json({ error: 'Missing channelId' });
+
+        const updatedProfile = await instagramService.switchInstagramAccount(userId, channelId);
+
+        // Update the main 'users' table integrations array for frontend consistency
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
+
+        res.json({ success: true, profile_data: updatedProfile });
+    } catch (error: any) {
+        console.error('Switch Instagram Account error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};

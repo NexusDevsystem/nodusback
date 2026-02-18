@@ -12,27 +12,26 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Scopes for Instagram Business/Professional (Your current app type)
+    // Scopes for Instagram Professional (via Facebook Login)
     const scopes = [
         'instagram_basic',
-        'instagram_business_basic',
+        'instagram_manage_comments',
+        'instagram_manage_insights',
         'pages_show_list',
-        'pages_read_engagement'
+        'pages_read_engagement',
+        'public_profile'
     ].join(',');
 
-    const baseUrl = 'https://www.instagram.com/oauth/authorize';
+    const baseUrl = 'https://www.facebook.com/v18.0/dialog/oauth';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
         scope: scopes,
         response_type: 'code',
-        state: state,
-        force_login: 'true'
+        state: state
     });
 
-    const finalUrl = `${baseUrl}?${params.toString()}`;
-    console.log(`[DEBUG] URL Completa Gerada: ${finalUrl}`);
-    return finalUrl;
+    return `${baseUrl}?${params.toString()}`;
 };
 
 /**
@@ -40,63 +39,66 @@ export const getAuthUrl = (userId: string, origin?: string) => {
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
-        // 1. Exchange code for short-lived access token using Instagram's endpoint
-        const formData = new FormData();
-        formData.append('client_id', APP_ID || '');
-        formData.append('client_secret', APP_SECRET || '');
-        formData.append('grant_type', 'authorization_code');
-        formData.append('redirect_uri', REDIRECT_URI || '');
-        formData.append('code', code);
+        const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`;
+        const tokenResponse = await fetch(tokenUrl);
+        const tokenData = await tokenResponse.json() as any;
 
-        const shortTokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
-            method: 'POST',
-            body: formData
-        });
-        const shortTokenData = await shortTokenResponse.json() as any;
-
-        if (shortTokenData.error_message || shortTokenData.error) {
-            throw new Error(`Instagram Token Error: ${shortTokenData.error_message || shortTokenData.error}`);
+        if (tokenData.error) {
+            throw new Error(`Facebook Token Error: ${tokenData.error.message}`);
         }
 
-        const shortAccessToken = shortTokenData.access_token;
-        const instagramUserId = shortTokenData.user_id;
+        const userAccessToken = tokenData.access_token;
 
-        // 2. Exchange short-lived token for long-lived token (60 days)
-        // Basic Display also has a long-lived token endpoint
-        const longTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${shortAccessToken}`;
-        const longTokenResponse = await fetch(longTokenUrl);
-        const longTokenData = await longTokenResponse.json() as any;
+        const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${userAccessToken}`;
+        const pagesResponse = await fetch(pagesUrl);
+        const pagesData = await pagesResponse.json() as any;
 
-        if (longTokenData.error) {
-            throw new Error(`Instagram Long Token Error: ${longTokenData.error.message}`);
+        if (!pagesData.data || pagesData.data.length === 0) {
+            throw new Error('No Facebook pages found. Make sure your Instagram is linked to a Facebook Page.');
         }
 
-        const accessToken = longTokenData.access_token;
-        // Basic Display tokens usually last 60 days (5184000 seconds)
-        const expiresAt = new Date(Date.now() + (longTokenData.expires_in || 5184000) * 1000).toISOString();
+        const availableAccounts: any[] = [];
 
-        // 3. Fetch Instagram Profile Info (Basic Display API)
-        const profileUrl = `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${accessToken}`;
-        const profileResponse = await fetch(profileUrl);
-        const profileInfo = await profileResponse.json() as any;
+        for (const page of pagesData.data) {
+            const igUrl = `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${userAccessToken}`;
+            const igResponse = await fetch(igUrl);
+            const igData = await igResponse.json() as any;
 
-        if (profileInfo.error) {
-            throw new Error(`Instagram Profile Error: ${profileInfo.error.message}`);
+            if (igData.instagram_business_account) {
+                const igId = igData.instagram_business_account.id;
+                const profileUrl = `https://graph.facebook.com/v18.0/${igId}?fields=username,profile_picture_url,followers_count&access_token=${userAccessToken}`;
+                const profileRes = await fetch(profileUrl);
+                const profile = await profileRes.json() as any;
+
+                availableAccounts.push({
+                    username: profile.username,
+                    avatar_url: profile.profile_picture_url,
+                    follower_count: profile.followers_count,
+                    channel_id: igId,
+                    page_id: page.id
+                });
+            }
         }
+
+        if (availableAccounts.length === 0) {
+            throw new Error('No Instagram Business Accounts linked to your Facebook Pages.');
+        }
+
+        // Default to the first account
+        const activeAccount = availableAccounts[0];
 
         const profileData = {
-            username: profileInfo.username || '',
-            follower_count: 0, // Not available in Basic Display API
-            avatar_url: '', // Not available directly in Basic Display, will use first post or fallback
-            channel_id: profileInfo.id
+            username: activeAccount.username,
+            avatar_url: activeAccount.avatar_url,
+            follower_count: activeAccount.follower_count,
+            channel_id: activeAccount.channel_id,
+            available_accounts: availableAccounts // Store all for selection
         };
 
-        // 4. Save to DB
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'instagram',
-            access_token: accessToken,
-            expires_at: expiresAt,
+            access_token: userAccessToken,
             profile_data: profileData
         };
 
@@ -108,27 +110,71 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         if (error) throw error;
 
-        // 5. Update the main 'users' table integrations array for redundancy/easier access
-        const { data: allIntegrations } = await supabase
-            .from('social_integrations')
-            .select('provider, profile_data')
-            .eq('user_id', userId);
-
-        if (allIntegrations) {
-            await supabase
-                .from('users')
-                .update({ integrations: allIntegrations })
-                .eq('id', userId);
-        }
-
-        // 6. Sync initial feed components (posts)
         await syncFeed(userId);
 
-        console.log('[InstagramService] Integration (Basic) saved successfully for user:', userId);
         return data;
-
     } catch (error) {
         console.error('Instagram Auth Error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Switch the active Instagram account for an existing integration
+ */
+export const switchInstagramAccount = async (userId: string, channelId: string) => {
+    try {
+        const { data: integration, error } = await supabase
+            .from('social_integrations')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('provider', 'instagram')
+            .single();
+
+        if (error || !integration) throw new Error('Integration not found');
+
+        const available = integration.profile_data.available_accounts || [];
+        const newAccount = available.find((acc: any) => acc.channel_id === channelId);
+
+        if (!newAccount) throw new Error('Account not found in available list');
+
+        const updatedProfileData = {
+            ...integration.profile_data,
+            username: newAccount.username,
+            avatar_url: newAccount.avatar_url,
+            follower_count: newAccount.follower_count,
+            channel_id: newAccount.channel_id
+        };
+
+        // Update integration
+        const { error: updateError } = await supabase
+            .from('social_integrations')
+            .update({ profile_data: updatedProfileData })
+            .eq('id', integration.id);
+
+        if (updateError) throw updateError;
+
+        // Clear existing Instagram links to prevent overlap
+        const { data: collection } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('title', 'Posts do Instagram')
+            .maybeSingle();
+
+        if (collection) {
+            await supabase
+                .from('links')
+                .delete()
+                .eq('parent_id', collection.id);
+        }
+
+        // Trigger sync for the new account
+        await syncFeed(userId);
+
+        return updatedProfileData;
+    } catch (error) {
+        console.error('Error switching Instagram account:', error);
         throw error;
     }
 };
@@ -147,8 +193,9 @@ export const syncFeed = async (userId: string) => {
 
         if (error || !integration) throw new Error('Instagram integration not found');
 
-        // Fetch media from Instagram Graph API (Basic Display)
-        const mediaUrl = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
+        // Fetch media from Instagram Graph API (Professional)
+        const igUserId = integration.profile_data.channel_id;
+        const mediaUrl = `https://graph.facebook.com/v18.0/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
         const response = await fetch(mediaUrl);
         const data = (await response.json()) as any;
 

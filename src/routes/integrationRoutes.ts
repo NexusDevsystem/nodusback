@@ -11,6 +11,7 @@ router.get('/tiktok/callback', integrationController.handleTikTokCallback);
 
 router.get('/instagram/auth-url', integrationController.getInstagramAuthUrl);
 router.get('/instagram/callback', integrationController.handleInstagramCallback);
+router.post('/instagram/switch', authMiddleware, integrationController.switchInstagramAccount);
 router.delete('/:provider', authMiddleware, integrationController.disconnectIntegration);
 router.get('/instagram/webhook', integrationController.handleInstagramWebhook);
 router.post('/instagram/webhook', integrationController.handleInstagramWebhook);
