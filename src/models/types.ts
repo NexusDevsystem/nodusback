@@ -308,8 +308,8 @@ export interface SocialIntegrationDB {
     expires_at?: string;
     profile_data?: {
         username?: string;
-        follower_count?: number;
-        avatar_url?: string;
+        follower_count?: number | null;
+        avatar_url?: string | null;
         channel_id?: string;
     };
     created_at?: string;

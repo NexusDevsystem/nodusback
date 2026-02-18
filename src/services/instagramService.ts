@@ -6,21 +6,19 @@ const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;
 const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
 
 /**
- * Generates the Instagram Professional Auth URL (via Facebook Login)
+ * Generates the Instagram Basic Display Auth URL
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Scopes for Instagram Professional (via Facebook Login)
+    // Scopes for Instagram Basic Display
     const scopes = [
-        'instagram_basic',
-        'pages_show_list',
-        'pages_read_engagement',
-        'public_profile'
+        'user_profile',
+        'user_media'
     ].join(',');
 
-    const baseUrl = 'https://www.facebook.com/v19.0/dialog/oauth';
+    const baseUrl = 'https://api.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
@@ -33,96 +31,69 @@ export const getAuthUrl = (userId: string, origin?: string) => {
 };
 
 /**
- * Handles the OAuth callback for Professional API (Facebook)
+ * Handles the OAuth callback for Instagram Basic Display
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
-        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`;
-        const tokenResponse = await fetch(tokenUrl);
+        console.log(`[InstagramService] Handling callback for user ${userId} with code ${code.substring(0, 10)}...`);
+
+        // 1. Exchange short-lived token (POST request)
+        const params = new URLSearchParams();
+        params.append('client_id', APP_ID || '');
+        params.append('client_secret', APP_SECRET || '');
+        params.append('grant_type', 'authorization_code');
+        params.append('redirect_uri', REDIRECT_URI || '');
+        params.append('code', code);
+
+        const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
+            method: 'POST',
+            body: params
+        });
+
         const tokenData = await tokenResponse.json() as any;
 
-        if (tokenData.error) {
-            throw new Error(`Facebook Token Error: ${tokenData.error.message}`);
+        if (tokenData.error_message || tokenData.error) {
+            throw new Error(`Instagram Token Error: ${tokenData.error_message || tokenData.error.message}`);
         }
 
-        let userAccessToken = tokenData.access_token;
+        let accessToken = tokenData.access_token;
+        const igUserId = tokenData.user_id;
 
-        // Log the user name for debugging
+        // 2. Exchange for Long-Lived Token (60 days)
         try {
-            const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=name&access_token=${userAccessToken}`);
-            const meData = await meRes.json() as any;
-            console.log(`[InstagramService] Intentando conectar con cuenta de Facebook: ${meData.name} (${meData.id})`);
-        } catch (e) {
-            console.warn('[InstagramService] Could not fetch user name for debug');
-        }
-
-        // Exchange for Long-Lived Token (60 days)
-        try {
-            const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${userAccessToken}`;
+            const longLivedUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${accessToken}`;
             const longLivedRes = await fetch(longLivedUrl);
             const longLivedData = await longLivedRes.json() as any;
+
             if (longLivedData.access_token) {
-                userAccessToken = longLivedData.access_token;
+                accessToken = longLivedData.access_token;
+                console.log('[InstagramService] Long-lived token acquired');
             }
         } catch (err) {
-            console.warn('Long-lived token exchange failed, using short-lived token:', err);
+            console.warn('[InstagramService] Long-lived token exchange failed, using short-lived token:', err);
         }
 
-        const pagesUrl = `https://graph.facebook.com/v19.0/me/accounts?access_token=${userAccessToken}`;
-        const pagesResponse = await fetch(pagesUrl);
-        const pagesData = await pagesResponse.json() as any;
+        // 3. Get User Profile
+        const profileUrl = `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${accessToken}`;
+        const profileRes = await fetch(profileUrl);
+        const profileDataRaw = await profileRes.json() as any;
 
-        if (pagesData.error) {
-            console.error('[InstagramService] Pages API Error:', pagesData.error);
+        if (profileDataRaw.error) {
+            throw new Error(`Instagram Profile Error: ${profileDataRaw.error.message}`);
         }
-
-        if (!pagesData.data || pagesData.data.length === 0) {
-            console.error('[InstagramService] No pages found for this token. Full response:', JSON.stringify(pagesData));
-            throw new Error('Nenhuma página do Facebook vinculada foi encontrada. Certifique-se de que: 1. Sua conta do Instagram é Profissional (Empresa ou Criador). 2. Ela está vinculada a uma Página do Facebook. 3. Você deu as permissões de "Páginas" no pop-up do Facebook.');
-        }
-
-        const availableAccounts: any[] = [];
-
-        for (const page of pagesData.data) {
-            const igUrl = `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account&access_token=${userAccessToken}`;
-            const igResponse = await fetch(igUrl);
-            const igData = await igResponse.json() as any;
-
-            if (igData.instagram_business_account) {
-                const igId = igData.instagram_business_account.id;
-                const profileUrl = `https://graph.facebook.com/v19.0/${igId}?fields=username,profile_picture_url,followers_count&access_token=${userAccessToken}`;
-                const profileRes = await fetch(profileUrl);
-                const profile = await profileRes.json() as any;
-
-                availableAccounts.push({
-                    username: profile.username,
-                    avatar_url: profile.profile_picture_url,
-                    follower_count: profile.followers_count,
-                    channel_id: igId,
-                    page_id: page.id
-                });
-            }
-        }
-
-        if (availableAccounts.length === 0) {
-            throw new Error('No Instagram Business Accounts linked to your Facebook Pages.');
-        }
-
-        // Default to the first account
-        const activeAccount = availableAccounts[0];
 
         const profileData = {
-            username: activeAccount.username,
-            avatar_url: activeAccount.avatar_url,
-            follower_count: activeAccount.follower_count,
-            channel_id: activeAccount.channel_id,
-            available_accounts: availableAccounts // Store all for selection
+            username: profileDataRaw.username,
+            avatar_url: null, // Basic Display API doesn't provide profile picture URL easily
+            follower_count: null, // Not available in Basic Display
+            channel_id: profileDataRaw.id,
+            account_type: profileDataRaw.account_type
         };
 
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'instagram',
-            access_token: userAccessToken,
+            access_token: accessToken,
             profile_data: profileData,
             expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // ~60 days
         };
@@ -135,14 +106,14 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         if (error) throw error;
 
-        // Run sync in background (non-blocking)
+        // Run sync in background
         syncFeed(userId).catch(syncError => {
-            console.error('Initial Instagram sync failed (background):', syncError);
+            console.error('[InstagramService] Initial sync failed:', syncError);
         });
 
         return data;
     } catch (error) {
-        console.error('Instagram Auth Error:', error);
+        console.error('[InstagramService] Auth Error:', error);
         throw error;
     }
 };
@@ -208,7 +179,7 @@ export const switchInstagramAccount = async (userId: string, channelId: string) 
 };
 
 /**
- * Syncs the Instagram media feed to the 'links' table as social links
+ * Syncs the Instagram media feed for Basic Display API
  */
 export const syncFeed = async (userId: string) => {
     try {
@@ -221,14 +192,13 @@ export const syncFeed = async (userId: string) => {
 
         if (error || !integration) throw new Error('Instagram integration not found');
 
-        // Fetch media from Instagram Graph API (Professional)
-        const igUserId = integration.profile_data.channel_id;
-        const mediaUrl = `https://graph.facebook.com/v19.0/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=6`;
+        // Fetch media from Instagram Basic Display API
+        const mediaUrl = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=12`;
         const response = await fetch(mediaUrl);
         const data = (await response.json()) as any;
 
         if (data.error) {
-            console.error('Instagram API error:', data.error);
+            console.error('[InstagramService] Sync API error:', data.error);
             return;
         }
 

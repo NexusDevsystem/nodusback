@@ -27,10 +27,9 @@ app.set('trust proxy', 1);
 
 // 1. CORS Configuration (MUST BE FIRST for preflights)
 const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    process.env.CORS_ORIGIN || 'http://localhost:5173',
-    'http://localhost:3001',
     'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
     'https://nodus-frontend.vercel.app',
     'https://nodus.app',
     'https://www.noduscc.com.br',
@@ -39,21 +38,33 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.nodus.app') || origin.includes('localhost')) {
+
+        const isAllowed = allowedOrigins.includes(origin) ||
+            origin.includes('localhost') ||
+            origin.endsWith('.vercel.app') ||
+            origin.endsWith('.nodus.app');
+
+        if (isAllowed) {
             callback(null, true);
         } else {
-            console.warn(`Blocked CORS request from: ${origin}`);
+            console.warn(`🚫 Blocked CORS request from: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    credentials: true,
+    maxAge: 86400 // 24 hours cache for preflight
 }));
 
 // 2. Security Headers (Helmet) & Parameter Pollution (HPP)
-app.use(helmet());
+// Relax CORP for development/cross-domain usage
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false
+}));
 app.use(hpp());
 
 // 3. Rate Limiting
