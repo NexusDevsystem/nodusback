@@ -1,5 +1,7 @@
 import { supabase } from '../config/supabaseClient.js';
 import { UserProfile, UserProfileDB, dbToApi, apiToDb } from '../models/types.js';
+import { linkService } from './linkService.js';
+import { productService } from './productService.js';
 
 export const profileService = {
     // Helper to attach active integrations to a profile
@@ -144,5 +146,21 @@ export const profileService = {
         }
 
         return !data; // Available if no data found
+    },
+
+    // Bootstrap data for Editor (Profile + Links + Products)
+    async getBootstrapData(userId: string) {
+        // Run all queries in parallel for maximum speed
+        const [profile, links, products] = await Promise.all([
+            this.getProfileByUserId(userId),
+            linkService.getLinksByProfileId(userId),
+            productService.getProductsByProfileId(userId)
+        ]);
+
+        return {
+            profile,
+            links,
+            products
+        };
     }
 };

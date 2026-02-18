@@ -41,6 +41,21 @@ export const profileController = {
         }
     },
 
+    // Get all initial data (Profile + Links + Products)
+    async getBootstrap(req: AuthRequest, res: Response) {
+        try {
+            if (!req.userId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const data = await profileService.getBootstrapData(req.userId);
+            res.json(data);
+        } catch (error) {
+            console.error('Error bootstrapping data:', error);
+            res.status(500).json({ error: 'Failed to bootstrap data' });
+        }
+    },
+
     // Update authenticated user's profile
     async updateProfile(req: AuthRequest, res: Response) {
         try {
