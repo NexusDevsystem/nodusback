@@ -30,6 +30,8 @@ export interface UserProfileDB {
     font_italic?: boolean;
     custom_secondary_color?: string | null;
     custom_button_text_color?: string | null;
+    onboarding_completed?: boolean;
+    referral_source?: string | null;
     created_at?: string;
     updated_at?: string;
     integrations?: any[];
