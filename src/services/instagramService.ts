@@ -63,8 +63,13 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         const pagesResponse = await fetch(pagesUrl);
         const pagesData = await pagesResponse.json() as any;
 
+        if (pagesData.error) {
+            console.error('[InstagramService] Pages API Error:', pagesData.error);
+        }
+
         if (!pagesData.data || pagesData.data.length === 0) {
-            throw new Error('No Facebook pages found. Make sure your Instagram is linked to a Facebook Page.');
+            console.error('[InstagramService] No pages found. Full response:', JSON.stringify(pagesData));
+            throw new Error('Nenhuma página do Facebook vinculada foi encontrada. Certifique-se de que sua conta do Instagram é Profissional e está vinculada a uma Página do Facebook.');
         }
 
         const availableAccounts: any[] = [];
