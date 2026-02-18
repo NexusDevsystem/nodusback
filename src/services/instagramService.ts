@@ -20,7 +20,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
         'public_profile'
     ].join(',');
 
-    const baseUrl = 'https://www.facebook.com/v18.0/dialog/oauth';
+    const baseUrl = 'https://www.facebook.com/v19.0/dialog/oauth';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
@@ -37,7 +37,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
-        const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`;
+        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`;
         const tokenResponse = await fetch(tokenUrl);
         const tokenData = await tokenResponse.json() as any;
 
@@ -47,9 +47,18 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         let userAccessToken = tokenData.access_token;
 
+        // Log the user name for debugging
+        try {
+            const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=name&access_token=${userAccessToken}`);
+            const meData = await meRes.json() as any;
+            console.log(`[InstagramService] Intentando conectar con cuenta de Facebook: ${meData.name} (${meData.id})`);
+        } catch (e) {
+            console.warn('[InstagramService] Could not fetch user name for debug');
+        }
+
         // Exchange for Long-Lived Token (60 days)
         try {
-            const longLivedUrl = `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${userAccessToken}`;
+            const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${userAccessToken}`;
             const longLivedRes = await fetch(longLivedUrl);
             const longLivedData = await longLivedRes.json() as any;
             if (longLivedData.access_token) {
@@ -59,7 +68,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
             console.warn('Long-lived token exchange failed, using short-lived token:', err);
         }
 
-        const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?access_token=${userAccessToken}`;
+        const pagesUrl = `https://graph.facebook.com/v19.0/me/accounts?access_token=${userAccessToken}`;
         const pagesResponse = await fetch(pagesUrl);
         const pagesData = await pagesResponse.json() as any;
 
@@ -68,20 +77,20 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         }
 
         if (!pagesData.data || pagesData.data.length === 0) {
-            console.error('[InstagramService] No pages found. Full response:', JSON.stringify(pagesData));
-            throw new Error('Nenhuma página do Facebook vinculada foi encontrada. Certifique-se de que sua conta do Instagram é Profissional e está vinculada a uma Página do Facebook.');
+            console.error('[InstagramService] No pages found for this token. Full response:', JSON.stringify(pagesData));
+            throw new Error('Nenhuma página do Facebook vinculada foi encontrada. Certifique-se de que: 1. Sua conta do Instagram é Profissional (Empresa ou Criador). 2. Ela está vinculada a uma Página do Facebook. 3. Você deu as permissões de "Páginas" no pop-up do Facebook.');
         }
 
         const availableAccounts: any[] = [];
 
         for (const page of pagesData.data) {
-            const igUrl = `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${userAccessToken}`;
+            const igUrl = `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account&access_token=${userAccessToken}`;
             const igResponse = await fetch(igUrl);
             const igData = await igResponse.json() as any;
 
             if (igData.instagram_business_account) {
                 const igId = igData.instagram_business_account.id;
-                const profileUrl = `https://graph.facebook.com/v18.0/${igId}?fields=username,profile_picture_url,followers_count&access_token=${userAccessToken}`;
+                const profileUrl = `https://graph.facebook.com/v19.0/${igId}?fields=username,profile_picture_url,followers_count&access_token=${userAccessToken}`;
                 const profileRes = await fetch(profileUrl);
                 const profile = await profileRes.json() as any;
 
