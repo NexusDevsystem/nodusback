@@ -6,7 +6,7 @@ const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;
 const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
 
 /**
- * Generates the Instagram Basic Display Auth URL
+ * Generates the Instagram Professional Auth URL (via Facebook Login)
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
@@ -15,8 +15,6 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     // Scopes for Instagram Professional (via Facebook Login)
     const scopes = [
         'instagram_basic',
-        'instagram_manage_comments',
-        'instagram_manage_insights',
         'pages_show_list',
         'pages_read_engagement',
         'public_profile'
@@ -35,7 +33,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
 };
 
 /**
- * Handles the OAuth callback, exchanges code for token, and fetches Instagram data
+ * Handles the OAuth callback for Professional API (Facebook)
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {

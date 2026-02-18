@@ -15,5 +15,6 @@ router.post('/instagram/switch', authMiddleware, integrationController.switchIns
 router.delete('/:provider', authMiddleware, integrationController.disconnectIntegration);
 router.get('/instagram/webhook', integrationController.handleInstagramWebhook);
 router.post('/instagram/webhook', integrationController.handleInstagramWebhook);
+router.post('/instagram/deauthorize', integrationController.handleInstagramDeauthorize);
 
 export default router;
