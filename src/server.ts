@@ -22,6 +22,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy for Railway/Proxies (required for express-rate-limit)
+app.set('trust proxy', true);
+
 // 1. CORS Configuration (MUST BE FIRST for preflights)
 const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:5173',
