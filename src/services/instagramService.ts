@@ -6,19 +6,23 @@ const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;
 const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
 
 /**
- * Generates the Instagram Basic Display Auth URL
+ * Generates the Instagram Login (for Business/Professional) Auth URL
+ * This allows professional accounts to login directly via Instagram without a Facebook Page.
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Scopes for Instagram Basic Display
+    // Scopes for Instagram Login for Business
     const scopes = [
-        'user_profile',
-        'user_media'
+        'instagram_business_basic',
+        'instagram_business_manage_messages',
+        'instagram_business_manage_comments',
+        'instagram_business_content_publish',
+        'instagram_business_manage_insights'
     ].join(',');
 
-    const baseUrl = 'https://api.instagram.com/oauth/authorize';
+    const baseUrl = 'https://www.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: REDIRECT_URI || '',
@@ -31,13 +35,13 @@ export const getAuthUrl = (userId: string, origin?: string) => {
 };
 
 /**
- * Handles the OAuth callback for Instagram Basic Display
+ * Handles the OAuth callback for Instagram Login (Professional)
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
-        console.log(`[InstagramService] Handling callback for user ${userId} with code ${code.substring(0, 10)}...`);
+        console.log(`[InstagramService] Handling Instagram Login callback for user ${userId}...`);
 
-        // 1. Exchange short-lived token (POST request)
+        // 1. Exchange short-lived token
         const params = new URLSearchParams();
         params.append('client_id', APP_ID || '');
         params.append('client_secret', APP_SECRET || '');
@@ -53,7 +57,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         const tokenData = await tokenResponse.json() as any;
 
         if (tokenData.error_message || tokenData.error) {
-            throw new Error(`Instagram Token Error: ${tokenData.error_message || tokenData.error.message}`);
+            throw new Error(`Instagram Token Error: ${tokenData.error_message || tokenData.error.message || JSON.stringify(tokenData.error)}`);
         }
 
         let accessToken = tokenData.access_token;
@@ -67,27 +71,27 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
             if (longLivedData.access_token) {
                 accessToken = longLivedData.access_token;
-                console.log('[InstagramService] Long-lived token acquired');
+                console.log('[InstagramService] Long-lived token acquired via Instagram Login');
             }
         } catch (err) {
-            console.warn('[InstagramService] Long-lived token exchange failed, using short-lived token:', err);
+            console.warn('[InstagramService] Long-lived token exchange failed:', err);
         }
 
-        // 3. Get User Profile
-        const profileUrl = `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${accessToken}`;
+        // 3. Get User Profile via Graph API (compatible with Instagram Login tokens)
+        const profileFields = 'id,username,name,profile_picture_url,followers_count';
+        const profileUrl = `https://graph.facebook.com/v19.0/${igUserId}?fields=${profileFields}&access_token=${accessToken}`;
         const profileRes = await fetch(profileUrl);
         const profileDataRaw = await profileRes.json() as any;
 
         if (profileDataRaw.error) {
-            throw new Error(`Instagram Profile Error: ${profileDataRaw.error.message}`);
+            console.warn('[InstagramService] Could not fetch professional profile details:', profileDataRaw.error.message);
         }
 
         const profileData = {
-            username: profileDataRaw.username,
-            avatar_url: null, // Basic Display API doesn't provide profile picture URL easily
-            follower_count: null, // Not available in Basic Display
-            channel_id: profileDataRaw.id,
-            account_type: profileDataRaw.account_type
+            username: profileDataRaw.username || 'instagram_user',
+            avatar_url: profileDataRaw.profile_picture_url || null,
+            follower_count: profileDataRaw.followers_count || null,
+            channel_id: igUserId || profileDataRaw.id,
         };
 
         const integrationData: SocialIntegrationDB = {
@@ -179,7 +183,7 @@ export const switchInstagramAccount = async (userId: string, channelId: string) 
 };
 
 /**
- * Syncs the Instagram media feed for Basic Display API
+ * Syncs the Instagram media feed for Instagram Login (Professional) API
  */
 export const syncFeed = async (userId: string) => {
     try {
@@ -192,8 +196,10 @@ export const syncFeed = async (userId: string) => {
 
         if (error || !integration) throw new Error('Instagram integration not found');
 
-        // Fetch media from Instagram Basic Display API
-        const mediaUrl = `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=12`;
+        // Fetch media from Instagram Graph API (Professional)
+        // Tokens from Instagram Login work with the standard Business Media endpoint
+        const igUserId = integration.profile_data.channel_id;
+        const mediaUrl = `https://graph.facebook.com/v19.0/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${integration.access_token}&limit=24`;
         const response = await fetch(mediaUrl);
         const data = (await response.json()) as any;
 
