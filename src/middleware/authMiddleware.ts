@@ -53,20 +53,43 @@ export const authMiddleware = async (
             return res.status(401).json({ error: 'Invalid token or email not found' });
         }
 
-        // Get the user's profile from DB using email
-        const { data: profile, error: profileError } = await supabase
+        // Get the user's profile from DB using email (Case-insensitive)
+        let { data: profile, error: profileError } = await supabase
             .from('users')
             .select('id')
-            .eq('email', email)
+            .ilike('email', email)
             .maybeSingle();
 
-        if (profileError || !profile) {
-            console.error('User not found for email:', email);
-            return res.status(404).json({ error: 'User profile not found. Please complete onboarding.' });
+        if (profileError) {
+            console.error('Database error during auth:', profileError);
+            return res.status(500).json({ error: 'Internal server error during authentication' });
+        }
+
+        // AUTO-CREATE: If no record exists, create a basic one immediately
+        // This prevents the 404 catch-22 for new users.
+        if (!profile) {
+            console.log(`🆕 Creating stub record for new user: ${email}`);
+            const { data: newProfile, error: createError } = await supabase
+                .from('users')
+                .insert({
+                    email: email.toLowerCase(),
+                    name: email.split('@')[0], // Default name from email
+                    onboarding_completed: false,
+                    auth_provider: 'google',
+                    theme_id: 'default', // Fallback to a default theme
+                    font_family: 'Inter'
+                })
+                .select('id')
+                .single();
+
+            if (createError) {
+                console.error('Failed to auto-create user record:', createError);
+                return res.status(500).json({ error: 'Failed to initialize user session' });
+            }
+            profile = newProfile;
         }
 
         // Attach user and profile info to request
-        // Since we aren't using Supabase Auth IDs here, we use the record ID from our 'users' table
         req.userId = profile.id;
         req.profileId = profile.id;
 

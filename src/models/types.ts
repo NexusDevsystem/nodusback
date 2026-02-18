@@ -115,6 +115,8 @@ export interface UserProfile {
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
     customButtonTextColor?: string | null;
+    onboardingCompleted?: boolean;
+    referralSource?: string | null;
     integrations?: any[];
 }
 
@@ -181,6 +183,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         fontItalic: dbProfile.font_italic,
         customSecondaryColor: dbProfile.custom_secondary_color || null,
         customButtonTextColor: dbProfile.custom_button_text_color || null,
+        onboardingCompleted: dbProfile.onboarding_completed,
+        referralSource: dbProfile.referral_source,
         integrations: dbProfile.integrations || []
     };
 }
@@ -217,6 +221,8 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
     if (apiProfile.customSecondaryColor !== undefined) dbProfile.custom_secondary_color = apiProfile.customSecondaryColor;
     if (apiProfile.customButtonTextColor !== undefined) dbProfile.custom_button_text_color = apiProfile.customButtonTextColor;
+    if (apiProfile.onboardingCompleted !== undefined) dbProfile.onboarding_completed = apiProfile.onboardingCompleted;
+    if (apiProfile.referralSource !== undefined) dbProfile.referral_source = apiProfile.referralSource;
 
     return dbProfile;
 }
