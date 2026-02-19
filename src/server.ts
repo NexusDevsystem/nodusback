@@ -33,7 +33,9 @@ const allowedOrigins = [
     'https://nodus-frontend.vercel.app',
     'https://nodus.app',
     'https://www.noduscc.com.br',
-    'https://noduscc.com.br'
+    'https://noduscc.com.br',
+    'https://nodus.my',
+    'https://www.nodus.my'
 ];
 
 app.use(cors({
@@ -44,7 +46,8 @@ app.use(cors({
         const isAllowed = allowedOrigins.includes(origin) ||
             origin.includes('localhost') ||
             origin.endsWith('.vercel.app') ||
-            origin.endsWith('.nodus.app');
+            origin.endsWith('.nodus.app') ||
+            origin.endsWith('.nodus.my');
 
         if (isAllowed) {
             callback(null, true);

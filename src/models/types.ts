@@ -195,7 +195,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         customTextColor: dbProfile.custom_text_color || null,
         customSolidColor: dbProfile.custom_solid_color || null,
         customButtonColor: dbProfile.custom_button_color || null,
-        isVerified: !!(dbProfile.is_verified || (dbProfile.username && dbProfile.username.trim().toLowerCase() === 'noduscc') || (dbProfile.name && dbProfile.name.trim().toLowerCase() === 'nodus.cc')),
+        isVerified: !!(dbProfile.is_verified || (dbProfile.username && ['noduscc', 'nodus.my', 'nodus'].includes(dbProfile.username.trim().toLowerCase())) || (dbProfile.name && ['nodus.cc', 'nodus.my'].includes(dbProfile.name.trim().toLowerCase()))),
         enableBlur: dbProfile.enable_blur,
         fontSize: dbProfile.font_size,
         fontWeight: dbProfile.font_weight,

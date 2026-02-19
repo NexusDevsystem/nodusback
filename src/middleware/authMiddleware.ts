@@ -53,11 +53,12 @@ export const authMiddleware = async (
             return res.status(401).json({ error: 'Invalid token or email not found' });
         }
 
-        // Get the user's profile from DB using email (Case-insensitive)
+        // Get the user's profile from DB using email (Sanitized exact match)
+        const sanitizedEmail = email.toLowerCase().trim();
         let { data: profile, error: profileError } = await supabase
             .from('users')
-            .select('id')
-            .ilike('email', email)
+            .select('id, onboarding_completed, username')
+            .eq('email', sanitizedEmail)
             .maybeSingle();
 
         if (profileError) {
@@ -72,14 +73,14 @@ export const authMiddleware = async (
             const { data: newProfile, error: createError } = await supabase
                 .from('users')
                 .insert({
-                    email: email.toLowerCase(),
+                    email: sanitizedEmail,
                     name: email.split('@')[0], // Default name from email
                     onboarding_completed: false,
                     auth_provider: 'google',
                     theme_id: 'default', // Fallback to a default theme
                     font_family: 'Inter'
                 })
-                .select('id')
+                .select('id, onboarding_completed, username')
                 .single();
 
             if (createError) {
@@ -89,11 +90,16 @@ export const authMiddleware = async (
             profile = newProfile;
         }
 
+        if (!profile) {
+            console.error('❌ Profile missing after creation/fetch for:', sanitizedEmail);
+            return res.status(500).json({ error: 'Failed to retrieve user profile' });
+        }
+
         // Attach user and profile info to request
         req.userId = profile.id;
         req.profileId = profile.id;
 
-        console.log(`✅ Auth: Request authorized for ${email}`);
+        console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Onboarded: ${profile.onboarding_completed ?? 'N/A'}, Username: ${profile.username || 'N/A'})`);
 
         next();
     } catch (error: any) {
