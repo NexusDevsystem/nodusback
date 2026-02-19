@@ -30,6 +30,14 @@ export interface UserProfileDB {
     font_italic?: boolean;
     custom_secondary_color?: string | null;
     custom_button_text_color?: string | null;
+    header_layout?: 'classic' | 'compact' | 'hero' | null;
+    header_style?: 'text' | 'logo' | null;
+    logo_url?: string | null;
+    avatar_size?: 'sm' | 'md' | 'lg' | null;
+    custom_css?: string | null;
+    seo_title?: string | null;
+    seo_description?: string | null;
+    payment_methods?: any[] | null;
     onboarding_completed?: boolean;
     referral_source?: string | null;
     created_at?: string;
@@ -117,6 +125,14 @@ export interface UserProfile {
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
     customButtonTextColor?: string | null;
+    headerLayout?: 'classic' | 'compact' | 'hero' | null;
+    headerStyle?: 'text' | 'logo' | null;
+    logoUrl?: string | null;
+    avatarSize?: 'sm' | 'md' | 'lg' | null;
+    customCSS?: string | null;
+    seoTitle?: string | null;
+    seoDescription?: string | null;
+    paymentMethods?: any[] | null;
     onboardingCompleted?: boolean;
     referralSource?: string | null;
     integrations?: any[];
@@ -185,6 +201,14 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         fontItalic: dbProfile.font_italic,
         customSecondaryColor: dbProfile.custom_secondary_color || null,
         customButtonTextColor: dbProfile.custom_button_text_color || null,
+        headerLayout: dbProfile.header_layout || 'classic',
+        headerStyle: dbProfile.header_style || 'text',
+        logoUrl: dbProfile.logo_url || null,
+        avatarSize: dbProfile.avatar_size || 'md',
+        customCSS: dbProfile.custom_css || null,
+        seoTitle: dbProfile.seo_title || null,
+        seoDescription: dbProfile.seo_description || null,
+        paymentMethods: dbProfile.payment_methods || [],
         onboardingCompleted: dbProfile.onboarding_completed,
         referralSource: dbProfile.referral_source,
         integrations: dbProfile.integrations || []
@@ -223,6 +247,14 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
     if (apiProfile.customSecondaryColor !== undefined) dbProfile.custom_secondary_color = apiProfile.customSecondaryColor;
     if (apiProfile.customButtonTextColor !== undefined) dbProfile.custom_button_text_color = apiProfile.customButtonTextColor;
+    if (apiProfile.headerLayout !== undefined) dbProfile.header_layout = apiProfile.headerLayout;
+    if (apiProfile.headerStyle !== undefined) dbProfile.header_style = apiProfile.headerStyle;
+    if (apiProfile.logoUrl !== undefined) dbProfile.logo_url = apiProfile.logoUrl;
+    if (apiProfile.avatarSize !== undefined) dbProfile.avatar_size = apiProfile.avatarSize;
+    if (apiProfile.customCSS !== undefined) dbProfile.custom_css = apiProfile.customCSS;
+    if (apiProfile.seoTitle !== undefined) dbProfile.seo_title = apiProfile.seoTitle;
+    if (apiProfile.seoDescription !== undefined) dbProfile.seo_description = apiProfile.seoDescription;
+    if (apiProfile.paymentMethods !== undefined) dbProfile.payment_methods = apiProfile.paymentMethods;
     if (apiProfile.onboardingCompleted !== undefined) dbProfile.onboarding_completed = apiProfile.onboardingCompleted;
     if (apiProfile.referralSource !== undefined) dbProfile.referral_source = apiProfile.referralSource;
 
