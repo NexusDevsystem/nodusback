@@ -53,9 +53,7 @@ export const analyticsController = {
                 return res.status(400).json({ error: 'profileId is required' });
             }
 
-            await analyticsService.trackView(profileId, {
-                ua: req.headers['user-agent']
-            });
+            await analyticsService.trackView(profileId);
 
             res.status(201).json({ success: true });
         } catch (error) {

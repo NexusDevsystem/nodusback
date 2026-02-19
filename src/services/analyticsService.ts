@@ -146,13 +146,12 @@ export const analyticsService = {
     },
 
     // Track a page view event
-    async trackView(userId: string, metadata?: any): Promise<void> {
+    async trackView(userId: string): Promise<void> {
         const { error } = await supabase
             .from('clicks')
             .insert({
                 user_id: userId,
-                type: 'view',
-                metadata: metadata || {}
+                type: 'view'
             });
 
         if (error) {
@@ -165,8 +164,7 @@ export const analyticsService = {
         userId: string,
         eventType: string,
         linkId?: string,
-        productId?: string,
-        metadata?: Record<string, any>
+        productId?: string
     ): Promise<void> {
         const { error } = await supabase
             .from('clicks')
@@ -174,8 +172,7 @@ export const analyticsService = {
                 user_id: userId,
                 link_id: linkId || null,
                 product_id: productId || null,
-                type: eventType,
-                ...metadata
+                type: eventType
             });
 
         if (error) {
