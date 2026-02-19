@@ -21,6 +21,23 @@ export const profileController = {
         }
     },
 
+    // Unified public data fetch (Profile + Links + Products)
+    async getPublicBootstrap(req: AuthRequest, res: Response) {
+        try {
+            const { username } = req.params;
+            const data = await profileService.getPublicBootstrapData(username);
+
+            if (!data) {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+
+            res.json(data);
+        } catch (error) {
+            console.error('Error bootstrapping public data:', error);
+            res.status(500).json({ error: 'Failed to bootstrap public data' });
+        }
+    },
+
     // Get authenticated user's profile
     async getMyProfile(req: AuthRequest, res: Response) {
         try {

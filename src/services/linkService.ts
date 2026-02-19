@@ -7,8 +7,7 @@ export const linkService = {
         const { data, error } = await supabase
             .from('links')
             .select('*')
-            .eq('user_id', userId)  // FK to users(id)
-            .is('parent_id', null) // Only top-level links
+            .eq('user_id', userId)
             .order('position', { ascending: true });
 
         if (error) {
@@ -19,37 +18,38 @@ export const linkService = {
         const dbLinks = data as LinkItemDB[];
         const now = new Date();
 
-        // Filter and Map
-        const linksWithChildren = await Promise.all(
-            dbLinks.map(async (dbLink) => {
-                const apiLink = linkDbToApi(dbLink);
+        // 1. Convert all DB links to API format and apply schedule filtering
+        const allLinks = dbLinks.map(db => linkDbToApi(db)).filter(link => {
+            if (!publicView) return true;
+            if (link.scheduleStart && new Date(link.scheduleStart) > now) return false;
+            if (link.scheduleEnd && new Date(link.scheduleEnd) < now) return false;
+            return true;
+        });
 
-                // --- SCHEDULE LOGIC ---
-                // If it's a public view, apply schedule filtering
-                if (publicView) {
-                    // 1. If start data is set and FUTURE (start > now), Hide it.
-                    if (apiLink.scheduleStart && new Date(apiLink.scheduleStart) > now) {
-                        return null;
-                    }
-                    // 2. If end date is set and PAST (end < now), Hide it.
-                    if (apiLink.scheduleEnd && new Date(apiLink.scheduleEnd) < now) {
-                        return null;
-                    }
+        // 2. Build the hierarchy in memory
+        const linkMap = new Map<string, LinkItem>();
+        allLinks.forEach(link => {
+            link.children = [];
+            linkMap.set(link.id!, link);
+        });
+
+        const rootLinks: LinkItem[] = [];
+        allLinks.forEach(link => {
+            if (link.parentId) {
+                const parent = linkMap.get(link.parentId);
+                if (parent) {
+                    parent.children = parent.children || [];
+                    parent.children.push(link);
                 }
-                // ----------------------
+            } else {
+                rootLinks.push(link);
+            }
+        });
 
-                const children = await this.getChildLinks(dbLink.id!, publicView);
-
-                // If the item itself is valid but has children, update children list
-                return { ...apiLink, children };
-            })
-        );
-
-        // Remove nulls (filtered out links)
-        return linksWithChildren.filter(l => l !== null) as LinkItem[];
+        return rootLinks;
     },
 
-    // Get child links (for collections)
+    // Get child links (kept for legacy or specific cases, but now redundant for profile load)
     async getChildLinks(parentId: string, publicView = false): Promise<LinkItem[]> {
         const { data, error } = await supabase
             .from('links')
@@ -65,19 +65,15 @@ export const linkService = {
         const dbLinks = data as LinkItemDB[];
         const now = new Date();
 
-        // Filter for schedule if public view
-        const filtered = dbLinks.filter(dbLink => {
-            if (!publicView) return true;
-
-            const start = dbLink.schedule_start ? new Date(dbLink.schedule_start) : null;
-            const end = dbLink.schedule_end ? new Date(dbLink.schedule_end) : null;
-
-            if (start && start > now) return false; // Future
-            if (end && end < now) return false;   // Expired
-            return true;
-        });
-
-        return filtered.map(db => linkDbToApi(db));
+        // Filter and Map
+        return dbLinks
+            .map(db => linkDbToApi(db))
+            .filter(link => {
+                if (!publicView) return true;
+                if (link.scheduleStart && new Date(link.scheduleStart) > now) return false;
+                if (link.scheduleEnd && new Date(link.scheduleEnd) < now) return false;
+                return true;
+            });
     },
 
     // Get links by username (public)

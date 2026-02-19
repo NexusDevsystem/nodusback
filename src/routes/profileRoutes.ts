@@ -6,6 +6,7 @@ const router = Router();
 
 // Public routes
 router.get('/public/:username', profileController.getPublicProfile);
+router.get('/public-bootstrap/:username', profileController.getPublicBootstrap);
 router.get('/check-username/:username', profileController.checkUsername);
 
 // Protected routes (require authentication)

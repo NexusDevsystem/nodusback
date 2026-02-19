@@ -140,6 +140,7 @@ export interface UserProfile {
 
 export interface LinkItem {
     id: string;
+    parentId?: string | null;
     title: string;
     url: string;
     image?: string;
@@ -264,6 +265,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
 export function linkDbToApi(db: LinkItemDB): LinkItem {
     return {
         id: db.id || '',
+        parentId: db.parent_id,
         title: db.title,
         url: db.url,
         image: db.icon, // Map icon to image
@@ -285,7 +287,7 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
 export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<LinkItemDB> {
     const dbLink: Partial<LinkItemDB> = {
         user_id: userId,  // FK to users(id)
-        parent_id: (api as any).parentId || null, // Map parentId if exists
+        parent_id: api.parentId || null, // Map parentId if exists
         title: api.title,
         url: api.url,
         icon: api.image, // Map image to icon

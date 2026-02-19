@@ -162,5 +162,24 @@ export const profileService = {
             links,
             products
         };
+    },
+
+    // Public Bootstrap (Profile + Links + Products) by username
+    async getPublicBootstrapData(username: string) {
+        // 1. Get profile first as we need the user_id for links/products
+        const profile = await this.getProfileByUsername(username);
+        if (!profile) return null;
+
+        // 2. Fetch links and products in parallel using the user_id
+        const [links, products] = await Promise.all([
+            linkService.getLinksByProfileId(profile.id!, true),
+            productService.getProductsByProfileId(profile.id!)
+        ]);
+
+        return {
+            profile,
+            links,
+            products
+        };
     }
 };
