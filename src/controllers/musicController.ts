@@ -96,7 +96,7 @@ export const musicController = {
             }
 
             // METHOD 2: SCRAPING (Fallback/Enhancement)
-            if (!title || !artist || !thumbnailUrl || isTiktok) {
+            if (!title || !artist || !thumbnailUrl || isTiktok || isYoutube) {
                 console.log(`[Metadata] Missing data or TikTok video, trying Scraping fallback for: ${targetUrl}`);
                 try {
                     const pageRes = await fetch(targetUrl, {
@@ -173,7 +173,13 @@ export const musicController = {
                         const pageTitle = $('title').text();
 
                         if (!title && ogTitle) title = ogTitle;
-                        if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
+
+                        // Favor og:image for YouTube channels to get the avatar
+                        if (isYoutube && (targetUrl.includes('/@') || targetUrl.includes('/channel/') || targetUrl.includes('/c/') || targetUrl.includes('/user/'))) {
+                            if (ogImage) thumbnailUrl = ogImage;
+                        } else {
+                            if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
+                        }
 
                         // ALBUM DETECTION
                         if (targetUrl.includes('/album/')) {
@@ -232,9 +238,54 @@ export const musicController = {
                                 artist = ogDescription.split(' by ')[1].split(' on Deezer')[0];
                             }
                         }
+
+                        // YOUTUBE SUBSCRIBER SCRAPING
+                        if (isYoutube) {
+                            try {
+                                // 1. Try meta description (Fastest)
+                                const metaDesc = $('meta[name="description"]').attr('content') || '';
+                                const subMatch = metaDesc.match(/([\d.,]+[KMB]?) inscritos/) ||
+                                    metaDesc.match(/([\d.,]+[KMB]?) subscribers/);
+
+                                if (subMatch) {
+                                    const subCount = subMatch[1];
+                                    artist = `${subCount} inscritos`;
+                                    console.log(`[Metadata] Found YouTube subscribers via meta: ${artist}`);
+                                } else {
+                                    // 2. Try to find in ytInitialData script
+                                    const scripts = $('script');
+                                    scripts.each((i, el) => {
+                                        const content = $(el).html() || '';
+                                        if (content.includes('subscriberCountText')) {
+                                            const subCountMatch = content.match(/"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"(.*?)"\}\}/) ||
+                                                content.match(/"subscriberCountText":\{"simpleText":"(.*?)"\}/);
+                                            if (subCountMatch) {
+                                                const subText = subCountMatch[1].replace(' subscribers', '').replace(' inscritos', '').trim();
+                                                artist = `${subText} inscritos`;
+                                                console.log(`[Metadata] Found YouTube subscribers via ytInitialData: ${artist}`);
+                                                return false; // break
+                                            }
+                                        }
+                                    });
+                                }
+                            } catch (e) {
+                                console.error('[Metadata] YouTube sub scraping failed:', e);
+                            }
+                        }
                     }
                 } catch (scrapeError) {
-                    console.error('[Metadata] Scraping failed:', scrapeError);
+                    console.error('[Metadata] Scraping fallback failed:', scrapeError);
+                }
+            }
+
+            // CLEANUP AND REFINEMENT
+            if (isYoutube) {
+                // If it's a channel link and we don't have a thumbnail, or it's a generic one
+                if (targetUrl.includes('/@') || targetUrl.includes('/channel/') || targetUrl.includes('/c/') || targetUrl.includes('/user/')) {
+                    // Title for channels often has " - YouTube", clean it
+                    if (title.endsWith(' - YouTube')) {
+                        title = title.replace(' - YouTube', '');
+                    }
                 }
             }
 
@@ -243,11 +294,14 @@ export const musicController = {
             if (thumbnailUrl && thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
 
             let videoId = '';
+            const isYoutubeChannel = isYoutube && (targetUrl.includes('/@') || targetUrl.includes('/channel/') || targetUrl.includes('/c/') || targetUrl.includes('/user/'));
+            let followers = (isYoutubeChannel || isTiktok) ? artist : ''; // Only show followers for YouTube channels or TikTok profiles
+
             if (isTiktok) {
                 const idMatch = targetUrl.match(/\/video\/(\d+)/) || targetUrl.match(/v=(\d+)/) || targetUrl.match(/\/v\/(\d+)/);
                 if (idMatch) videoId = idMatch[1];
             } else if (isYoutube) {
-                const idMatch = targetUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+                const idMatch = targetUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
                 if (idMatch) videoId = idMatch[1];
             }
 
@@ -259,7 +313,8 @@ export const musicController = {
                 platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : isTiktok ? 'tiktok' : 'youtube',
                 resolvedUrl: targetUrl,
                 videoId: videoId,
-                videoUrl: targetVideoUrl
+                videoUrl: targetVideoUrl,
+                followers: followers
             });
 
         } catch (error) {
