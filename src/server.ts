@@ -13,6 +13,7 @@ import musicRoutes from './routes/musicRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
 import integrationRoutes from './routes/integrationRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
+import socialRoutes from './routes/socialRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -111,6 +112,7 @@ app.use('/api/music', musicRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/social', socialRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
