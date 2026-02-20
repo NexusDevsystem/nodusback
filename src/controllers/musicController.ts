@@ -28,8 +28,9 @@ export const musicController = {
             const isSpotify = targetUrl.includes('spotify.com');
             const isDeezer = targetUrl.includes('deezer.com');
             const isTiktok = targetUrl.includes('tiktok.com');
+            const isYoutube = targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be');
 
-            if (!isSpotify && !isDeezer && !isTiktok) {
+            if (!isSpotify && !isDeezer && !isTiktok && !isYoutube) {
                 return res.status(400).json({ error: 'Unsupported platform' });
             }
 
@@ -60,6 +61,7 @@ export const musicController = {
             if (isSpotify) oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(targetUrl)}`;
             else if (isDeezer) oembedUrl = `https://api.deezer.com/oembed?url=${encodeURIComponent(targetUrl)}`;
             else if (isTiktok) oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(targetUrl)}`;
+            else if (isYoutube) oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(targetUrl)}&format=json`;
 
             try {
                 if (oembedUrl) {
@@ -244,6 +246,9 @@ export const musicController = {
             if (isTiktok) {
                 const idMatch = targetUrl.match(/\/video\/(\d+)/) || targetUrl.match(/v=(\d+)/) || targetUrl.match(/\/v\/(\d+)/);
                 if (idMatch) videoId = idMatch[1];
+            } else if (isYoutube) {
+                const idMatch = targetUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+                if (idMatch) videoId = idMatch[1];
             }
 
             return res.json({
@@ -251,7 +256,7 @@ export const musicController = {
                 artist: artist || '',
                 thumbnailUrl: thumbnailUrl || '',
                 type: type,
-                platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : 'tiktok',
+                platform: isSpotify ? 'spotify' : isDeezer ? 'deezer' : isTiktok ? 'tiktok' : 'youtube',
                 resolvedUrl: targetUrl,
                 videoId: videoId,
                 videoUrl: targetVideoUrl
