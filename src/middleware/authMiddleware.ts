@@ -9,7 +9,7 @@ export interface AuthRequest extends Request {
 
 // Simple in-memory cache to avoid hammering Google API on every concurrent request
 const tokenCache = new Map<string, { email: string, expiry: number }>();
-const CACHE_DURATION = 60 * 1000; // 1 minute cache
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minute cache
 
 export const authMiddleware = async (
     req: AuthRequest,
@@ -32,14 +32,24 @@ export const authMiddleware = async (
         if (cached && cached.expiry > Date.now()) {
             email = cached.email;
         } else {
-            // Verify the token with Google directly with a 5s timeout
-            const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${token}` },
-                timeout: 5000
-            });
+            // Verify the token with Google directly with a 10s timeout and a retry
+            let googleUser;
+            try {
+                const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 10000
+                });
+                googleUser = googleRes.data;
+            } catch (retryErr) {
+                console.warn('Google Auth failed, retrying once...');
+                const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 15000
+                });
+                googleUser = googleRes.data;
+            }
 
-            const googleUser = googleRes.data as { email?: string };
-            email = googleUser.email || '';
+            email = googleUser?.email || '';
 
             if (email) {
                 tokenCache.set(token, {

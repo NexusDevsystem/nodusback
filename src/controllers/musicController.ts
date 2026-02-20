@@ -34,18 +34,18 @@ export const musicController = {
                 return res.status(400).json({ error: 'Unsupported platform' });
             }
 
-            // Follow redirects for Deezer and TikTok shortened links (vm, v, t, vt)
-            if (url.includes('link.deezer.com') || url.includes('tiktok.com')) {
+            // Follow redirects for TikTok shortened links (vm, v, t, vt)
+            if (url.includes('tiktok.com') && (url.includes('/vm/') || url.includes('/vt/') || url.includes('/v/') || url.includes('/t/'))) {
                 try {
                     const headRes = await fetch(url, {
                         method: 'GET',
                         redirect: 'follow',
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
                         }
                     });
                     targetUrl = headRes.url;
-                    console.log(`[Metadata] Resolved redirect to: ${targetUrl}`);
+                    console.log(`[Metadata] Resolved TikTok redirect to: ${targetUrl}`);
                 } catch (e) {
                     console.error('[Metadata] Error following redirect', e);
                 }
@@ -65,30 +65,22 @@ export const musicController = {
 
             try {
                 if (oembedUrl) {
-                    console.log(`[Metadata] Trying OEmbed: ${oembedUrl}`);
                     const response = await fetch(oembedUrl, {
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
                         }
                     });
 
                     if (response.ok) {
                         const data = await response.json() as any;
-
                         if (data.title) title = data.title;
                         if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
-
                         if (data.author_name && data.author_name !== 'Spotify' && data.author_name !== 'TikTok') {
                             artist = data.author_name;
                         }
-
                         if (isTiktok) {
                             type = targetUrl.includes('/video/') ? 'video' : 'profile';
                         }
-
-                        console.log(`[Metadata] OEmbed Result - Title: ${title}, Artist: ${artist}, Type: ${type}`);
-                    } else {
-                        console.warn(`[Metadata] OEmbed failed with status: ${response.status}`);
                     }
                 }
             } catch (oembedError) {
@@ -97,102 +89,56 @@ export const musicController = {
 
             // METHOD 2: SCRAPING (Fallback/Enhancement)
             if (!title || !artist || !thumbnailUrl || isTiktok || isYoutube) {
-                console.log(`[Metadata] Missing data or TikTok video, trying Scraping fallback for: ${targetUrl}`);
                 try {
-                    const pageRes = await fetch(targetUrl, {
+                    const fetchUrl = encodeURI(targetUrl);
+                    const pageRes = await fetch(fetchUrl, {
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache',
-                            'Referer': 'https://www.tiktok.com/',
-                            'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-                            'Sec-Ch-Ua-Mobile': '?0',
-                            'Sec-Ch-Ua-Platform': '"macOS"',
-                            'Sec-Fetch-Dest': 'document',
-                            'Sec-Fetch-Mode': 'navigate',
-                            'Sec-Fetch-Site': 'same-origin',
-                            'Sec-Fetch-User': '?1',
-                            'Upgrade-Insecure-Requests': '1'
                         }
                     });
 
                     if (pageRes.ok) {
                         const html = await pageRes.text();
-                        console.log(`[Metadata] Scraped HTML length: ${html.length}`);
                         const $ = cheerio.load(html);
 
-                        // TikTok specific direct video extraction
-                        if (isTiktok && targetUrl.includes('/video/')) {
-                            try {
-                                // 1. Check Hydration Data
-                                const hydrationData = $('script#\\__UNIVERSAL_DATA_FOR_REHYDRATION__').html() ||
-                                    $('script#SIGI_STATE').html() ||
-                                    $('script').filter((i: any, el: any) => $(el).html()?.includes('playAddr') || false).first().html();
-
-                                if (hydrationData) {
-                                    try {
-                                        const json = JSON.parse(hydrationData);
-                                        targetVideoUrl =
-                                            json?.['defaultScope']?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
-                                            json?.['webapp.video-detail']?.['itemInfo']?.['itemStruct']?.['video']?.playAddr ||
-                                            json?.ItemModule?.[Object.keys(json?.ItemModule || {})[0]]?.video?.playAddr ||
-                                            json?.itemInfo?.itemStruct?.video?.playAddr;
-
-                                        if (targetVideoUrl) console.log(`[Metadata] Found TikTok playAddr via JSON.`);
-                                    } catch (e) { }
-                                }
-
-                                // 2. Regex Fallback
-                                if (!targetVideoUrl) {
-                                    const playAddrMatch = html.match(/"playAddr":"(.*?)"/) || html.match(/playAddr":"(.*?)"/);
-                                    if (playAddrMatch && playAddrMatch[1]) {
-                                        targetVideoUrl = playAddrMatch[1].replace(/\\u002F/g, '/').replace(/\\u003A/g, ':').replace(/\\/g, '');
-                                        console.log(`[Metadata] Found TikTok playAddr via Regex.`);
-                                    }
-                                }
-
-                                if (!targetVideoUrl) {
-                                    const mp4Match = html.match(/(https:\/\/v16-webapp-prime\.tiktok\.com\/.*?\.mp4)/);
-                                    if (mp4Match) {
-                                        targetVideoUrl = mp4Match[1];
-                                        console.log(`[Metadata] Found TikTok .mp4 via CDN.`);
-                                    }
-                                }
-                            } catch (e) {
-                                console.error('[Metadata] Error parsing TikTok scripts:', e);
-                            }
-                        }
-
+                        // Basic Meta Tags
                         const ogTitle = $('meta[property="og:title"]').attr('content');
                         const ogDescription = $('meta[property="og:description"]').attr('content');
                         const ogImage = $('meta[property="og:image"]').attr('content');
-                        const musicMusician = $('meta[property="music:musician"]').attr('content');
                         const twitterArtist = $('meta[name="twitter:audio:artist_name"]').attr('content');
-                        const pageTitle = $('title').text();
 
-                        if (!title && ogTitle) title = ogTitle;
+                        if (!title) title = ogTitle || $('title').text() || '';
+                        if (!thumbnailUrl) thumbnailUrl = ogImage || '';
 
-                        // Favor og:image for YouTube channels to get the avatar
-                        if (isYoutube && (targetUrl.includes('/@') || targetUrl.includes('/channel/') || targetUrl.includes('/c/') || targetUrl.includes('/user/'))) {
-                            if (ogImage) thumbnailUrl = ogImage;
-                        } else {
-                            if (!thumbnailUrl && ogImage) thumbnailUrl = ogImage;
+                        // YouTube Channel Special Case
+                        if (isYoutube && !targetUrl.includes('watch?v=') && !targetUrl.includes('youtu.be/')) {
+                            if (!title || title === 'Link Desconhecido') {
+                                const parts = targetUrl.split('/@');
+                                if (parts.length > 1) title = parts[1].split(/[/?#]/)[0];
+                            }
                         }
 
-                        // ALBUM DETECTION
-                        if (targetUrl.includes('/album/')) {
+                        // TikTok specific direct video extraction
+                        if (isTiktok && targetUrl.includes('/video/')) {
+                            const hydrationData = $('script#\\__UNIVERSAL_DATA_FOR_REHYDRATION__').html() ||
+                                $('script#SIGI_STATE').html();
+
+                            const playAddrMatch = html.match(/"playAddr":"(.*?)"/) || html.match(/playAddr":"(.*?)"/);
+                            if (playAddrMatch && playAddrMatch[1]) {
+                                targetVideoUrl = playAddrMatch[1].replace(/\\u002F/g, '/').replace(/\\u003A/g, ':').replace(/\\/g, '');
+                            }
+                        }
+
+                        // Spotify Album Detection
+                        if (isSpotify && targetUrl.includes('/album/')) {
                             try {
                                 const albumIdMatch = targetUrl.match(/album\/([a-zA-Z0-9]+)/);
                                 const albumId = albumIdMatch ? albumIdMatch[1] : null;
                                 if (albumId) {
-                                    const embedUrl = `https://open.spotify.com/embed/album/${albumId}`;
-                                    const embedRes = await fetch(embedUrl, {
-                                        headers: {
-                                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                                            'Referer': 'https://open.spotify.com/'
-                                        }
+                                    const embedRes = await fetch(`https://open.spotify.com/embed/album/${albumId}`, {
+                                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://open.spotify.com/' }
                                     });
                                     if (embedRes.ok) {
                                         const embedHtml = await embedRes.text();
@@ -203,11 +149,21 @@ export const musicController = {
                                             const entity = jsonData?.props?.pageProps?.state?.data?.entity;
                                             if (entity?.trackList) {
                                                 const albumCover = entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '';
-                                                const tracks = entity.trackList.map((t: any) => {
-                                                    const trackId = t.uri ? t.uri.split(':').pop() : t.uid;
-                                                    return { title: t.title, artist: t.subtitle, url: `https://open.spotify.com/track/${trackId}`, image: albumCover, duration: t.duration };
+                                                const albumTracks = entity.trackList.map((t: any) => ({
+                                                    title: t.title,
+                                                    artist: t.subtitle,
+                                                    url: `https://open.spotify.com/track/${t.uri?.split(':').pop() || t.uid}`,
+                                                    image: albumCover,
+                                                    duration: t.duration
+                                                }));
+                                                return res.json({
+                                                    title: entity.title || title || 'Álbum',
+                                                    artist: entity.subtitle || artist || '',
+                                                    thumbnailUrl: albumCover,
+                                                    type: 'album',
+                                                    platform: 'spotify',
+                                                    tracks: albumTracks
                                                 });
-                                                return res.json({ title: entity.title || title || 'Álbum', artist: entity.subtitle || artist || '', thumbnailUrl: albumCover, type: 'album', platform: 'spotify', tracks: tracks });
                                             }
                                         }
                                     }
@@ -217,88 +173,59 @@ export const musicController = {
                             }
                         }
 
+                        // Artist Refinement
                         if (!artist) {
-                            if (musicMusician) artist = musicMusician;
-                            else if (twitterArtist) artist = twitterArtist;
-                        }
-
-                        if (!artist && isSpotify && pageTitle) {
-                            const cleanTitle = pageTitle.replace(' | Spotify', '');
-                            if (cleanTitle.includes(' - song and lyrics by ')) artist = cleanTitle.split(' - song and lyrics by ')[1];
-                            else if (cleanTitle.includes(' - Single by ')) artist = cleanTitle.split(' - Single by ')[1];
-                            else if (cleanTitle.includes(' - EP by ')) artist = cleanTitle.split(' - EP by ')[1];
-                            else if (cleanTitle.includes(' - Album by ')) artist = cleanTitle.split(' - Album by ')[1];
-                        }
-
-                        if (!artist && ogDescription) {
-                            if (isSpotify) {
+                            if (twitterArtist) artist = twitterArtist;
+                            else if (ogDescription && isSpotify) {
                                 const parts = ogDescription.split(' · ');
                                 if (parts.length >= 2) artist = parts[0] === title ? parts[1] : parts[0];
-                            } else if (isDeezer && ogDescription.includes(' by ')) {
+                            } else if (ogDescription && isDeezer && ogDescription.includes(' by ')) {
                                 artist = ogDescription.split(' by ')[1].split(' on Deezer')[0];
                             }
                         }
 
-                        // YOUTUBE SUBSCRIBER SCRAPING
+                        // YouTube Subscriber Scraping
                         if (isYoutube) {
                             try {
-                                // 1. Try meta description (Fastest)
                                 const metaDesc = $('meta[name="description"]').attr('content') || '';
-                                const subMatch = metaDesc.match(/([\d.,]+[KMB]?) inscritos/) ||
-                                    metaDesc.match(/([\d.,]+[KMB]?) subscribers/);
-
+                                const subMatch = metaDesc.match(/([\d.,]+[KMB]?) (inscritos|subscribers)/i);
                                 if (subMatch) {
-                                    const subCount = subMatch[1];
-                                    artist = `${subCount} inscritos`;
-                                    console.log(`[Metadata] Found YouTube subscribers via meta: ${artist}`);
+                                    artist = `${subMatch[1]} inscritos`;
                                 } else {
-                                    // 2. Try to find in ytInitialData script
-                                    const scripts = $('script');
-                                    scripts.each((i, el) => {
+                                    $('script').each((i, el) => {
                                         const content = $(el).html() || '';
                                         if (content.includes('subscriberCountText')) {
-                                            const subCountMatch = content.match(/"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"(.*?)"\}\}/) ||
-                                                content.match(/"subscriberCountText":\{"simpleText":"(.*?)"\}/);
-                                            if (subCountMatch) {
-                                                const subText = subCountMatch[1].replace(' subscribers', '').replace(' inscritos', '').trim();
-                                                artist = `${subText} inscritos`;
-                                                console.log(`[Metadata] Found YouTube subscribers via ytInitialData: ${artist}`);
-                                                return false; // break
+                                            const countMatch = content.match(/"subscriberCountText":\s*\{"accessibility":\s*\{"accessibilityData":\s*\{"label":"(.*?)"\}/) ||
+                                                content.match(/"subscriberCountText":\s*\{"simpleText":"(.*?)"\}/);
+                                            if (countMatch) {
+                                                artist = `${countMatch[1].split(/\s+/)[0]} inscritos`;
+                                                return false;
                                             }
                                         }
                                     });
                                 }
-                            } catch (e) {
-                                console.error('[Metadata] YouTube sub scraping failed:', e);
-                            }
+                            } catch (e) { }
                         }
                     }
                 } catch (scrapeError) {
-                    console.error('[Metadata] Scraping fallback failed:', scrapeError);
+                    console.error('[Metadata] Scraping failed:', scrapeError);
                 }
             }
 
-            // CLEANUP AND REFINEMENT
+            // CLEANUP
             if (isYoutube) {
-                // If it's a channel link and we don't have a thumbnail, or it's a generic one
-                if (targetUrl.includes('/@') || targetUrl.includes('/channel/') || targetUrl.includes('/c/') || targetUrl.includes('/user/')) {
-                    // Title for channels often has " - YouTube", clean it
-                    if (title.endsWith(' - YouTube')) {
-                        title = title.replace(' - YouTube', '');
-                    }
-                }
+                if (title.endsWith(' - YouTube')) title = title.replace(' - YouTube', '');
             }
-
             if (title) title = title.replace(/ - (Single|EP|Album|Remastered|Radio Edit).*$/i, '').trim();
             if (artist) artist = artist.replace(/ on Spotify| on Deezer.*/i, '').trim();
             if (thumbnailUrl && thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
 
-            let videoId = '';
-            const isYoutubeChannel = isYoutube && (targetUrl.includes('/@') || targetUrl.includes('/channel/') || targetUrl.includes('/c/') || targetUrl.includes('/user/'));
-            let followers = (isYoutubeChannel || isTiktok) ? artist : ''; // Only show followers for YouTube channels or TikTok profiles
+            const isVideoUrl = targetUrl.includes('watch?v=') || targetUrl.includes('/shorts/') || targetUrl.includes('/live/') || targetUrl.includes('youtu.be/');
+            const followers = (isYoutube && !isVideoUrl) || isTiktok ? artist : '';
 
+            let videoId = '';
             if (isTiktok) {
-                const idMatch = targetUrl.match(/\/video\/(\d+)/) || targetUrl.match(/v=(\d+)/) || targetUrl.match(/\/v\/(\d+)/);
+                const idMatch = targetUrl.match(/\/video\/(\d+)/) || targetUrl.match(/v=(\d+)/);
                 if (idMatch) videoId = idMatch[1];
             } else if (isYoutube) {
                 const idMatch = targetUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
@@ -318,8 +245,8 @@ export const musicController = {
             });
 
         } catch (error) {
-            console.error('[MusicMetadata] Error:', error);
-            res.status(500).json({ error: 'Internal server error while fetching metadata' });
+            console.error('[MusicMetadata] Critical Error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
 };
