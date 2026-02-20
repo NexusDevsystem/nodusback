@@ -131,32 +131,46 @@ export const analyticsService = {
 
     // Track a click event
     async trackClick(userId: string, linkId?: string, productId?: string): Promise<void> {
-        const { error } = await supabase
+        console.log(`📊 [Analytics] trackClick: userId=${userId}, linkId=${linkId || 'N/A'}, productId=${productId || 'N/A'}`);
+        const payload = {
+            user_id: userId,
+            link_id: linkId || null,
+            product_id: productId || null,
+            type: 'click'
+        };
+
+        const { data, error } = await supabase
             .from('clicks')
-            .insert({
-                user_id: userId,
-                link_id: linkId || null,
-                product_id: productId || null,
-                type: 'click'
-            });
+            .insert(payload)
+            .select();
 
         if (error) {
-            console.error('Error tracking click:', error);
+            console.error('❌ [Analytics] trackClick FAILED:', JSON.stringify(error));
+            throw new Error(`Failed to track click: ${error.message}`);
         }
+
+        console.log(`✅ [Analytics] Click tracked successfully, id=${data?.[0]?.id || 'unknown'}`);
     },
 
     // Track a page view event
     async trackView(userId: string): Promise<void> {
-        const { error } = await supabase
+        console.log(`📊 [Analytics] trackView: userId=${userId}`);
+        const payload = {
+            user_id: userId,
+            type: 'view'
+        };
+
+        const { data, error } = await supabase
             .from('clicks')
-            .insert({
-                user_id: userId,
-                type: 'view'
-            });
+            .insert(payload)
+            .select();
 
         if (error) {
-            console.error('Error tracking view:', error);
+            console.error('❌ [Analytics] trackView FAILED:', JSON.stringify(error));
+            throw new Error(`Failed to track view: ${error.message}`);
         }
+
+        console.log(`✅ [Analytics] View tracked successfully, id=${data?.[0]?.id || 'unknown'}`);
     },
 
     // Track a custom event
@@ -166,17 +180,39 @@ export const analyticsService = {
         linkId?: string,
         productId?: string
     ): Promise<void> {
-        const { error } = await supabase
+        console.log(`📊 [Analytics] trackEvent: type=${eventType}, userId=${userId}`);
+        const payload = {
+            user_id: userId,
+            link_id: linkId || null,
+            product_id: productId || null,
+            type: eventType
+        };
+
+        const { data, error } = await supabase
             .from('clicks')
-            .insert({
-                user_id: userId,
-                link_id: linkId || null,
-                product_id: productId || null,
-                type: eventType
-            });
+            .insert(payload)
+            .select();
 
         if (error) {
-            console.error('Error tracking event:', error);
+            console.error('❌ [Analytics] trackEvent FAILED:', JSON.stringify(error));
+            throw new Error(`Failed to track event: ${error.message}`);
         }
+
+        console.log(`✅ [Analytics] Event tracked successfully, id=${data?.[0]?.id || 'unknown'}`);
+    },
+
+    // Diagnostic: check if the clicks table is accessible
+    async getEventCount(userId: string): Promise<number> {
+        const { count, error } = await supabase
+            .from('clicks')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId);
+
+        if (error) {
+            console.error('❌ [Analytics] getEventCount FAILED:', JSON.stringify(error));
+            return -1;
+        }
+
+        return count || 0;
     }
 };
