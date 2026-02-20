@@ -182,23 +182,31 @@ export const linkService = {
             let userId: string | null = null;
             let type: 'link' | 'product' = 'link';
 
-            // Check links table
-            const { data: linkData } = await supabase
+            // Check links table (use maybeSingle to avoid throwing on 0 rows)
+            const { data: linkData, error: linkError } = await supabase
                 .from('links')
                 .select('user_id')
                 .eq('id', id)
-                .single();
+                .maybeSingle();
+
+            if (linkError) {
+                console.error(`❌ [incrementClicks] Error looking up link ${id}:`, linkError.message);
+            }
 
             if (linkData) {
                 userId = linkData.user_id;
                 type = 'link';
             } else {
                 // Check products table
-                const { data: productData } = await supabase
+                const { data: productData, error: productError } = await supabase
                     .from('products')
                     .select('user_id')
                     .eq('id', id)
-                    .single();
+                    .maybeSingle();
+
+                if (productError) {
+                    console.error(`❌ [incrementClicks] Error looking up product ${id}:`, productError.message);
+                }
 
                 if (productData) {
                     userId = productData.user_id;
@@ -207,9 +215,11 @@ export const linkService = {
             }
 
             if (!userId) {
-                console.warn(`Could not find owner for ID ${id} to track click.`);
+                console.warn(`⚠️ [incrementClicks] Could not find owner for ID ${id} to track click.`);
                 return;
             }
+
+            console.log(`📊 [incrementClicks] Found ${type} owner: userId=${userId} for item=${id}`);
 
             // 2. Increment clicks in the respective table
             const table = type === 'link' ? 'links' : 'products';
@@ -220,21 +230,27 @@ export const linkService = {
 
             // Fallback if RPC is missing (common in development)
             if (incError) {
-                console.log(`RPC failed, falling back to manual increment for ${table}`);
-                const { data: item } = await supabase.from(table).select('clicks').eq('id', id).single();
+                console.log(`⚠️ [incrementClicks] RPC failed, falling back to manual increment for ${table}`);
+                const { data: item } = await supabase.from(table).select('clicks').eq('id', id).maybeSingle();
                 await supabase.from(table).update({ clicks: (item?.clicks || 0) + 1 }).eq('id', id);
             }
 
             // 3. Log event in analytics table 'clicks'
-            await supabase.from('clicks').insert({
+            const { data: insertData, error: insertError } = await supabase.from('clicks').insert({
                 user_id: userId,
                 link_id: type === 'link' ? id : null,
                 product_id: type === 'product' ? id : null,
                 type: 'click'
-            });
+            }).select();
+
+            if (insertError) {
+                console.error(`❌ [incrementClicks] FAILED to insert analytics event:`, JSON.stringify(insertError));
+            } else {
+                console.log(`✅ [incrementClicks] Analytics event inserted: id=${insertData?.[0]?.id || 'unknown'}`);
+            }
 
         } catch (error) {
-            console.error('Error in complex incrementClicks:', error);
+            console.error('❌ [incrementClicks] Unexpected error:', error);
         }
     },
 

@@ -4,8 +4,7 @@ import { AnalyticsEvent } from '../models/types.js';
 export const analyticsService = {
     // Get analytics summary for a profile
     async getAnalyticsSummary(userId: string, days: number = 14) {
-        // If days is 0 (or 'all'), we fetch EVERYTHING
-        // First, let's determine the start date if days > 0
+        // Determine the start date
         let startDate: Date;
 
         if (days > 0) {
@@ -13,92 +12,99 @@ export const analyticsService = {
             startDate.setHours(0, 0, 0, 0);
             startDate.setDate(startDate.getDate() - days);
         } else {
-            // ALL TIME: Set to a very old date (e.g. 2020) or just null query
-            startDate = new Date('2020-01-01'); // Project inception or reasonable past
+            startDate = new Date('2020-01-01');
         }
 
-        // Fetch events for this user
-        const query = supabase
+        console.log(`📊 [Summary] Querying clicks for user=${userId}, days=${days}, startDate=${startDate.toISOString()}`);
+
+        // Fetch events for this user - build query correctly
+        let query = supabase
             .from('clicks')
             .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: true });
 
-        // Only filter by date if not 'all time' (to be safe, or just use the old date)
+        // Apply date filter (reassign to capture the new builder)
         if (days > 0) {
-            query.gte('created_at', startDate.toISOString());
+            query = query.gte('created_at', startDate.toISOString());
         }
 
         const { data: events, error } = await query;
 
         if (error) {
-            console.error('Error fetching analytics summary:', error);
+            console.error('❌ [Summary] Error fetching events:', JSON.stringify(error));
             return { totalViews: 0, totalClicks: 0, ctr: 0, dailyData: [], topLinks: [] };
         }
 
-        // If All Time (days=0), we need to determine the actual range from the first event
+        // Diagnostic: log raw events
+        console.log(`📊 [Summary] Raw events returned: ${events?.length || 0}`);
+        if (events && events.length > 0) {
+            events.slice(0, 5).forEach((e, i) => {
+                console.log(`📊 [Summary] Event[${i}]: type="${e.type}", created_at="${e.created_at}", link_id=${e.link_id || 'null'}, product_id=${e.product_id || 'null'}`);
+            });
+        }
+
+        // Determine actual range for dailyMap
         let actualDays = days;
         if (days <= 0 && events && events.length > 0) {
             const firstEventDate = new Date(events[0].created_at);
             const now = new Date();
             const timeDiff = now.getTime() - firstEventDate.getTime();
-            actualDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include today
+            actualDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
             startDate = firstEventDate;
         } else if (days <= 0) {
-            actualDays = 30; // Default if no data
+            actualDays = 30;
             startDate = new Date();
             startDate.setDate(startDate.getDate() - 30);
         }
 
         // Initialize daily map
         const dailyMap = new Map();
-        // For All Time, we might want to group differently if too large, but for now stick to daily
-        // Limit to reasonable max (e.g. 365*2) to prevent UI crash?
-        // Let's stick to generating days for the actual range found
         for (let i = 0; i < actualDays; i++) {
             const date = new Date();
             date.setDate(date.getDate() - i);
             const dateStr = date.toISOString().split('T')[0];
-            // Only add if it's >= startDate (to be clean)
-            if (date >= startDate || days > 0) { // Simple logic: just populate
-                dailyMap.set(dateStr, { date: dateStr, views: 0, clicks: 0 });
-            }
+            dailyMap.set(dateStr, { date: dateStr, views: 0, clicks: 0 });
         }
 
         let totalViews = 0;
         let totalClicks = 0;
-        const linkStats = new Map(); // link_id -> clicks count
+        const linkStats = new Map();
 
         events?.forEach(event => {
             const ts = event.created_at;
-            if (!ts) return;
+            if (!ts) {
+                console.log(`📊 [Summary] Skipping event with null created_at`);
+                return;
+            }
 
             const dateStr = new Date(ts).toISOString().split('T')[0];
             const dayData = dailyMap.get(dateStr);
 
-            if (dayData) {
-                if (event.type === 'view') {
-                    dayData.views++;
-                    totalViews++;
-                } else if (event.type === 'click') {
-                    dayData.clicks++;
-                    totalClicks++;
+            if (!dayData) {
+                console.log(`📊 [Summary] Event date ${dateStr} NOT in dailyMap (range mismatch)`);
+                return;
+            }
 
-                    // If it's a specific link or product, track it
-                    const itemId = event.link_id || event.product_id;
-                    if (itemId) {
-                        const stats = linkStats.get(itemId) || { id: itemId, clicks: 0 };
-                        stats.clicks++;
-                        linkStats.set(itemId, stats);
-                    }
+            if (event.type === 'view') {
+                dayData.views++;
+                totalViews++;
+            } else if (event.type === 'click') {
+                dayData.clicks++;
+                totalClicks++;
+
+                const itemId = event.link_id || event.product_id;
+                if (itemId) {
+                    const stats = linkStats.get(itemId) || { id: itemId, clicks: 0 };
+                    stats.clicks++;
+                    linkStats.set(itemId, stats);
                 }
+            } else {
+                console.log(`📊 [Summary] Unknown event type: "${event.type}" — not counted`);
             }
         });
 
-        // Convert map to sorted array (oldest to newest for the chart)
         const dailyData = Array.from(dailyMap.values()).reverse();
-
-        // Calculate CTR (Click-Through Rate)
         const ctr = totalViews > 0 ? (totalClicks / totalViews) * 100 : 0;
 
         return {
@@ -108,7 +114,7 @@ export const analyticsService = {
             dailyData,
             topLinks: Array.from(linkStats.values())
                 .sort((a, b) => b.clicks - a.clicks)
-                .slice(0, 5) // Top 5 links
+                .slice(0, 5)
         };
     },
 
