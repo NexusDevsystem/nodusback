@@ -88,7 +88,9 @@ export const profileService = {
 
     // Update profile
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
+        console.log(`[ProfileService] Updating profile for user ${userId}:`, JSON.stringify(updates));
         const dbUpdates = apiToDb(updates);
+        console.log(`[ProfileService] Converted DB updates:`, JSON.stringify(dbUpdates));
 
         const { data, error } = await supabase
             .from('users')

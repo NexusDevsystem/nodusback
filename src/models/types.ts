@@ -30,7 +30,7 @@ export interface UserProfileDB {
     font_italic?: boolean;
     custom_secondary_color?: string | null;
     custom_button_text_color?: string | null;
-    header_layout?: 'classic' | 'compact' | 'hero' | null;
+    header_layout?: 'classic' | 'compact' | 'hero' | 'banner' | null;
     header_style?: 'text' | 'logo' | null;
     logo_url?: string | null;
     avatar_size?: 'sm' | 'md' | 'lg' | null;
@@ -125,7 +125,7 @@ export interface UserProfile {
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
     customButtonTextColor?: string | null;
-    headerLayout?: 'classic' | 'compact' | 'hero' | null;
+    headerLayout?: 'classic' | 'compact' | 'hero' | 'banner' | null;
     headerStyle?: 'text' | 'logo' | null;
     logoUrl?: string | null;
     avatarSize?: 'sm' | 'md' | 'lg' | null;
