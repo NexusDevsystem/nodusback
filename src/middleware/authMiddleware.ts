@@ -40,13 +40,22 @@ export const authMiddleware = async (
                     timeout: 10000
                 });
                 googleUser = googleRes.data;
-            } catch (retryErr) {
-                console.warn('Google Auth failed, retrying once...');
-                const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 15000
-                });
-                googleUser = googleRes.data;
+            } catch (firstErr: any) {
+                console.warn('Google Auth failed on first attempt (status:', firstErr.response?.status, '), retrying once...');
+                try {
+                    const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                        headers: { Authorization: `Bearer ${token}` },
+                        timeout: 15000
+                    });
+                    googleUser = googleRes.data;
+                } catch (retryErr: any) {
+                    // Both attempts failed. If it's a 401, throw a proper auth error
+                    // so the outer catch returns 401 (not 500) to the client.
+                    console.warn('Google Auth retry also failed (status:', retryErr.response?.status, '). Token is invalid or expired.');
+                    const authErr = new Error('Token inválido ou sessão expirada');
+                    (authErr as any).response = { status: retryErr.response?.status || 401 };
+                    throw authErr;
+                }
             }
 
             email = googleUser?.email || '';

@@ -145,17 +145,16 @@ export const analyticsService = {
             type: 'click'
         };
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clicks')
-            .insert(payload)
-            .select();
+            .insert(payload);
 
         if (error) {
             console.error('❌ [Analytics] trackClick FAILED:', JSON.stringify(error));
             throw new Error(`Failed to track click: ${error.message}`);
         }
 
-        console.log(`✅ [Analytics] Click tracked successfully, id=${data?.[0]?.id || 'unknown'}`);
+        console.log(`✅ [Analytics] Click tracked successfully`);
     },
 
     // Track a page view event
@@ -166,17 +165,16 @@ export const analyticsService = {
             type: 'view'
         };
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clicks')
-            .insert(payload)
-            .select();
+            .insert(payload);
 
         if (error) {
             console.error('❌ [Analytics] trackView FAILED:', JSON.stringify(error));
             throw new Error(`Failed to track view: ${error.message}`);
         }
 
-        console.log(`✅ [Analytics] View tracked successfully, id=${data?.[0]?.id || 'unknown'}`);
+        console.log(`✅ [Analytics] View tracked successfully`);
     },
 
     // Track a custom event
@@ -194,17 +192,16 @@ export const analyticsService = {
             type: eventType
         };
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clicks')
-            .insert(payload)
-            .select();
+            .insert(payload);
 
         if (error) {
             console.error('❌ [Analytics] trackEvent FAILED:', JSON.stringify(error));
             throw new Error(`Failed to track event: ${error.message}`);
         }
 
-        console.log(`✅ [Analytics] Event tracked successfully, id=${data?.[0]?.id || 'unknown'}`);
+        console.log(`✅ [Analytics] Event tracked successfully`);
     },
 
     // Diagnostic: check if the clicks table is accessible
