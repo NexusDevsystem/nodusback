@@ -29,39 +29,35 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 
         if (linksError) throw linksError;
 
-        // Fetch Total Products (Digital)
+        // Fetch Total Products
         const { count: totalProducts, error: productsError } = await supabase
-            .from('digital_products')
+            .from('products')
             .select('*', { count: 'exact', head: true });
 
         if (productsError) throw productsError;
 
-        // Fetch Total Global Views
-        // Summing up all views from the 'users' table
-        const { data: viewsData, error: viewsError } = await supabase
-            .from('users')
-            .select('views');
+        // Fetch Total Global Views (Counting from 'clicks' table)
+        const { count: totalViews, error: viewsError } = await supabase
+            .from('clicks')
+            .select('*', { count: 'exact', head: true })
+            .eq('type', 'view');
 
         if (viewsError) throw viewsError;
 
-        const totalViews = viewsData.reduce((acc, profile: any) => acc + (profile.views || 0), 0);
-
-        // Fetch Total Global Clicks
-        // Summing up all clicks from the 'links' table
-        const { data: clicksData, error: clicksError } = await supabase
-            .from('links')
-            .select('clicks');
+        // Fetch Total Global Clicks (Counting from 'clicks' table)
+        const { count: totalClicks, error: clicksError } = await supabase
+            .from('clicks')
+            .select('*', { count: 'exact', head: true })
+            .eq('type', 'click');
 
         if (clicksError) throw clicksError;
-
-        const totalClicks = clicksData.reduce((acc, link: any) => acc + (link.clicks || 0), 0);
 
         res.json({
             totalUsers: totalUsers || 0,
             totalLinks: totalLinks || 0,
             totalProducts: totalProducts || 0,
-            totalViews: totalViews,
-            totalClicks: totalClicks
+            totalViews: totalViews || 0,
+            totalClicks: totalClicks || 0
         });
 
     } catch (error: any) {
