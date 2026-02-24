@@ -30,6 +30,7 @@ export interface UserProfileDB {
     font_italic?: boolean;
     custom_secondary_color?: string | null;
     custom_button_text_color?: string | null;
+    custom_collection_text_color?: string | null;
     header_layout?: 'classic' | 'compact' | 'hero' | 'banner' | null;
     header_style?: 'text' | 'logo' | null;
     logo_url?: string | null;
@@ -125,6 +126,7 @@ export interface UserProfile {
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
     customButtonTextColor?: string | null;
+    customCollectionTextColor?: string | null;
     headerLayout?: 'classic' | 'compact' | 'hero' | 'banner' | null;
     headerStyle?: 'text' | 'logo' | null;
     logoUrl?: string | null;
@@ -202,6 +204,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         fontItalic: dbProfile.font_italic,
         customSecondaryColor: dbProfile.custom_secondary_color || null,
         customButtonTextColor: dbProfile.custom_button_text_color || null,
+        customCollectionTextColor: dbProfile.custom_collection_text_color || null,
         headerLayout: dbProfile.header_layout || 'classic',
         headerStyle: dbProfile.header_style || 'text',
         logoUrl: dbProfile.logo_url || null,
@@ -248,6 +251,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
     if (apiProfile.customSecondaryColor !== undefined) dbProfile.custom_secondary_color = apiProfile.customSecondaryColor;
     if (apiProfile.customButtonTextColor !== undefined) dbProfile.custom_button_text_color = apiProfile.customButtonTextColor;
+    if (apiProfile.customCollectionTextColor !== undefined) dbProfile.custom_collection_text_color = apiProfile.customCollectionTextColor;
     if (apiProfile.headerLayout !== undefined) dbProfile.header_layout = apiProfile.headerLayout;
     if (apiProfile.headerStyle !== undefined) dbProfile.header_style = apiProfile.headerStyle;
     if (apiProfile.logoUrl !== undefined) dbProfile.logo_url = apiProfile.logoUrl;
