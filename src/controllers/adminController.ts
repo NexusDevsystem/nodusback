@@ -17,7 +17,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 
         // Fetch Total Users
         const { count: totalUsers, error: usersError } = await supabase
-            .from('profiles')
+            .from('users')
             .select('*', { count: 'exact', head: true });
 
         if (usersError) throw usersError;
@@ -37,14 +37,14 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         if (productsError) throw productsError;
 
         // Fetch Total Global Views
-        // Summing up all views from the 'profiles' table
+        // Summing up all views from the 'users' table
         const { data: viewsData, error: viewsError } = await supabase
-            .from('profiles')
+            .from('users')
             .select('views');
 
         if (viewsError) throw viewsError;
 
-        const totalViews = viewsData.reduce((acc, profile) => acc + (profile.views || 0), 0);
+        const totalViews = viewsData.reduce((acc, profile: any) => acc + (profile.views || 0), 0);
 
         // Fetch Total Global Clicks
         // Summing up all clicks from the 'links' table
@@ -54,7 +54,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 
         if (clicksError) throw clicksError;
 
-        const totalClicks = clicksData.reduce((acc, link) => acc + (link.clicks || 0), 0);
+        const totalClicks = clicksData.reduce((acc, link: any) => acc + (link.clicks || 0), 0);
 
         res.json({
             totalUsers: totalUsers || 0,
