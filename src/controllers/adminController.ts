@@ -113,3 +113,64 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         res.status(500).json({ error: 'Erro ao carregar estatísticas da plataforma.' });
     }
 };
+
+export const updateUserProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.userId;
+        const username = req.username;
+        const email = req.email;
+        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+
+        if (!userId || !isAdmin) {
+            res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode realizar esta ação.' });
+            return;
+        }
+
+        const { targetUserId } = req.params;
+        const updates = req.body;
+
+        const { data, error } = await supabase
+            .from('users')
+            .update(updates)
+            .eq('id', targetUserId)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json(data);
+    } catch (error: any) {
+        console.error('❌ Error updating user profile:', error);
+        res.status(500).json({ error: 'Erro ao atualizar perfil do usuário.' });
+    }
+};
+
+export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.userId;
+        const username = req.username;
+        const email = req.email;
+        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+
+        if (!userId || !isAdmin) {
+            res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode realizar esta ação.' });
+            return;
+        }
+
+        const { targetUserId } = req.params;
+
+        // Note: This only deletes from the 'users' table. 
+        // If using Supabase Auth, you might also want to call supabase.auth.admin.deleteUser(targetUserId)
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', targetUserId);
+
+        if (error) throw error;
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('❌ Error deleting user:', error);
+        res.status(500).json({ error: 'Erro ao deletar usuário.' });
+    }
+};
