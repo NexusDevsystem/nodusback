@@ -15,28 +15,61 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             return;
         }
 
-        // Fetch Total Users
+        // Fetch Base Counts
         const { count: totalUsers, error: usersError } = await supabase
             .from('users')
             .select('*', { count: 'exact', head: true });
-
         if (usersError) throw usersError;
 
-        // Fetch Total Links
         const { count: totalLinks, error: linksError } = await supabase
             .from('links')
             .select('*', { count: 'exact', head: true });
-
         if (linksError) throw linksError;
 
-        // Fetch Total Products
         const { count: totalProducts, error: productsError } = await supabase
             .from('products')
             .select('*', { count: 'exact', head: true });
-
         if (productsError) throw productsError;
 
-        // Fetch Total Global Views (Counting from 'clicks' table)
+        // Fetch Plan Breakdown
+        const { count: proUsers, error: proError } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .neq('plan_type', 'free');
+
+        if (proError) throw proError;
+
+        // Fetch Growth Metrics
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const lastWeek = new Date();
+        lastWeek.setDate(lastWeek.getDate() - 7);
+
+        const { count: todayUsers, error: todayError } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', today.toISOString());
+
+        if (todayError) throw todayError;
+
+        const { count: weeklyUsers, error: weeklyError } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', lastWeek.toISOString());
+
+        if (weeklyError) throw weeklyError;
+
+        // Fetch Latest Users (Last 5)
+        const { data: latestUsers, error: latestError } = await supabase
+            .from('users')
+            .select('id, username, email, name, created_at, plan_type')
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+        if (latestError) throw latestError;
+
+        // Fetch Total Views
         const { count: totalViews, error: viewsError } = await supabase
             .from('clicks')
             .select('*', { count: 'exact', head: true })
@@ -44,7 +77,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 
         if (viewsError) throw viewsError;
 
-        // Fetch Total Global Clicks (Counting from 'clicks' table)
+        // Fetch Total Clicks
         const { count: totalClicks, error: clicksError } = await supabase
             .from('clicks')
             .select('*', { count: 'exact', head: true })
@@ -52,12 +85,27 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 
         if (clicksError) throw clicksError;
 
+        // Calculate CTR
+        const globalCTR = totalViews && totalViews > 0
+            ? ((totalClicks || 0) / totalViews) * 100
+            : 0;
+
         res.json({
-            totalUsers: totalUsers || 0,
-            totalLinks: totalLinks || 0,
-            totalProducts: totalProducts || 0,
-            totalViews: totalViews || 0,
-            totalClicks: totalClicks || 0
+            summary: {
+                totalUsers: totalUsers || 0,
+                proUsers: proUsers || 0,
+                freeUsers: (totalUsers || 0) - (proUsers || 0),
+                totalLinks: totalLinks || 0,
+                totalProducts: totalProducts || 0,
+                totalViews: totalViews || 0,
+                totalClicks: totalClicks || 0,
+                globalCTR: globalCTR.toFixed(2),
+            },
+            growth: {
+                today: todayUsers || 0,
+                thisWeek: weeklyUsers || 0
+            },
+            latestUsers: latestUsers || []
         });
 
     } catch (error: any) {
