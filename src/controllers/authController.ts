@@ -2,8 +2,10 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabaseClient.js';
+import { sendPasswordResetEmail } from '../services/emailService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nodus_super_secret_jwt_key_change_in_production';
+const RESET_SECRET = process.env.RESET_SECRET || 'nodus_reset_secret_key';
 const SALT_ROUNDS = 12;
 
 export const register = async (req: Request, res: Response) => {
@@ -139,6 +141,170 @@ export const login = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Login error:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
+
+// --- PASSWORD RESET FLOW ---
+
+export const requestPasswordReset = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email é obrigatório.' });
+
+        const sanitizedEmail = email.toLowerCase().trim();
+
+        // Check if user exists and is an email user
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('id, name, auth_provider')
+            .eq('email', sanitizedEmail)
+            .maybeSingle();
+
+        if (userError || !user) {
+            // For security, don't reveal if email exists or not exactly, but here we keep it friendly
+            return res.status(404).json({ error: 'Nenhuma conta encontrada com este email.' });
+        }
+
+        if (user.auth_provider === 'google') {
+            return res.status(400).json({ error: 'Esta conta utiliza login pelo Google.' });
+        }
+
+        // Generate 6 digit code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Expire in 15 mins
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+        // Invalidate previous OTPs for this user
+        await supabase
+            .from('auth_otps')
+            .update({ used: true })
+            .eq('user_id', user.id)
+            .eq('used', false);
+
+        // Store new OTP using Service Role (since RLS protects it)
+        const { error: insertError } = await supabase
+            .from('auth_otps')
+            .insert({
+                user_id: user.id,
+                email: sanitizedEmail,
+                code,
+                expires_at: expiresAt.toISOString(),
+                used: false
+            });
+
+        if (insertError) {
+            console.error('Failed to insert OTP:', insertError);
+            return res.status(500).json({ error: 'Erro ao gerar código de recuperação.' });
+        }
+
+        // Send Email
+        const emailSent = await sendPasswordResetEmail(sanitizedEmail, code, user.name);
+
+        if (!emailSent) {
+            return res.status(500).json({ error: 'Erro ao enviar o e-mail.' });
+        }
+
+        return res.status(200).json({ message: 'Código de recuperação enviado.' });
+
+    } catch (error) {
+        console.error('requestPasswordReset error:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
+
+export const verifyResetCode = async (req: Request, res: Response) => {
+    try {
+        const { email, code } = req.body;
+        if (!email || !code) return res.status(400).json({ error: 'Email e código são obrigatórios.' });
+
+        const sanitizedEmail = email.toLowerCase().trim();
+
+        // Find active OTP
+        const { data: otpRecords, error: otpError } = await supabase
+            .from('auth_otps')
+            .select('*')
+            .eq('email', sanitizedEmail)
+            .eq('code', code)
+            .eq('used', false)
+            .gte('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (otpError || !otpRecords || otpRecords.length === 0) {
+            return res.status(400).json({ error: 'Código inválido ou expirado.' });
+        }
+
+        const otp = otpRecords[0];
+
+        // Mark OTP as used
+        await supabase
+            .from('auth_otps')
+            .update({ used: true })
+            .eq('id', otp.id);
+
+        // Generate a temporary reset token (valid for 15 mins)
+        const resetToken = jwt.sign(
+            { userId: otp.user_id, email: sanitizedEmail, purpose: 'password_reset' },
+            RESET_SECRET,
+            { expiresIn: '15m' }
+        );
+
+        return res.status(200).json({
+            message: 'Código verificado com sucesso.',
+            resetToken
+        });
+
+    } catch (error) {
+        console.error('verifyResetCode error:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor.' });
+    }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+    try {
+        const { resetToken, newPassword } = req.body;
+
+        if (!resetToken || !newPassword) {
+            return res.status(400).json({ error: 'Dados insuficientes para redefinição.' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+        }
+
+        // Verify token
+        let decoded: any;
+        try {
+            decoded = jwt.verify(resetToken, RESET_SECRET);
+        } catch (err) {
+            return res.status(401).json({ error: 'Sessão de redefinição inválida ou expirada.' });
+        }
+
+        if (decoded.purpose !== 'password_reset') {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
+
+        // Hash new password
+        const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+        // Update user
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ password_hash: passwordHash })
+            .eq('id', decoded.userId);
+
+        if (updateError) {
+            console.error('Failed to update password:', updateError);
+            return res.status(500).json({ error: 'Erro ao salvar a nova senha.' });
+        }
+
+        return res.status(200).json({ message: 'Senha redefinida com sucesso. Faça login.' });
+
+    } catch (error) {
+        console.error('resetPassword error:', error);
         return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 };
