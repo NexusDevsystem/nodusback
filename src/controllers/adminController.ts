@@ -60,14 +60,32 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 
         if (weeklyError) throw weeklyError;
 
-        // Fetch Latest Users (Last 5)
-        const { data: latestUsers, error: latestError } = await supabase
+        // Fetch Latest Users (always include 'nodus' admin)
+        const { data: latestUsersRaw, error: latestError } = await supabase
             .from('users')
             .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category')
             .order('created_at', { ascending: false })
-            .limit(5);
+            .limit(10); // Increase limit to ensure variety
 
         if (latestError) throw latestError;
+
+        // Ensure nodus is included if missing from the latest
+        let latestUsers = latestUsersRaw || [];
+        const hasNodus = latestUsers.some(u => u.username === 'nodus');
+
+        if (!hasNodus) {
+            const { data: nodusUser } = await supabase
+                .from('users')
+                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category')
+                .eq('username', 'nodus')
+                .single();
+
+            if (nodusUser) {
+                latestUsers = [nodusUser, ...latestUsers].slice(0, 6);
+            }
+        } else {
+            latestUsers = latestUsers.slice(0, 6);
+        }
 
         // Fetch Total Views
         const { count: totalViews, error: viewsError } = await supabase
