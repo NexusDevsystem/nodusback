@@ -63,7 +63,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         // Fetch Latest Users (Last 5)
         const { data: latestUsers, error: latestError } = await supabase
             .from('users')
-            .select('id, username, email, name, created_at, plan_type')
+            .select('id, username, email, name, created_at, plan_type, bio, avatar_url')
             .order('created_at', { ascending: false })
             .limit(5);
 
