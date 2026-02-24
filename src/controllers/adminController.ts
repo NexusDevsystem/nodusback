@@ -1,12 +1,16 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
 
-export const getPlatformStats = async (req: Request, res: Response): Promise<void> => {
+export const getPlatformStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const userId = (req as any).user?.userId;
-        const username = (req as any).user?.username;
+        const userId = req.userId;
+        const username = req.username;
+        const email = req.email;
 
-        if (!userId || username !== 'nodus') {
+        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+
+        if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode acessar esta rota.' });
             return;
         }

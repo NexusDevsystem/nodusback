@@ -8,6 +8,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'nodus_super_secret_jwt_key_change_
 export interface AuthRequest extends Request {
     userId?: string;
     profileId?: string;
+    username?: string;
+    email?: string;
 }
 
 // Simple in-memory cache to avoid hammering Google API on every concurrent request
@@ -45,7 +47,9 @@ export const authMiddleware = async (
 
             req.userId = profile.id;
             req.profileId = profile.id;
-            console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id})`);
+            req.username = profile.username;
+            req.email = payload.email;
+            console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Username: ${profile.username || 'N/A'})`);
             return next();
         } catch (jwtError) {
             // Not a valid internal JWT → fall through to Google verification
@@ -143,6 +147,8 @@ export const authMiddleware = async (
         // Attach user and profile info to request
         req.userId = profile.id;
         req.profileId = profile.id;
+        req.username = profile.username;
+        req.email = sanitizedEmail;
 
         console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Onboarded: ${profile.onboarding_completed ?? 'N/A'}, Username: ${profile.username || 'N/A'})`);
 
