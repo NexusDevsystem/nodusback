@@ -14,6 +14,7 @@ import billingRoutes from './routes/billingRoutes.js';
 import integrationRoutes from './routes/integrationRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
 import socialRoutes from './routes/socialRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -103,6 +104,7 @@ const UPLOADS_DIR = path.join(__dirname, '../uploads');
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Routes
+app.use('/api/auth', authRoutes); // Public - email/password auth
 app.use('/api/profile', profileRoutes);
 app.use('/api/links', linkRoutes);
 app.use('/api/products', productRoutes);

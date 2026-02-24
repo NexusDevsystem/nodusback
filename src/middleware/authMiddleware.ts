@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabaseClient.js';
 import axios from 'axios';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'nodus_super_secret_jwt_key_change_in_production';
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -25,7 +28,30 @@ export const authMiddleware = async (
 
         const token = authHeader.substring(7);
 
-        // Check cache first
+        // --- 1. Try internal JWT first (email/password users) ---
+        try {
+            const payload = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
+
+            // Valid internal token - look up profile directly in DB
+            const { data: profile, error: profileError } = await supabase
+                .from('users')
+                .select('id, onboarding_completed, username')
+                .eq('id', payload.userId)
+                .maybeSingle();
+
+            if (profileError || !profile) {
+                return res.status(401).json({ error: 'Sessão inválida. Por favor, faça login novamente.' });
+            }
+
+            req.userId = profile.id;
+            req.profileId = profile.id;
+            console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id})`);
+            return next();
+        } catch (jwtError) {
+            // Not a valid internal JWT → fall through to Google verification
+        }
+
+        // --- 2. Check Google token cache ---
         const cached = tokenCache.get(token);
         let email = '';
 
