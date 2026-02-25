@@ -24,6 +24,7 @@ export const sendPasswordResetEmail = async (to: string, code: string, name: str
                 user_name: name,
                 otp_code: code,
                 to_email: to,
+                email: to, // Added for compatibility
                 reply_to: 'contato@nodus.my'
             }
         };
