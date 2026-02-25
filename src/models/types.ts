@@ -77,6 +77,7 @@ export interface EventItemDB {
     collection_id: string;
     title: string;
     date: string;
+    time?: string;
     location?: string;
     url?: string;
     status?: string | null;
@@ -180,10 +181,12 @@ export interface LinkItem {
 
 export interface EventItem {
     id?: string;
+    clientId?: string;
     userId: string;
     collectionId: string;
     title: string;
     date: string;
+    time?: string;
     location: string;
     url: string;
     status: 'Tickets' | 'Sold Out' | 'Free' | string;
@@ -400,6 +403,7 @@ export function eventDbToApi(db: EventItemDB): EventItem {
         collectionId: db.collection_id,
         title: db.title,
         date: db.date,
+        time: db.time,
         location: db.location || '',
         url: db.url || '',
         status: db.status || 'Tickets',
@@ -414,6 +418,7 @@ export function eventApiToDb(api: Partial<EventItem>, userId: string): Partial<E
     if (api.collectionId) db.collection_id = api.collectionId;
     if (api.title !== undefined) db.title = api.title;
     if (api.date !== undefined) db.date = api.date;
+    if (api.time !== undefined) db.time = api.time;
     if (api.location !== undefined) db.location = api.location;
     if (api.url !== undefined) db.url = api.url;
     if (api.status !== undefined) db.status = api.status;

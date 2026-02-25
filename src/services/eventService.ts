@@ -57,6 +57,7 @@ export const eventService = {
         const dbUpdates: Partial<EventItemDB> = {};
         if (updates.title !== undefined) dbUpdates.title = updates.title;
         if (updates.date !== undefined) dbUpdates.date = updates.date;
+        if (updates.time !== undefined) dbUpdates.time = updates.time;
         if (updates.location !== undefined) dbUpdates.location = updates.location;
         if (updates.url !== undefined) dbUpdates.url = updates.url;
         if (updates.status !== undefined) dbUpdates.status = updates.status;

@@ -281,9 +281,10 @@ export const linkService = {
                         apiLink.children = await upsertRecursive(item.children, savedDbLink.id!);
                     }
 
-                    // Specific case: if it's an agenda, we might want to handle events here too if they are part of the links array
-                    // But usually they are handled via separate sync or bulk update.
-                    // For now, let's keep it simple as events are a separate table.
+                    // Preserve events in the response for agenda items so frontend doesn't lose them
+                    if (item.type === 'agenda' && item.events) {
+                        apiLink.events = item.events;
+                    }
 
                     result.push(apiLink);
                 }
