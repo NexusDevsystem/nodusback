@@ -209,16 +209,36 @@ export const syncFeed = async (userId: string) => {
 
         console.log('[InstagramService] Syncing media from:', mediaUrl.split('access_token=')[0] + 'access_token=***');
 
-        const response = await fetch(mediaUrl);
-        const data = (await response.json()) as any;
+        // 0. Fetch latest profile info (followers, etc.)
+        const profileFields = 'id,username,name,profile_picture_url,followers_count';
+        const profileUrl = `https://graph.instagram.com/me?fields=${profileFields}&access_token=${integration.access_token}`;
+        const profileRes = await fetch(profileUrl);
+        const profileDataRaw = await profileRes.json() as any;
 
-        if (data.error) {
-            console.error('[InstagramService] Sync API error:', data.error);
-            return;
+        const mediaRes = await fetch(mediaUrl);
+        const mediaData = await mediaRes.json() as any;
+        const mediaList = mediaData.data || [];
+
+        // Update profile data in the integration
+        const updatedProfile = {
+            ...integration.profile_data,
+            username: profileDataRaw.username || integration.profile_data.username,
+            avatar_url: profileDataRaw.profile_picture_url || integration.profile_data.avatar_url,
+            follower_count: profileDataRaw.followers_count || integration.profile_data.follower_count,
+            media: mediaList
+        };
+
+        if (mediaList.length === 0 && !profileDataRaw.followers_count) {
+            // If no media and no new follower count, just update the timestamp and profile data
+            await supabase
+                .from('social_integrations')
+                .update({
+                    profile_data: updatedProfile,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', integration.id);
+            return [];
         }
-
-        const mediaList = data.data || [];
-        if (mediaList.length === 0) return [];
 
         // 1. Ensure "Posts do Instagram" collection exists
         let collectionId: string;
@@ -290,12 +310,18 @@ export const syncFeed = async (userId: string) => {
         // 3. Update the integration profile_data with the latest media for the rich card
         const updatedProfileData = {
             ...integration.profile_data,
+            username: profileDataRaw.username || integration.profile_data.username,
+            avatar_url: profileDataRaw.profile_picture_url || integration.profile_data.avatar_url,
+            follower_count: profileDataRaw.followers_count || integration.profile_data.follower_count,
             media: mediaList
         };
 
         await supabase
             .from('social_integrations')
-            .update({ profile_data: updatedProfileData })
+            .update({
+                profile_data: updatedProfileData,
+                updated_at: new Date().toISOString()
+            })
             .eq('id', integration.id);
 
         // 4. Also sync to the main 'users' table so the frontend sees it immediately in the profile object
@@ -315,5 +341,33 @@ export const syncFeed = async (userId: string) => {
     } catch (error) {
         console.error('Error syncing Instagram feed:', error);
         throw error;
+    }
+};
+
+/**
+ * Checks if a sync is needed and triggers it in the background
+ */
+export const checkAndSync = async (userId: string) => {
+    try {
+        const { data: integration } = await supabase
+            .from('social_integrations')
+            .select('id, updated_at')
+            .eq('user_id', userId)
+            .eq('provider', 'instagram')
+            .maybeSingle();
+
+        if (!integration) return;
+
+        const lastSync = integration.updated_at ? new Date(integration.updated_at) : new Date(0);
+        const now = new Date();
+        const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
+
+        // Sync if older than 60 minutes
+        if (diffMinutes >= 60) {
+            console.log(`[InstagramService] Auto-syncing for user ${userId} (Last sync: ${diffMinutes}m ago)`);
+            syncFeed(userId).catch(err => console.error('[InstagramService] Background sync error:', err));
+        }
+    } catch (err) {
+        console.error('[InstagramService] Sync check error:', err);
     }
 };

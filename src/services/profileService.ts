@@ -2,6 +2,8 @@ import { supabase } from '../config/supabaseClient.js';
 import { UserProfile, UserProfileDB, dbToApi, apiToDb } from '../models/types.js';
 import { linkService } from './linkService.js';
 import { productService } from './productService.js';
+import * as instagramService from './instagramService.js';
+import * as tiktokService from './tiktokService.js';
 
 export const profileService = {
     // Helper to attach active integrations to a profile
@@ -15,6 +17,12 @@ export const profileService = {
 
         if (integrations) {
             profile.integrations = integrations;
+        }
+
+        // Trigger background sync for social data if needed
+        if (profile.id) {
+            instagramService.checkAndSync(profile.id).catch(e => console.error('[InstagramSync] Failed:', e));
+            tiktokService.checkAndSync(profile.id).catch(e => console.error('[TikTokSync] Failed:', e));
         }
 
         return profile;

@@ -141,8 +141,8 @@ export const syncFeed = async (userId: string) => {
         if (error || !integration) throw new Error('TikTok integration not found');
 
         // Fetch videos from TikTok (v2 API - GET)
-        const fields = 'id,title,cover_image_url,share_url,video_description,duration,create_time';
-        const response = await fetch(`https://open.tiktokapis.com/v2/video/list/?fields=${fields}`, {
+        const videosFields = 'id,title,cover_image_url,share_url,video_description,duration,create_time';
+        const response = await fetch(`https://open.tiktokapis.com/v2/video/list/?fields=${videosFields}`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${integration.access_token}`,
@@ -156,7 +156,46 @@ export const syncFeed = async (userId: string) => {
             return;
         }
 
+        // 0. Fetch latest profile info
+        const userFields = 'display_name,username,avatar_url,follower_count';
+        const userResponse = await fetch(`https://open.tiktokapis.com/v2/user/info/?fields=${userFields}`, {
+            headers: {
+                'Authorization': `Bearer ${integration.access_token}`,
+            },
+        });
+        const userData = await userResponse.json() as any;
+        const user = userData.data?.user;
+
         const videos = data.data?.videos || [];
+
+        // 1. Update integration data
+        const updatedProfile = {
+            ...integration.profile_data,
+            username: user?.display_name || user?.username || integration.profile_data.username,
+            follower_count: user?.follower_count || integration.profile_data.follower_count,
+            avatar_url: user?.avatar_url || integration.profile_data.avatar_url
+        };
+
+        await supabase
+            .from('social_integrations')
+            .update({
+                profile_data: updatedProfile,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', integration.id);
+
+        // 2. Sync to redundant cache in users table
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
 
         // Save videos as links for the user
         for (const video of videos) {
@@ -190,5 +229,33 @@ export const syncFeed = async (userId: string) => {
     } catch (error) {
         console.error('Error syncing TikTok feed:', error);
         throw error;
+    }
+};
+
+/**
+ * Checks if a sync is needed and triggers it in the background
+ */
+export const checkAndSync = async (userId: string) => {
+    try {
+        const { data: integration } = await supabase
+            .from('social_integrations')
+            .select('id, updated_at')
+            .eq('user_id', userId)
+            .eq('provider', 'tiktok')
+            .maybeSingle();
+
+        if (!integration) return;
+
+        const lastSync = integration.updated_at ? new Date(integration.updated_at) : new Date(0);
+        const now = new Date();
+        const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
+
+        // Sync if older than 60 minutes
+        if (diffMinutes >= 60) {
+            console.log(`[TikTokService] Auto-syncing for user ${userId} (Last sync: ${diffMinutes}m ago)`);
+            syncFeed(userId).catch(err => console.error('[TikTokService] Background sync error:', err));
+        }
+    } catch (err) {
+        console.error('[TikTokService] Sync check error:', err);
     }
 };
