@@ -99,9 +99,10 @@ export const profileController = {
             }
 
             res.json(profile);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating profile:', error);
-            res.status(500).json({ error: 'Failed to update profile' });
+            const status = error.message?.includes('7 dias') ? 400 : 500;
+            res.status(status).json({ error: error.message || 'Failed to update profile' });
         }
     },
 

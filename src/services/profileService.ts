@@ -89,6 +89,26 @@ export const profileService = {
     // Update profile
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
         console.log(`[ProfileService] Updating profile for user ${userId}:`, JSON.stringify(updates));
+
+        // Check if username is being changed and apply 7-day restriction
+        if (updates.username) {
+            const currentProfile = await this.getProfileByUserId(userId);
+            if (currentProfile && currentProfile.username && currentProfile.username.toLowerCase() !== updates.username.toLowerCase()) {
+                if (currentProfile.usernameUpdatedAt) {
+                    const lastUpdate = new Date(currentProfile.usernameUpdatedAt);
+                    const now = new Date();
+                    const diffDays = Math.ceil((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+
+                    if (diffDays < 7) {
+                        const remainingDays = 7 - diffDays;
+                        throw new Error(`O nome de usuário só pode ser alterado a cada 7 dias. Faltam ${remainingDays} ${remainingDays === 1 ? 'dia' : 'dias'}.`);
+                    }
+                }
+                // Update the timestamp if username is actually changing
+                updates.usernameUpdatedAt = new Date().toISOString();
+            }
+        }
+
         const dbUpdates = apiToDb(updates);
         console.log(`[ProfileService] Converted DB updates:`, JSON.stringify(dbUpdates));
 

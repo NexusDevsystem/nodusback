@@ -44,6 +44,7 @@ export interface UserProfileDB {
     created_at?: string;
     updated_at?: string;
     integrations?: any[];
+    username_updated_at?: string | null;
 }
 
 export interface LinkItemDB {
@@ -138,6 +139,7 @@ export interface UserProfile {
     onboardingCompleted?: boolean;
     referralSource?: string | null;
     integrations?: any[];
+    usernameUpdatedAt?: string | null;
 }
 
 export interface LinkItem {
@@ -215,7 +217,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         paymentMethods: dbProfile.payment_methods || [],
         onboardingCompleted: dbProfile.onboarding_completed,
         referralSource: dbProfile.referral_source,
-        integrations: dbProfile.integrations || []
+        integrations: dbProfile.integrations || [],
+        usernameUpdatedAt: dbProfile.username_updated_at
     };
 }
 
@@ -262,6 +265,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.paymentMethods !== undefined) dbProfile.payment_methods = apiProfile.paymentMethods;
     if (apiProfile.onboardingCompleted !== undefined) dbProfile.onboarding_completed = apiProfile.onboardingCompleted;
     if (apiProfile.referralSource !== undefined) dbProfile.referral_source = apiProfile.referralSource;
+    if (apiProfile.usernameUpdatedAt !== undefined) dbProfile.username_updated_at = apiProfile.usernameUpdatedAt;
 
     return dbProfile;
 }
