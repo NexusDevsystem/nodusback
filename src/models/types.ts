@@ -71,6 +71,20 @@ export interface LinkItemDB {
     updated_at?: string;
 }
 
+export interface EventItemDB {
+    id?: string;
+    user_id: string;
+    collection_id: string;
+    title: string;
+    date: string;
+    location?: string;
+    url?: string;
+    status?: string | null;
+    position: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
 export interface ProductDB {
     id?: string;
     user_id: string;  // FK to users(id)
@@ -151,8 +165,9 @@ export interface LinkItem {
     isActive: boolean;
     clicks?: number;
     layout?: 'classic' | 'social' | 'card' | 'icon' | 'grid' | 'carousel' | 'stacked';
-    type?: 'link' | 'collection' | 'social';
+    type?: 'link' | 'collection' | 'social' | 'agenda';
     children?: LinkItem[];
+    events?: EventItem[];
     highlight?: 'none' | 'pulse' | 'bounce' | 'shake' | 'glow' | 'wobble';
     embedType?: 'none' | 'youtube' | 'spotify' | 'deezer';
     subtitle?: string;
@@ -161,6 +176,18 @@ export interface LinkItem {
     scheduleStart?: string | null;
     scheduleEnd?: string | null;
     videoUrl?: string;
+}
+
+export interface EventItem {
+    id?: string;
+    userId: string;
+    collectionId: string;
+    title: string;
+    date: string;
+    location: string;
+    url: string;
+    status: 'Tickets' | 'Sold Out' | 'Free' | string;
+    position: number;
 }
 
 export interface Product {
@@ -364,4 +391,33 @@ export interface SocialIntegrationDB {
     };
     created_at?: string;
     updated_at?: string;
+}
+
+export function eventDbToApi(db: EventItemDB): EventItem {
+    return {
+        id: db.id,
+        userId: db.user_id,
+        collectionId: db.collection_id,
+        title: db.title,
+        date: db.date,
+        location: db.location || '',
+        url: db.url || '',
+        status: db.status || 'Tickets',
+        position: db.position || 0
+    };
+}
+
+export function eventApiToDb(api: Partial<EventItem>, userId: string): Partial<EventItemDB> {
+    const db: Partial<EventItemDB> = { user_id: userId };
+
+    if (api.id) db.id = api.id;
+    if (api.collectionId) db.collection_id = api.collectionId;
+    if (api.title !== undefined) db.title = api.title;
+    if (api.date !== undefined) db.date = api.date;
+    if (api.location !== undefined) db.location = api.location;
+    if (api.url !== undefined) db.url = api.url;
+    if (api.status !== undefined) db.status = api.status;
+    if (api.position !== undefined) db.position = api.position;
+
+    return db;
 }

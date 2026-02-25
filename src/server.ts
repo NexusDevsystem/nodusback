@@ -16,6 +16,7 @@ import fileRoutes from './routes/fileRoutes.js';
 import socialRoutes from './routes/socialRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import eventRoutes from './routes/eventRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -117,6 +118,7 @@ app.use('/api/integrations', integrationRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/events', eventRoutes);
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
