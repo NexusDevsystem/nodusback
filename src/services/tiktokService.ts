@@ -197,10 +197,48 @@ export const syncFeed = async (userId: string) => {
                 .eq('id', userId);
         }
 
-        // Save videos as links for the user
+        // 3. Ensure "Vídeos do TikTok" collection exists
+        let collectionId: string;
+        const { data: existingCollection } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('title', 'Vídeos do TikTok')
+            .eq('type', 'collection')
+            .maybeSingle();
+
+        if (existingCollection) {
+            collectionId = existingCollection.id;
+            await supabase
+                .from('links')
+                .update({ platform: 'tiktok' })
+                .eq('id', collectionId);
+        } else {
+            const { data: newCollection, error: collError } = await supabase
+                .from('links')
+                .insert({
+                    user_id: userId,
+                    title: 'Vídeos do TikTok',
+                    url: '#',
+                    is_active: true,
+                    is_archived: false,
+                    type: 'collection',
+                    platform: 'tiktok',
+                    layout: 'carousel', // Default to carousel for TikTok
+                    position: 0
+                })
+                .select()
+                .single();
+
+            if (collError) throw collError;
+            collectionId = newCollection.id;
+        }
+
+        // 4. Save videos as links within that collection
         for (const video of videos) {
             const linkData = {
                 user_id: userId,
+                parent_id: collectionId,
                 title: video.title || 'Vídeo do TikTok',
                 url: video.share_url,
                 is_active: true,
@@ -209,7 +247,7 @@ export const syncFeed = async (userId: string) => {
                 type: 'social',
                 platform: 'tiktok',
                 video_url: video.share_url,
-                icon: video.cover_image_url // Use cover as icon
+                icon: video.cover_image_url
             };
 
             // Check if link already exists
