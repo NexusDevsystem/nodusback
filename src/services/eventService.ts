@@ -1,6 +1,10 @@
 import { supabase } from '../config/supabaseClient.js';
 import { EventItem, EventItemDB, eventDbToApi, eventApiToDb } from '../models/types.js';
 
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (id: string) => UUID_REGEX.test(id);
+
 export const eventService = {
     // Get all events for a user
     async getEventsByUserId(userId: string): Promise<EventItem[]> {
@@ -54,6 +58,10 @@ export const eventService = {
 
     // Update an event
     async updateEvent(eventId: string, updates: Partial<EventItem>): Promise<EventItem | null> {
+        if (!isValidUUID(eventId)) {
+            console.warn(`[eventService] updateEvent: invalid UUID "${eventId}", skipping.`);
+            return null;
+        }
         const dbUpdates: Partial<EventItemDB> = {};
         if (updates.title !== undefined) dbUpdates.title = updates.title;
         if (updates.date !== undefined) dbUpdates.date = updates.date;
@@ -80,6 +88,10 @@ export const eventService = {
 
     // Delete an event
     async deleteEvent(eventId: string): Promise<boolean> {
+        if (!isValidUUID(eventId)) {
+            console.warn(`[eventService] deleteEvent: invalid UUID "${eventId}", skipping.`);
+            return false;
+        }
         const { error } = await supabase
             .from('events')
             .delete()
@@ -95,8 +107,12 @@ export const eventService = {
 
     // Bulk update events for a collection
     async replaceEvents(userId: string, collectionId: string, events: EventItem[]): Promise<EventItem[]> {
-        // Simple implementation: delete and re-insert (or upsert if preferred)
-        // For simplicity and to handle positional changes cleanly, delete/insert is often easier
+        // Guard: if collectionId is a temp ID (not a valid UUID), skip the DB operation.
+        // The frontend may call this before the parent agenda link is saved.
+        if (!isValidUUID(collectionId)) {
+            console.warn(`[eventService] replaceEvents called with non-UUID collectionId="${collectionId}". Skipping.`);
+            return [];
+        }
 
         // 1. Delete existing for this collection
         await supabase.from('events').delete().eq('collection_id', collectionId);

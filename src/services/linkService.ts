@@ -2,6 +2,8 @@ import { supabase } from '../config/supabaseClient.js';
 import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.js';
 import { eventService } from './eventService.js';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const linkService = {
     // Get all links for a profile (by user_id)
     async getLinksByProfileId(userId: string, publicView = false): Promise<LinkItem[]> {
@@ -255,7 +257,7 @@ export const linkService = {
                     dbLink.parent_id = parentId;
                     dbLink.position = i;
 
-                    const isUUID = item.id && item.id.length > 20 && !item.id.startsWith('temp-');
+                    const isUUID = item.id && UUID_REGEX.test(item.id);
                     if (isUUID) {
                         dbLink.id = item.id;
                     } else {
