@@ -246,9 +246,16 @@ export const billingController = {
                 const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
                 const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
 
+                console.log(`🔍 [Billing] Reconciling for customer ${subscription.customerId}`);
+                console.log(`🔍 [Billing] Stripe Plan ID: ${subscription.planId}`);
+                console.log(`🔍 [Billing] Expected Annual ID: ${annualPriceId}`);
+
                 let planId: 'monthly' | 'annual' = 'monthly';
                 if (subscription.planId === annualPriceId) {
+                    console.log('✅ [Billing] Matched Annual Plan');
                     planId = 'annual';
+                } else {
+                    console.log('ℹ️ [Billing] No match for annual, defaulting to monthly');
                 }
 
                 // 4. Update Profile
