@@ -169,7 +169,8 @@ export const switchInstagramAccount = async (userId: string, channelId: string) 
             .from('links')
             .select('id')
             .eq('user_id', userId)
-            .eq('title', 'Posts do Instagram')
+            .eq('platform', 'instagram')
+            .eq('type', 'collection')
             .maybeSingle();
 
         if (collection) {
@@ -242,17 +243,29 @@ export const syncFeed = async (userId: string) => {
 
         // 1. Ensure "Posts do Instagram" collection exists
         let collectionId: string;
-        const { data: existingCollection } = await supabase
+        let { data: existingCollection } = await supabase
             .from('links')
             .select('id')
             .eq('user_id', userId)
-            .eq('title', 'Posts do Instagram')
+            .eq('platform', 'instagram')
             .eq('type', 'collection')
             .maybeSingle();
 
+        // Fallback to title if platform tag is missing
+        if (!existingCollection) {
+            const { data: byTitle } = await supabase
+                .from('links')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('title', 'Posts do Instagram')
+                .eq('type', 'collection')
+                .maybeSingle();
+            existingCollection = byTitle;
+        }
+
         if (existingCollection) {
             collectionId = existingCollection.id;
-            // Retroactively tag existing collections so the frontend filter works
+            // Ensure platform tag is set
             await supabase
                 .from('links')
                 .update({ platform: 'instagram' })
@@ -268,8 +281,8 @@ export const syncFeed = async (userId: string) => {
                     is_archived: false,
                     type: 'collection',
                     platform: 'instagram',
-                    layout: 'grid', // Useful for showing posts in a grid when clicked
-                    position: 0 // Place at top for visibility
+                    layout: 'grid',
+                    position: 0
                 })
                 .select()
                 .single();
@@ -302,7 +315,17 @@ export const syncFeed = async (userId: string) => {
                 .eq('url', media.permalink)
                 .maybeSingle();
 
-            if (!existing) {
+            if (existing) {
+                // Update existing post info to reflect caption/thumb changes
+                await supabase
+                    .from('links')
+                    .update({
+                        title: linkData.title,
+                        icon: linkData.icon,
+                        video_url: linkData.video_url
+                    })
+                    .eq('id', existing.id);
+            } else {
                 await supabase.from('links').insert(linkData);
             }
         }

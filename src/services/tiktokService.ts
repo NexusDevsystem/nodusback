@@ -199,13 +199,25 @@ export const syncFeed = async (userId: string) => {
 
         // 3. Ensure "Vídeos do TikTok" collection exists
         let collectionId: string;
-        const { data: existingCollection } = await supabase
+        let { data: existingCollection } = await supabase
             .from('links')
             .select('id')
             .eq('user_id', userId)
-            .eq('title', 'Vídeos do TikTok')
+            .eq('platform', 'tiktok')
             .eq('type', 'collection')
             .maybeSingle();
+
+        // Fallback to title for legacy compatibility
+        if (!existingCollection) {
+            const { data: byTitle } = await supabase
+                .from('links')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('title', 'Vídeos do TikTok')
+                .eq('type', 'collection')
+                .maybeSingle();
+            existingCollection = byTitle;
+        }
 
         if (existingCollection) {
             collectionId = existingCollection.id;
@@ -258,7 +270,17 @@ export const syncFeed = async (userId: string) => {
                 .eq('url', video.share_url)
                 .maybeSingle();
 
-            if (!existing) {
+            if (existing) {
+                // Update existing video info
+                await supabase
+                    .from('links')
+                    .update({
+                        title: linkData.title,
+                        icon: linkData.icon,
+                        video_url: linkData.video_url
+                    })
+                    .eq('id', existing.id);
+            } else {
                 await supabase.from('links').insert(linkData);
             }
         }
