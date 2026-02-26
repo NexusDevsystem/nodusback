@@ -65,7 +65,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             .from('users')
             .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category')
             .order('created_at', { ascending: false })
-            .limit(10); // Increase limit to ensure variety
+            .limit(50); // Increased limit to show more users with scroll
 
         if (latestError) throw latestError;
 
@@ -81,10 +81,10 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
                 .single();
 
             if (nodusUser) {
-                latestUsers = [nodusUser, ...latestUsers].slice(0, 6);
+                latestUsers = [nodusUser, ...latestUsers].slice(0, 50);
             }
         } else {
-            latestUsers = latestUsers.slice(0, 6);
+            latestUsers = latestUsers.slice(0, 50);
         }
 
         // Fetch Total Views
