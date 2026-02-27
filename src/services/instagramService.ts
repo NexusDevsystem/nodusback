@@ -170,7 +170,6 @@ export const switchInstagramAccount = async (userId: string, channelId: string) 
             .select('id')
             .eq('user_id', userId)
             .eq('platform', 'instagram')
-            .eq('type', 'collection')
             .maybeSingle();
 
         if (collection) {
@@ -245,10 +244,9 @@ export const syncFeed = async (userId: string) => {
         let collectionId: string;
         let { data: existingCollection } = await supabase
             .from('links')
-            .select('id')
+            .select('id, type')
             .eq('user_id', userId)
             .eq('platform', 'instagram')
-            .eq('type', 'collection')
             .maybeSingle();
 
         // Fallback to title if platform tag is missing
@@ -275,13 +273,13 @@ export const syncFeed = async (userId: string) => {
                 .from('links')
                 .insert({
                     user_id: userId,
-                    title: 'Posts do Instagram',
-                    url: '#',
+                    title: 'Instagram',
+                    url: `https://instagram.com/${updatedProfile.username}`,
                     is_active: true,
                     is_archived: false,
-                    type: 'collection',
+                    type: 'link',
                     platform: 'instagram',
-                    layout: 'grid',
+                    layout: 'classic',
                     position: 0
                 })
                 .select()
