@@ -9,6 +9,74 @@ const getTwitchConfig = () => ({
 });
 
 /**
+ * Ensures a Twitch social link exists in the user's links list.
+ * Creates it if it doesn't exist, updates the URL if it does.
+ */
+export const ensureTwitchLink = async (userId: string, twitchUsername: string) => {
+    try {
+        const twitchUrl = `https://twitch.tv/${twitchUsername}`;
+
+        // Check if a Twitch social link already exists
+        const { data: existing } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('platform', 'twitch')
+            .eq('type', 'social')
+            .maybeSingle();
+
+        if (existing) {
+            // Update it with the correct URL
+            await supabase
+                .from('links')
+                .update({ url: twitchUrl, title: 'Twitch', is_active: true })
+                .eq('id', existing.id);
+            console.log(`[TwitchService] Updated Twitch social link for user ${userId}`);
+        } else {
+            // Get the current highest position to place this at the end
+            const { data: lastLink } = await supabase
+                .from('links')
+                .select('position')
+                .eq('user_id', userId)
+                .is('parent_id', null)
+                .order('position', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const position = lastLink ? (lastLink.position ?? 0) + 1 : 0;
+
+            await supabase.from('links').insert({
+                user_id: userId,
+                title: 'Twitch',
+                url: twitchUrl,
+                is_active: true,
+                is_archived: false,
+                type: 'social',
+                platform: 'twitch',
+                layout: 'social',
+                position
+            });
+            console.log(`[TwitchService] Created Twitch social link for user ${userId}`);
+        }
+
+        // Also update the users table integrations cache
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
+    } catch (err) {
+        console.error('[TwitchService] ensureTwitchLink error:', err);
+    }
+};
+
+/**
  * Generates the Twitch Auth URL
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
@@ -122,8 +190,11 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         if (error) throw error;
 
-        // Sync extra data if needed
-        await syncData(userId);
+        // Create or update the Twitch social link in the user's links
+        await ensureTwitchLink(userId, twitchUser.login);
+
+        // Sync extra data (followers, live status)
+        syncData(userId).catch(e => console.error('[TwitchService] Background sync error:', e));
 
         return data;
     } catch (error) {
