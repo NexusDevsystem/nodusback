@@ -16,6 +16,9 @@ router.post('/instagram/switch', authMiddleware, integrationController.switchIns
 router.get('/twitch/auth-url', integrationController.getTwitchAuthUrl);
 router.get('/twitch/callback', integrationController.handleTwitchCallback);
 
+router.get('/youtube/auth-url', integrationController.getYoutubeAuthUrl);
+router.get('/youtube/callback', integrationController.handleYoutubeCallback);
+
 router.delete('/:provider', authMiddleware, integrationController.disconnectIntegration);
 router.get('/instagram/webhook', integrationController.handleInstagramWebhook);
 router.post('/instagram/webhook', integrationController.handleInstagramWebhook);
