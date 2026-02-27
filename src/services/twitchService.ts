@@ -122,18 +122,69 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 };
 
 /**
+ * Refreshes the Twitch access token if it's expired
+ */
+export const refreshTokenIfNeeded = async (userId: string) => {
+    const { data: integration, error } = await supabase
+        .from('social_integrations')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', 'twitch')
+        .single();
+
+    if (error || !integration) return null;
+
+    const expiresAt = integration.expires_at ? new Date(integration.expires_at) : new Date(0);
+    const now = new Date();
+
+    // If it expires in less than 5 minutes, refresh
+    if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
+        console.log(`[TwitchService] Refreshing token for user ${userId}...`);
+
+        const refreshParams = new URLSearchParams({
+            client_id: CLIENT_ID || '',
+            client_secret: CLIENT_SECRET || '',
+            grant_type: 'refresh_token',
+            refresh_token: integration.refresh_token || ''
+        });
+
+        const refreshRes = await fetch('https://id.twitch.tv/oauth2/token', {
+            method: 'POST',
+            body: refreshParams
+        });
+
+        const refreshData = await refreshRes.json() as any;
+        if (refreshData.error) {
+            console.error('[TwitchService] Refresh Error:', refreshData.message);
+            return null;
+        }
+
+        const { data: updated, error: updateError } = await supabase
+            .from('social_integrations')
+            .update({
+                access_token: refreshData.access_token,
+                refresh_token: refreshData.refresh_token || integration.refresh_token,
+                expires_at: new Date(Date.now() + (refreshData.expires_in || 3600) * 1000).toISOString(),
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', integration.id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+        return updated;
+    }
+
+    return integration;
+};
+
+/**
  * Periodic sync for followers and stream status
  */
 export const syncData = async (userId: string) => {
     try {
-        const { data: integration, error } = await supabase
-            .from('social_integrations')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('provider', 'twitch')
-            .single();
-
-        if (error || !integration) return;
+        const integration = await refreshTokenIfNeeded(userId);
+        if (!integration) return;
 
         // 1. Refresh followers
         const followersRes = await fetch(`https://api.twitch.tv/helix/channels/followers?broadcaster_id=${integration.profile_data.channel_id}`, {
