@@ -1,15 +1,25 @@
 import { supabase } from '../config/supabaseClient.js';
 import { SocialIntegrationDB } from '../models/types.js';
 
-const CLIENT_ID = process.env.TWITCH_CLIENT_ID;
-const CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
-const REDIRECT_URI = process.env.TWITCH_REDIRECT_URI;
+// Environment variables access inside functions to ensure they are loaded after dotenv.config()
+const getTwitchConfig = () => ({
+    CLIENT_ID: process.env.TWITCH_CLIENT_ID,
+    CLIENT_SECRET: process.env.TWITCH_CLIENT_SECRET,
+    REDIRECT_URI: process.env.TWITCH_REDIRECT_URI
+});
 
 /**
  * Generates the Twitch Auth URL
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
     const state = Buffer.from(JSON.stringify({ userId, origin: origin || 'production' })).toString('base64');
+
+    const { CLIENT_ID, REDIRECT_URI } = getTwitchConfig();
+
+    console.log('[TwitchService] Generating Auth URL with:', {
+        clientId: CLIENT_ID ? 'set' : 'MISSING',
+        redirectUri: REDIRECT_URI
+    });
 
     const scopes = [
         'user:read:email',
@@ -33,6 +43,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
  */
 export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
     try {
+        const { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI } = getTwitchConfig();
         console.log(`[TwitchService] Handling callback for user ${userId}...`);
 
         // 1. Exchange code for tokens
@@ -141,6 +152,7 @@ export const refreshTokenIfNeeded = async (userId: string) => {
     if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
         console.log(`[TwitchService] Refreshing token for user ${userId}...`);
 
+        const { CLIENT_ID, CLIENT_SECRET } = getTwitchConfig();
         const refreshParams = new URLSearchParams({
             client_id: CLIENT_ID || '',
             client_secret: CLIENT_SECRET || '',
@@ -185,6 +197,8 @@ export const syncData = async (userId: string) => {
     try {
         const integration = await refreshTokenIfNeeded(userId);
         if (!integration) return;
+
+        const { CLIENT_ID } = getTwitchConfig();
 
         // 1. Refresh followers
         const followersRes = await fetch(`https://api.twitch.tv/helix/channels/followers?broadcaster_id=${integration.profile_data.channel_id}`, {
