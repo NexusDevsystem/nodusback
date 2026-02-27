@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import * as tiktokService from '../services/tiktokService.js';
 import * as instagramService from '../services/instagramService.js';
+import * as twitchService from '../services/twitchService.js';
 import { supabase } from '../config/supabaseClient.js';
 
 export const getTikTokAuthUrl = (req: Request, res: Response) => {
@@ -93,6 +94,56 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
         const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?error=instagram`);
+    }
+};
+
+export const getTwitchAuthUrl = (req: Request, res: Response) => {
+    try {
+        const { userId, origin } = req.query;
+        if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+        const url = twitchService.getAuthUrl(userId as string, origin as string);
+        res.json({ url });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const handleTwitchCallback = async (req: Request, res: Response) => {
+    try {
+        const { code, state } = req.query;
+
+        if (!code) {
+            return res.status(400).json({ error: 'Missing code' });
+        }
+
+        // Extract userId and origin from state (format: { userId, origin } encoded in base64)
+        const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+        const { userId, origin } = stateData;
+
+        if (!userId) {
+            return res.status(400).json({ error: 'Invalid state or missing userId' });
+        }
+
+        await twitchService.handleCallback(code as string, userId);
+
+        // Redirect back to frontend
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?success=twitch`);
+    } catch (error: any) {
+        console.error('Twitch Callback error:', error);
+
+        let origin = '';
+        try {
+            const state = req.query.state as string;
+            const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+            origin = stateData.origin;
+        } catch (e) { }
+
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?error=twitch`);
     }
 };
 
