@@ -253,7 +253,7 @@ export const syncFeed = async (userId: string) => {
         if (!existingCollection) {
             const { data: byTitle } = await supabase
                 .from('links')
-                .select('id')
+                .select('id, type')
                 .eq('user_id', userId)
                 .eq('title', 'Posts do Instagram')
                 .eq('type', 'collection')
