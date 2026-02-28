@@ -26,6 +26,7 @@ export interface UserProfileDB {
     is_verified?: boolean;
     enable_blur?: boolean;
     font_size?: number;
+    bio_font_size?: number;
     font_weight?: string;
     font_italic?: boolean;
     custom_secondary_color?: string | null;
@@ -139,6 +140,7 @@ export interface UserProfile {
     isVerified?: boolean;
     enableBlur?: boolean;
     fontSize?: number;
+    bioFontSize?: number;
     fontWeight?: string;
     fontItalic?: boolean;
     customSecondaryColor?: string | null;
@@ -234,6 +236,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         isVerified: !!(dbProfile.is_verified || (dbProfile.username && ['noduscc', 'nodus.my', 'nodus'].includes(dbProfile.username.trim().toLowerCase())) || (dbProfile.name && ['nodus.cc', 'nodus.my'].includes(dbProfile.name.trim().toLowerCase()))),
         enableBlur: dbProfile.enable_blur,
         fontSize: dbProfile.font_size,
+        bioFontSize: dbProfile.bio_font_size,
         fontWeight: dbProfile.font_weight,
         fontItalic: dbProfile.font_italic,
         customSecondaryColor: dbProfile.custom_secondary_color || null,
@@ -283,6 +286,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.isVerified !== undefined) dbProfile.is_verified = apiProfile.isVerified;
     if (apiProfile.enableBlur !== undefined) dbProfile.enable_blur = apiProfile.enableBlur;
     if (apiProfile.fontSize !== undefined) dbProfile.font_size = apiProfile.fontSize;
+    if (apiProfile.bioFontSize !== undefined) dbProfile.bio_font_size = apiProfile.bioFontSize;
     if (apiProfile.fontWeight !== undefined) dbProfile.font_weight = apiProfile.fontWeight;
     if (apiProfile.fontItalic !== undefined) dbProfile.font_italic = apiProfile.fontItalic;
     if (apiProfile.customSecondaryColor !== undefined) dbProfile.custom_secondary_color = apiProfile.customSecondaryColor;
