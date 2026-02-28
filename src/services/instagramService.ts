@@ -170,6 +170,7 @@ export const switchInstagramAccount = async (userId: string, channelId: string) 
             .select('id')
             .eq('user_id', userId)
             .eq('platform', 'instagram')
+            .limit(1)
             .maybeSingle();
 
         if (collection) {
@@ -247,6 +248,7 @@ export const syncFeed = async (userId: string) => {
             .select('id, type')
             .eq('user_id', userId)
             .eq('platform', 'instagram')
+            .limit(1)
             .maybeSingle();
 
         // Fallback to title if platform tag is missing
@@ -257,6 +259,7 @@ export const syncFeed = async (userId: string) => {
                 .eq('user_id', userId)
                 .eq('title', 'Posts do Instagram')
                 .eq('type', 'collection')
+                .limit(1)
                 .maybeSingle();
             existingCollection = byTitle;
         }

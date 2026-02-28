@@ -23,6 +23,7 @@ export const ensureTwitchLink = async (userId: string, twitchUsername: string) =
             .eq('user_id', userId)
             .eq('platform', 'twitch')
             .eq('type', 'social')
+            .limit(1)
             .maybeSingle();
 
         if (existing) {
@@ -331,6 +332,7 @@ export const checkAndSync = async (userId: string) => {
             .select('id, updated_at')
             .eq('user_id', userId)
             .eq('provider', 'twitch')
+            .limit(1)
             .maybeSingle();
 
         if (!integration) return;

@@ -118,30 +118,35 @@ export const musicController = {
                             }
                         }
 
-                        // Spotify album detection
-                        if (isSpotify && targetUrl.includes('/album/')) {
+                        // Spotify album and playlist detection
+                        if (isSpotify && (targetUrl.includes('/album/') || targetUrl.includes('/playlist/'))) {
                             try {
-                                const albumIdMatch = targetUrl.match(/album\/([a-zA-Z0-9]+)/);
-                                const albumId = albumIdMatch?.[1];
-                                if (albumId) {
-                                    const embedRes = await fetch(`https://open.spotify.com/embed/album/${albumId}`, {
+                                const entityMatch = targetUrl.match(/\/(album|playlist)\/([a-zA-Z0-9]+)/);
+                                const entityType = entityMatch?.[1];
+                                const entityId = entityMatch?.[2];
+                                console.log(`[Metadata] Detected Spotify ${entityType}: ${entityId}`);
+
+                                if (entityId && entityType) {
+                                    const embedRes = await fetch(`https://open.spotify.com/embed/${entityType}/${entityId}`, {
                                         headers: {
                                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                                             'Referer': 'https://open.spotify.com/'
                                         }
                                     });
                                     if (embedRes.ok) {
-                                        const $embed = cheerio.load(await embedRes.text());
+                                        const embedHtml = await embedRes.text();
+                                        const $embed = cheerio.load(embedHtml);
                                         const nextData = $embed('script[id="__NEXT_DATA__"]').html();
                                         if (nextData) {
                                             const entity = JSON.parse(nextData)?.props?.pageProps?.state?.data?.entity;
                                             if (entity?.trackList) {
+                                                console.log(`[Metadata] Found ${entity.trackList.length} tracks in Spotify ${entityType}`);
                                                 const albumCover = entity.visualIdentity?.image?.[0]?.url || thumbnailUrl || '';
                                                 return res.json({
-                                                    title: entity.title || title || 'Álbum',
+                                                    title: entity.title || title || (entityType === 'album' ? 'Álbum' : 'Playlist'),
                                                     artist: entity.subtitle || artist || '',
                                                     thumbnailUrl: albumCover,
-                                                    type: 'album',
+                                                    type: entityType,
                                                     platform: 'spotify',
                                                     tracks: entity.trackList.map((t: any) => ({
                                                         title: t.title,
@@ -151,12 +156,18 @@ export const musicController = {
                                                         duration: t.duration
                                                     }))
                                                 });
+                                            } else {
+                                                console.log('[Metadata] No trackList found in Spotify embed data');
                                             }
+                                        } else {
+                                            console.log('[Metadata] No __NEXT_DATA__ script found in Spotify embed');
                                         }
+                                    } else {
+                                        console.log(`[Metadata] Spotify embed fetch failed: ${embedRes.status}`);
                                     }
                                 }
                             } catch (e) {
-                                console.error('[Metadata] Album scraping failed:', e);
+                                console.error('[Metadata] Album/Playlist scraping failed:', e);
                             }
                         }
 

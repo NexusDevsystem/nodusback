@@ -302,6 +302,7 @@ export const checkAndSync = async (userId: string) => {
             .select('id, updated_at')
             .eq('user_id', userId)
             .eq('provider', 'tiktok')
+            .limit(1)
             .maybeSingle();
 
         if (!integration) return;
