@@ -165,8 +165,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         const refreshToken = tokenData.refresh_token;
 
         // 2. Get User Profile
-        // Note: This endpoint is an assumption based on standard OAuth patterns
-        const userRes = await fetch('https://api.kick.com/public/v1/user', {
+        const userRes = await fetch('https://api.kick.com/public/v1/users', {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json'
@@ -174,15 +173,25 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         });
 
         const userDataRaw = await userRes.json() as any;
-        const kickUser = userDataRaw; // Adjust based on real API response
 
-        if (!kickUser || !kickUser.username) throw new Error('Could not fetch Kick user profile');
+        // Kick API might return { data: [{...}] } or { data: {...} } or just {...}
+        let kickUser = userDataRaw;
+
+        if (userDataRaw.data) {
+            kickUser = Array.isArray(userDataRaw.data) ? userDataRaw.data[0] : userDataRaw.data;
+        }
+
+        if (!kickUser || !kickUser.name) {
+            throw new Error(`Could not fetch Kick user profile. API Response: ${JSON.stringify(userDataRaw)}`);
+        }
+
+        const kickUsername = kickUser.name || kickUser.username;
 
         // 3. Get Channel Info (Live Status, Followers)
         let followerCount = 0;
         let isLive = false;
         try {
-            const channelRes = await fetch(`https://api.kick.com/public/v1/channels/${kickUser.username}`, {
+            const channelRes = await fetch(`https://api.kick.com/public/v1/channels/${kickUsername}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
             const channelData = await channelRes.json() as any;
@@ -193,12 +202,12 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         }
 
         const profileData = {
-            username: kickUser.username,
-            display_name: kickUser.display_name || kickUser.username,
-            avatar_url: kickUser.profile_pic || `https://avatar.kick.com/${kickUser.username}`,
+            username: kickUsername,
+            display_name: kickUser.name || kickUsername,
+            avatar_url: kickUser.profile_pic || `https://avatar.kick.com/${kickUsername}`,
             follower_count: followerCount,
             is_live: isLive,
-            id: kickUser.id
+            id: kickUser.id || kickUser.user_id
         };
 
         const integrationData: SocialIntegrationDB = {
