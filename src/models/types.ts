@@ -47,6 +47,7 @@ export interface UserProfileDB {
     integrations?: any[];
     username_updated_at?: string | null;
     banner_blur_color?: string | null;
+    tutorial_status?: 'yes' | 'no' | 'skip' | null;
 }
 
 export interface LinkItemDB {
@@ -159,6 +160,7 @@ export interface UserProfile {
     integrations?: any[];
     usernameUpdatedAt?: string | null;
     bannerBlurColor?: string | null;
+    tutorialStatus?: 'yes' | 'no' | 'skip' | null;
 }
 
 export interface LinkItem {
@@ -254,7 +256,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         referralSource: dbProfile.referral_source,
         integrations: dbProfile.integrations || [],
         usernameUpdatedAt: dbProfile.username_updated_at,
-        bannerBlurColor: dbProfile.banner_blur_color || null
+        bannerBlurColor: dbProfile.banner_blur_color || null,
+        tutorialStatus: dbProfile.tutorial_status || 'no'
     };
 }
 
@@ -304,6 +307,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.referralSource !== undefined) dbProfile.referral_source = apiProfile.referralSource;
     if (apiProfile.usernameUpdatedAt !== undefined) dbProfile.username_updated_at = apiProfile.usernameUpdatedAt;
     if (apiProfile.bannerBlurColor !== undefined) dbProfile.banner_blur_color = apiProfile.bannerBlurColor;
+    if (apiProfile.tutorialStatus !== undefined) dbProfile.tutorial_status = apiProfile.tutorialStatus;
 
     return dbProfile;
 }

@@ -50,6 +50,7 @@ async function seed() {
             password_hash: passwordHash,
             auth_provider: 'email',
             onboarding_completed: false,
+            tutorial_status: 'no',
             theme_id: 'default',
             font_family: 'Inter'
         })

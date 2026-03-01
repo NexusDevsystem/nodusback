@@ -48,6 +48,7 @@ export const register = async (req: Request, res: Response) => {
                 password_hash: passwordHash,
                 auth_provider: 'email',
                 onboarding_completed: false,
+                tutorial_status: 'no',
                 theme_id: 'default',
                 font_family: 'Inter'
             })
