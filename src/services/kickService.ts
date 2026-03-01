@@ -127,22 +127,38 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         console.log(`[KickService] Handling callback for user ${userId}...`);
 
         // 1. Exchange code for tokens
-        const tokenRes = await fetch('https://id.kick.com/oauth/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
-                code,
-                grant_type: 'authorization_code',
-                redirect_uri: REDIRECT_URI,
-                code_verifier: stateVerifier // Mandatory for PKCE
-            })
+        const tokenParams = new URLSearchParams({
+            client_id: CLIENT_ID || '',
+            client_secret: CLIENT_SECRET || '',
+            code,
+            grant_type: 'authorization_code',
+            redirect_uri: REDIRECT_URI || '',
+            code_verifier: stateVerifier || '' // Mandatory for PKCE
         });
 
-        const tokenData = await tokenRes.json() as any;
+        const tokenRes = await fetch('https://id.kick.com/oauth/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
+            },
+            body: tokenParams.toString()
+        });
+
+        const responseText = await tokenRes.text();
+        let tokenData;
+        try {
+            tokenData = JSON.parse(responseText);
+        } catch (e) {
+            throw new Error(`Kick Token API failed to return JSON. Status: ${tokenRes.status}. Body: ${responseText}`);
+        }
+
         if (tokenData.error) {
-            throw new Error(`Kick Token Error: ${tokenData.message || tokenData.error}`);
+            throw new Error(`Kick Token Error: ${tokenData.message || tokenData.error_description || tokenData.error}`);
+        }
+
+        if (!tokenData.access_token) {
+            throw new Error(`Kick Token Error: Missing access_token in response. Body data: ${JSON.stringify(tokenData)}`);
         }
 
         const accessToken = tokenData.access_token;
