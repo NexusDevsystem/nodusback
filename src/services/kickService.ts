@@ -100,9 +100,8 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     })).toString('base64');
 
     const scopes = [
-        'user.read',
-        'channel.read',
-        'channel.token.read'
+        'user:read',
+        'channel:read'
     ].join(' ');
 
     const baseUrl = 'https://id.kick.com/oauth/authorize';
