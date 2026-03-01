@@ -113,26 +113,37 @@ export const getTwitchAuthUrl = (req: Request, res: Response) => {
 
 export const handleTwitchCallback = async (req: Request, res: Response) => {
     try {
-        const { code, state } = req.query;
-
-        if (!code) {
-            return res.status(400).json({ error: 'Missing code' });
-        }
+        const { code, state, error: authError } = req.query;
 
         // Extract userId and origin from state (format: { userId, origin } encoded in base64)
-        const base64State = (state as string).replace(/ /g, '+');
-        const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-        const { userId, origin } = stateData;
+        let origin = '';
+        let userId = '';
+        try {
+            if (state) {
+                const base64State = (state as string).replace(/ /g, '+');
+                const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
+                origin = stateData.origin;
+                userId = stateData.userId;
+            }
+        } catch (e) {
+            console.error('Twitch Callback State Parsing Error:', e);
+        }
+
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+
+        if (authError || !code) {
+            console.error(`Twitch Callback Error: Provider sent error or missing code. Error: ${authError}`);
+            return res.redirect(`${redirectUrl}/admin?error=twitch_auth_denied`);
+        }
 
         if (!userId) {
-            return res.status(400).json({ error: 'Invalid state or missing userId' });
+            return res.redirect(`${redirectUrl}/admin?error=twitch_invalid_state`);
         }
 
         await twitchService.handleCallback(code as string, userId);
 
         // Redirect back to frontend
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?success=twitch`);
     } catch (error: any) {
         console.error('Twitch Callback error:', error);
@@ -215,27 +226,39 @@ export const getKickAuthUrl = (req: Request, res: Response) => {
 
 export const handleKickCallback = async (req: Request, res: Response) => {
     try {
-        const { code, state } = req.query;
+        const { code, state, error: authError } = req.query;
 
-        if (!code) {
-            return res.status(400).json({ error: 'Missing code' });
+        // Ensure we find the origin to redirect even if there's an error
+        let origin = '';
+        let userId = '';
+        let verifier = '';
+        try {
+            if (state) {
+                const base64State = (state as string).replace(/ /g, '+');
+                const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
+                origin = stateData.origin;
+                userId = stateData.userId;
+                verifier = stateData.verifier;
+            }
+        } catch (e) {
+            console.error('Kick Callback State Parsing Error:', e);
         }
 
-        // Extract userId, verifier and origin from state (JSON base64)
-        // Note: URL query parameters might replace '+' with ' ' so we need to put them back
-        const base64State = (state as string).replace(/ /g, '+');
-        const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-        const { userId, origin, verifier } = stateData;
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+
+        if (authError || !code) {
+            console.error(`Kick Callback Error: Provider sent error or missing code. Error: ${authError}`);
+            return res.redirect(`${redirectUrl}/admin?error=kick_auth_denied`);
+        }
 
         if (!userId) {
-            return res.status(400).json({ error: 'Invalid state or missing userId' });
+            return res.redirect(`${redirectUrl}/admin?error=kick_invalid_state`);
         }
 
         await kickService.handleCallback(code as string, userId, verifier);
 
         // Redirect back to frontend
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?success=kick`);
     } catch (error: any) {
         console.error('Kick Callback error:', error);
