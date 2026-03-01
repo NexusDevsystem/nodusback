@@ -394,16 +394,11 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
 export interface SocialIntegrationDB {
     id?: string;
     user_id: string; // FK to users(id)
-    provider: 'youtube' | 'instagram' | 'tiktok' | 'twitch';
+    provider: 'youtube' | 'instagram' | 'tiktok' | 'twitch' | 'kick';
     access_token: string;
     refresh_token?: string;
     expires_at?: string;
-    profile_data?: {
-        username?: string;
-        follower_count?: number | null;
-        avatar_url?: string | null;
-        channel_id?: string;
-    };
+    profile_data?: any;
     created_at?: string;
     updated_at?: string;
 }

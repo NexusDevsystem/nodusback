@@ -19,6 +19,10 @@ router.get('/twitch/callback', integrationController.handleTwitchCallback);
 router.get('/youtube/auth-url', integrationController.getYoutubeAuthUrl);
 router.get('/youtube/callback', integrationController.handleYoutubeCallback);
 
+router.get('/kick/auth-url', integrationController.getKickAuthUrl);
+router.get('/kick/callback', integrationController.handleKickCallback);
+router.post('/kick/connect', authMiddleware, integrationController.connectKickAccount);
+
 router.delete('/:provider', authMiddleware, integrationController.disconnectIntegration);
 router.get('/instagram/webhook', integrationController.handleInstagramWebhook);
 router.post('/instagram/webhook', integrationController.handleInstagramWebhook);

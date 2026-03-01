@@ -4,6 +4,7 @@ import * as tiktokService from '../services/tiktokService.js';
 import * as instagramService from '../services/instagramService.js';
 import * as twitchService from '../services/twitchService.js';
 import * as youtubeService from '../services/youtubeService.js';
+import * as kickService from '../services/kickService.js';
 import { supabase } from '../config/supabaseClient.js';
 
 export const getTikTokAuthUrl = (req: Request, res: Response) => {
@@ -195,6 +196,100 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
         const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?error=youtube`);
+    }
+};
+
+export const getKickAuthUrl = (req: Request, res: Response) => {
+    try {
+        const { userId, origin } = req.query;
+        if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+        const url = kickService.getAuthUrl(userId as string, origin as string);
+        res.json({ url });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const handleKickCallback = async (req: Request, res: Response) => {
+    try {
+        const { code, state } = req.query;
+
+        if (!code) {
+            return res.status(400).json({ error: 'Missing code' });
+        }
+
+        // Extract userId and origin from state (JSON base64)
+        const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+        const { userId, origin } = stateData;
+
+        if (!userId) {
+            return res.status(400).json({ error: 'Invalid state or missing userId' });
+        }
+
+        await kickService.handleCallback(code as string, userId);
+
+        // Redirect back to frontend
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?success=kick`);
+    } catch (error: any) {
+        console.error('Kick Callback error:', error);
+
+        let origin = '';
+        try {
+            const state = req.query.state as string;
+            const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+            origin = stateData.origin;
+        } catch (e) { }
+
+        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
+        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        res.redirect(`${redirectUrl}/admin?error=kick`);
+    }
+};
+
+export const connectKickAccount = async (req: Request, res: Response) => {
+    try {
+        const { userId } = (req as any);
+        const { username } = req.body;
+
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!username) return res.status(400).json({ error: 'Missing Kick username' });
+
+        const cleanUsername = username.trim().replace(/^@/, '');
+
+        // Simulating profile data for Kick
+        const profileData = {
+            username: cleanUsername,
+            display_name: cleanUsername,
+            avatar_url: `https://avatar.kick.com/${cleanUsername}`,
+            follower_count: 0
+        };
+
+        const integrationData: any = {
+            user_id: userId,
+            provider: 'kick',
+            access_token: 'manual',
+            profile_data: profileData,
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('social_integrations')
+            .upsert(integrationData, { onConflict: 'user_id,provider' })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Ensure link exists
+        await kickService.ensureKickLink(userId, cleanUsername);
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        console.error('Kick Connect error:', error);
+        res.status(500).json({ error: error.message });
     }
 };
 
