@@ -1,11 +1,20 @@
 import { supabase } from '../config/supabaseClient.js';
 import { SocialIntegrationDB } from '../models/types.js';
+import crypto from 'crypto';
 
 const getKickConfig = () => ({
     CLIENT_ID: process.env.KICK_CLIENT_ID,
     CLIENT_SECRET: process.env.KICK_CLIENT_SECRET,
     REDIRECT_URI: process.env.KICK_REDIRECT_URI
 });
+
+const generateCodeVerifier = () => {
+    return crypto.randomBytes(32).toString('base64url');
+};
+
+const generateCodeChallenge = (verifier: string) => {
+    return crypto.createHash('sha256').update(verifier).digest('base64url');
+};
 
 /**
  * Ensures a Kick social link exists in the user's links list.
@@ -76,11 +85,19 @@ export const ensureKickLink = async (userId: string, kickUsername: string) => {
 };
 
 /**
- * Generates the Kick Auth URL
+ * Generates the Kick Auth URL with PKCE
  */
 export const getAuthUrl = (userId: string, origin?: string) => {
-    const state = Buffer.from(JSON.stringify({ userId, origin: origin || 'production' })).toString('base64');
     const { CLIENT_ID, REDIRECT_URI } = getKickConfig();
+    const verifier = generateCodeVerifier();
+    const challenge = generateCodeChallenge(verifier);
+
+    // Store verifier in state to retrieve it later in the callback
+    const state = Buffer.from(JSON.stringify({
+        userId,
+        verifier,
+        origin: origin || 'production'
+    })).toString('base64');
 
     const scopes = [
         'user.read',
@@ -94,23 +111,23 @@ export const getAuthUrl = (userId: string, origin?: string) => {
         redirect_uri: REDIRECT_URI || '',
         response_type: 'code',
         scope: scopes,
-        state: state
+        state: state,
+        code_challenge: challenge,
+        code_challenge_method: 'S256'
     });
 
     return `${baseUrl}?${params.toString()}`;
 };
 
 /**
- * Handles the OAuth callback from Kick
+ * Handles the OAuth callback from Kick with PKCE
  */
-export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
+export const handleCallback = async (code: string, userId: string, stateVerifier?: string): Promise<SocialIntegrationDB | null> => {
     try {
         const { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI } = getKickConfig();
         console.log(`[KickService] Handling callback for user ${userId}...`);
 
         // 1. Exchange code for tokens
-        // Note: Kick's token endpoint might be different depending on their beta implementation
-        // Usually it's https://kick.com/oauth/token
         const tokenRes = await fetch('https://id.kick.com/oauth/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -119,7 +136,8 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
                 client_secret: CLIENT_SECRET,
                 code,
                 grant_type: 'authorization_code',
-                redirect_uri: REDIRECT_URI
+                redirect_uri: REDIRECT_URI,
+                code_verifier: stateVerifier // Mandatory for PKCE
             })
         });
 

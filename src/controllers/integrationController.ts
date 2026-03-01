@@ -219,15 +219,15 @@ export const handleKickCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Missing code' });
         }
 
-        // Extract userId and origin from state (JSON base64)
+        // Extract userId, verifier and origin from state (JSON base64)
         const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
-        const { userId, origin } = stateData;
+        const { userId, origin, verifier } = stateData;
 
         if (!userId) {
             return res.status(400).json({ error: 'Invalid state or missing userId' });
         }
 
-        await kickService.handleCallback(code as string, userId);
+        await kickService.handleCallback(code as string, userId, verifier);
 
         // Redirect back to frontend
         const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://noduscc.com.br';
