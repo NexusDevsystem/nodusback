@@ -120,7 +120,8 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
         }
 
         // Extract userId and origin from state (format: { userId, origin } encoded in base64)
-        const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+        const base64State = (state as string).replace(/ /g, '+');
+        const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
         const { userId, origin } = stateData;
 
         if (!userId) {
@@ -139,7 +140,8 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
         let origin = '';
         try {
             const state = req.query.state as string;
-            const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+            const base64State = state.replace(/ /g, '+');
+            const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
             origin = stateData.origin;
         } catch (e) { }
 
@@ -220,7 +222,9 @@ export const handleKickCallback = async (req: Request, res: Response) => {
         }
 
         // Extract userId, verifier and origin from state (JSON base64)
-        const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+        // Note: URL query parameters might replace '+' with ' ' so we need to put them back
+        const base64State = (state as string).replace(/ /g, '+');
+        const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
         const { userId, origin, verifier } = stateData;
 
         if (!userId) {
@@ -239,7 +243,8 @@ export const handleKickCallback = async (req: Request, res: Response) => {
         let origin = '';
         try {
             const state = req.query.state as string;
-            const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+            const base64State = state.replace(/ /g, '+');
+            const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
             origin = stateData.origin;
         } catch (e) { }
 
