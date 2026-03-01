@@ -83,12 +83,12 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const { CLIENT_ID, REDIRECT_URI } = getKickConfig();
 
     const scopes = [
-        'user:read',
-        'channel:read',
-        'events:subscribe'
+        'user.read',
+        'channel.read',
+        'channel.token.read'
     ].join(' ');
 
-    const baseUrl = 'https://kick.com/oauth/authorize';
+    const baseUrl = 'https://id.kick.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: CLIENT_ID || '',
         redirect_uri: REDIRECT_URI || '',
@@ -111,7 +111,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         // 1. Exchange code for tokens
         // Note: Kick's token endpoint might be different depending on their beta implementation
         // Usually it's https://kick.com/oauth/token
-        const tokenRes = await fetch('https://kick.com/oauth/token', {
+        const tokenRes = await fetch('https://id.kick.com/oauth/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -133,7 +133,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         // 2. Get User Profile
         // Note: This endpoint is an assumption based on standard OAuth patterns
-        const userRes = await fetch('https://api.kick.com/v1/user', {
+        const userRes = await fetch('https://api.kick.com/public/v1/user', {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Accept': 'application/json'
@@ -149,7 +149,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         let followerCount = 0;
         let isLive = false;
         try {
-            const channelRes = await fetch(`https://api.kick.com/v1/channels/${kickUser.username}`, {
+            const channelRes = await fetch(`https://api.kick.com/public/v1/channels/${kickUser.username}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
             const channelData = await channelRes.json() as any;
@@ -211,7 +211,7 @@ export const syncData = async (userId: string) => {
 
         // Fetch latest channel data
         const username = integration.profile_data.username;
-        const channelRes = await fetch(`https://api.kick.com/v1/channels/${username}`);
+        const channelRes = await fetch(`https://api.kick.com/public/v1/channels/${username}`);
         const channelData = await channelRes.json() as any;
 
         const updatedProfileData = {

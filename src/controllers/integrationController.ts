@@ -257,15 +257,34 @@ export const connectKickAccount = async (req: Request, res: Response) => {
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!username) return res.status(400).json({ error: 'Missing Kick username' });
 
-        const cleanUsername = username.trim().replace(/^@/, '');
+        const cleanUsername = username.trim().replace(/^@/, '').split('/').pop() || '';
 
-        // Simulating profile data for Kick
-        const profileData = {
+        console.log(`[KickController] Connecting Kick account for ${cleanUsername}...`);
+
+        // Fetch real data from Kick
+        let profileData: any = {
             username: cleanUsername,
             display_name: cleanUsername,
             avatar_url: `https://avatar.kick.com/${cleanUsername}`,
-            follower_count: 0
+            follower_count: 0,
+            is_live: false
         };
+
+        try {
+            const channelRes = await fetch(`https://api.kick.com/v1/channels/${cleanUsername}`);
+            if (channelRes.ok) {
+                const channelData = await channelRes.json() as any;
+                profileData = {
+                    username: cleanUsername,
+                    display_name: channelData.user?.username || cleanUsername,
+                    avatar_url: channelData.user?.profile_pic || profileData.avatar_url,
+                    follower_count: channelData.followers_count || 0,
+                    is_live: channelData.livestream !== null
+                };
+            }
+        } catch (err) {
+            console.warn(`[KickController] Could not fetch real-time data for ${cleanUsername}:`, err);
+        }
 
         const integrationData: any = {
             user_id: userId,
