@@ -191,12 +191,19 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         let followerCount = 0;
         let isLive = false;
         try {
-            const channelRes = await fetch(`https://api.kick.com/public/v1/channels/${kickUsername}`, {
+            // Oficial Kick Public API fetch for channel
+            const channelRes = await fetch(`https://api.kick.com/public/v1/channels`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
             const channelData = await channelRes.json() as any;
-            followerCount = channelData.followers_count || 0;
-            isLive = channelData.livestream !== null;
+
+            if (channelData && Array.isArray(channelData.data) && channelData.data.length > 0) {
+                const c = channelData.data[0];
+                // Kick's new v1 API doesn't fully expose followers_count reliably yet, 
+                // but we map it if they add it, or fallback.
+                followerCount = c.followers_count || 0;
+                isLive = c.is_live_now || false;
+            }
         } catch (err) {
             console.warn('[KickService] Failed to fetch channel info:', err);
         }
@@ -204,7 +211,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         const profileData = {
             username: kickUsername,
             display_name: kickUser.name || kickUsername,
-            avatar_url: kickUser.profile_pic || `https://avatar.kick.com/${kickUsername}`,
+            avatar_url: kickUser.profile_picture || kickUser.profile_pic || `https://avatar.kick.com/${kickUsername}`,
             follower_count: followerCount,
             is_live: isLive,
             id: kickUser.id || kickUser.user_id
@@ -228,7 +235,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         if (error) throw error;
 
         // Create or update the Kick social link
-        await ensureKickLink(userId, kickUser.username);
+        await ensureKickLink(userId, kickUsername);
 
         return data;
     } catch (error) {
