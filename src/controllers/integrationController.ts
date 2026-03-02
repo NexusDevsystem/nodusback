@@ -420,6 +420,14 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
 
         if (deleteError) throw deleteError;
 
+        // 1.5 Delete the corresponding social link
+        await supabase
+            .from('links')
+            .delete()
+            .eq('user_id', userId)
+            .eq('type', 'social')
+            .eq('platform', provider);
+
         // 2. Update redundant 'integrations' array in 'users' table
         const { data: remainingIntegrations } = await supabase
             .from('social_integrations')
