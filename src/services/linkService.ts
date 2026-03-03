@@ -283,9 +283,9 @@ export const linkService = {
                         apiLink.children = await upsertRecursive(item.children, savedDbLink.id!);
                     }
 
-                    // Preserve events in the response for agenda items so frontend doesn't lose them
+                    // Persist events for agenda items so they are saved to the DB
                     if (item.type === 'agenda' && item.events) {
-                        apiLink.events = item.events;
+                        apiLink.events = await eventService.replaceEvents(userId, savedDbLink.id!, item.events);
                     }
 
                     result.push(apiLink);
