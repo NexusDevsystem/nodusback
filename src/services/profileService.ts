@@ -8,7 +8,7 @@ import * as twitchService from './twitchService.js';
 
 export const profileService = {
     // Helper to attach active integrations to a profile
-    async _attachIntegrations(profile: UserProfile): Promise<UserProfile> {
+    async _attachIntegrations(profile: UserProfile, triggerSync: boolean = true): Promise<UserProfile> {
         if (!profile.id) return profile;
 
         const { data: integrations } = await supabase
@@ -21,7 +21,7 @@ export const profileService = {
         }
 
         // Trigger background sync for social data if needed
-        if (profile.id) {
+        if (profile.id && triggerSync) {
             instagramService.checkAndSync(profile.id).catch(e => console.error('[InstagramSync] Failed:', e));
             tiktokService.checkAndSync(profile.id).catch(e => console.error('[TikTokSync] Failed:', e));
             twitchService.checkAndSync(profile.id).catch(e => console.error('[TwitchSync] Failed:', e));
@@ -31,7 +31,7 @@ export const profileService = {
     },
 
     // Get profile by username (public access)
-    async getProfileByUsername(username: string): Promise<UserProfile | null> {
+    async getProfileByUsername(username: string, triggerSync: boolean = true): Promise<UserProfile | null> {
         const { data, error } = await supabase
             .from('users')
             .select('*')
@@ -44,7 +44,7 @@ export const profileService = {
         }
 
         const profile = dbToApi(data as UserProfileDB);
-        return await this._attachIntegrations(profile);
+        return await this._attachIntegrations(profile, triggerSync);
     },
 
     // Get profile by user_id (authenticated access)
@@ -199,7 +199,8 @@ export const profileService = {
     // Public Bootstrap (Profile + Links + Products) by username
     async getPublicBootstrapData(username: string) {
         // 1. Get profile first as we need the user_id for links/products
-        const profile = await this.getProfileByUsername(username);
+        // Pass false to disable automatic social background syncing for public views
+        const profile = await this.getProfileByUsername(username, false);
         if (!profile) return null;
 
         // 2. Fetch links and products in parallel using the user_id
