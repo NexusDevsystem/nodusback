@@ -70,6 +70,8 @@ export const eventService = {
         if (updates.url !== undefined) dbUpdates.url = updates.url;
         if (updates.status !== undefined) dbUpdates.status = updates.status;
         if (updates.position !== undefined) dbUpdates.position = updates.position;
+        if (updates.scheduleStart !== undefined) dbUpdates.schedule_start = updates.scheduleStart;
+        if (updates.scheduleEnd !== undefined) dbUpdates.schedule_end = updates.scheduleEnd;
 
         const { data, error } = await supabase
             .from('events')

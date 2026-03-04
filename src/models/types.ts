@@ -85,6 +85,8 @@ export interface EventItemDB {
     url?: string;
     status?: string | null;
     position: number;
+    schedule_start?: string | null;
+    schedule_end?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -197,6 +199,8 @@ export interface EventItem {
     url: string;
     status: 'Tickets' | 'Sold Out' | 'Free' | string;
     position: number;
+    scheduleStart?: string | null;
+    scheduleEnd?: string | null;
 }
 
 export interface Product {
@@ -414,7 +418,9 @@ export function eventDbToApi(db: EventItemDB): EventItem {
         location: db.location || '',
         url: db.url || '',
         status: db.status || 'Tickets',
-        position: db.position || 0
+        position: db.position || 0,
+        scheduleStart: db.schedule_start,
+        scheduleEnd: db.schedule_end
     };
 }
 
@@ -430,6 +436,8 @@ export function eventApiToDb(api: Partial<EventItem>, userId: string): Partial<E
     if (api.url !== undefined) db.url = api.url;
     if (api.status !== undefined) db.status = api.status;
     if (api.position !== undefined) db.position = api.position;
+    if (api.scheduleStart !== undefined) db.schedule_start = api.scheduleStart;
+    if (api.scheduleEnd !== undefined) db.schedule_end = api.scheduleEnd;
 
     return db;
 }

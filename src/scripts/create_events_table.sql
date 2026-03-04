@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS public.events (
     url TEXT,
     status TEXT DEFAULT 'Tickets',
     position INTEGER DEFAULT 0,
+    schedule_start TIMESTAMP WITH TIME ZONE,
+    schedule_end TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
