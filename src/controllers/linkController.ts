@@ -19,24 +19,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 // Configure Multer Storage for Thumbnails
-const storage = multer.diskStorage({
-    destination: (req: Request, file: Express.Multer.File, cb) => {
-        const userId = (req as AuthRequest).userId;
-        if (!userId) return cb(new Error('User not authenticated'), '');
-
-        const userDir = path.join(UPLOADS_DIR, userId);
-        if (!fs.existsSync(userDir)) {
-            fs.mkdirSync(userDir, { recursive: true });
-        }
-        cb(null, userDir);
-    },
-    filename: (req: Request, file: Express.Multer.File, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
-        cb(null, `thumb-${name}-${uniqueSuffix}${ext}`);
-    }
-});
+const storage = multer.memoryStorage();
 
 export const uploadThumbnailMiddleware = multer({
     storage: storage,
@@ -185,14 +168,33 @@ export const linkController = {
             }
 
             const userId = req.userId;
-            const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-            const fileUrl = `${baseUrl}/uploads/links/${userId}/${file.filename}`;
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            const ext = path.extname(file.originalname);
+            const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
+            const filename = `thumb-${name}-${uniqueSuffix}${ext}`;
+            const filePath = `${userId}/thumbnails/${filename}`;
+
+            const { data, error } = await supabase.storage
+                .from('uploads')
+                .upload(filePath, file.buffer!, {
+                    contentType: file.mimetype,
+                    upsert: false
+                });
+
+            if (error) {
+                console.error("Supabase Storage Error:", error);
+                throw error;
+            }
+
+            const { data: publicData } = supabase.storage
+                .from('uploads')
+                .getPublicUrl(filePath);
 
             res.json({
                 success: true,
                 file: {
-                    url: fileUrl,
-                    filename: file.filename
+                    url: publicData.publicUrl,
+                    filename: filename
                 }
             });
         } catch (error: any) {
