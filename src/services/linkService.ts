@@ -35,16 +35,17 @@ export const linkService = {
             list.push(event);
             eventsByCollection.set(event.collectionId, list);
         });
-
-        allLinks.forEach(link => {
-            if (link.type === 'agenda') {
-                link.events = eventsByCollection.get(link.id!) || [];
-            }
-        });
-
-        // 3. Build the hierarchy in memory
+        // 3. Attach events and build the map in memory
         const linkMap = new Map<string, LinkItem>();
         allLinks.forEach(link => {
+            if (link.type === 'agenda') {
+                const rawEvents = eventsByCollection.get(link.id!) || [];
+                link.events = publicView ? rawEvents.filter(event => {
+                    if (event.scheduleStart && new Date(event.scheduleStart) > now) return false;
+                    if (event.scheduleEnd && new Date(event.scheduleEnd) < now) return false;
+                    return true;
+                }) : rawEvents;
+            }
             link.children = [];
             linkMap.set(link.id!, link);
         });
