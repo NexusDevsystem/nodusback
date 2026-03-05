@@ -22,13 +22,13 @@ export const musicController = {
             let targetUrl = url;
             let targetVideoUrl = '';
 
-            // Resolve Deezer shortened links
-            if (url.includes('link.deezer.com')) {
+            // Resolve shortened links
+            if (url.includes('link.deezer.com') || url.includes('deezer.page.link') || url.includes('spotify.link')) {
                 try {
-                    const headRes = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+                    const headRes = await fetch(url, { method: 'GET', redirect: 'follow' });
                     targetUrl = headRes.url;
                 } catch (e) {
-                    console.error('[Metadata] Error following Deezer redirect', e);
+                    console.error('[Metadata] Error following redirect', e);
                 }
             }
 
@@ -85,8 +85,10 @@ export const musicController = {
                 console.error('[Metadata] OEmbed failed:', oembedError);
             }
 
-            // METHOD 2: Scraping fallback
-            if (!title || !artist || !thumbnailUrl || isTiktok) {
+            // METHOD 2: Scraping fallback & Album/Playlist Track Fetching
+            const isAlbumOrPlaylist = (isSpotify || isDeezer) && (targetUrl.includes('/album/') || targetUrl.includes('/playlist/'));
+
+            if (!title || !artist || !thumbnailUrl || isTiktok || isAlbumOrPlaylist) {
                 try {
                     const fetchUrl = encodeURI(targetUrl);
                     const pageRes = await fetch(fetchUrl, {
