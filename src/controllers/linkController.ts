@@ -1,7 +1,53 @@
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { linkService } from '../services/linkService.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import multer from 'multer';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure uploads directory exists - Note: link thumbnails are stored separately
+// so they don't clutter the user's main file manager.
+const UPLOADS_DIR = path.join(__dirname, '../../uploads/links');
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Configure Multer Storage for Thumbnails
+const storage = multer.diskStorage({
+    destination: (req: Request, file: Express.Multer.File, cb) => {
+        const userId = (req as AuthRequest).userId;
+        if (!userId) return cb(new Error('User not authenticated'), '');
+
+        const userDir = path.join(UPLOADS_DIR, userId);
+        if (!fs.existsSync(userDir)) {
+            fs.mkdirSync(userDir, { recursive: true });
+        }
+        cb(null, userDir);
+    },
+    filename: (req: Request, file: Express.Multer.File, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
+        cb(null, `thumb-${name}-${uniqueSuffix}${ext}`);
+    }
+});
+
+export const uploadThumbnailMiddleware = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for thumbnails
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only images are allowed for thumbnails'));
+        }
+    }
+});
 
 export const linkController = {
     // Get all links for authenticated user
@@ -126,6 +172,31 @@ export const linkController = {
         } catch (error) {
             console.error('Error tracking click:', error);
             res.status(500).json({ error: 'Failed to track click' });
+        }
+    },
+
+    // Upload thumbnail (hidden from general file manager)
+    async uploadThumbnail(req: AuthRequest, res: Response) {
+        try {
+            const file = req.file;
+            if (!file) {
+                return res.status(400).json({ error: 'No file uploaded' });
+            }
+
+            const userId = req.userId;
+            const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+            const fileUrl = `${baseUrl}/uploads/links/${userId}/${file.filename}`;
+
+            res.json({
+                success: true,
+                file: {
+                    url: fileUrl,
+                    filename: file.filename
+                }
+            });
+        } catch (error: any) {
+            console.error('Thumbnail upload error:', error);
+            res.status(500).json({ error: 'Error uploading thumbnail' });
         }
     }
 };

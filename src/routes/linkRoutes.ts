@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { linkController } from '../controllers/linkController.js';
+import { linkController, uploadThumbnailMiddleware } from '../controllers/linkController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
@@ -11,6 +11,7 @@ router.post('/track/:id', linkController.trackClick);
 // Protected routes (require authentication)
 router.get('/me', authMiddleware, linkController.getMyLinks);
 router.post('/', authMiddleware, linkController.createLink);
+router.post('/thumbnail', authMiddleware, uploadThumbnailMiddleware.single('file'), linkController.uploadThumbnail);
 router.put('/bulk', authMiddleware, linkController.replaceAllLinks);
 router.put('/:id', authMiddleware, linkController.updateLink);
 router.delete('/:id', authMiddleware, linkController.deleteLink);
