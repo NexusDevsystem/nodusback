@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabaseClient.js';
 import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.js';
 import { eventService } from './eventService.js';
+import { createHash } from 'crypto';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,7 +22,15 @@ export const linkService = {
         const now = new Date();
 
         // 1. Convert all DB links to API format and apply schedule filtering
-        const allLinks = dbLinks.map(db => linkDbToApi(db)).filter(link => {
+        const allLinks = dbLinks.map(db => {
+            const link = linkDbToApi(db);
+            // SECURITY: In public view, strip the URL from password-protected links
+            // so the destination is never exposed in the page payload
+            if (publicView && db.is_password_protected) {
+                link.url = '';
+            }
+            return link;
+        }).filter(link => {
             if (!publicView) return true;
             if (link.scheduleStart && new Date(link.scheduleStart) > now) return false;
             if (link.scheduleEnd && new Date(link.scheduleEnd) < now) return false;
@@ -263,6 +272,14 @@ export const linkService = {
                         dbLink.id = item.id;
                     } else {
                         delete dbLink.id;
+                    }
+
+                    // 🔐 Hash password if provided
+                    const linkAny = item as any;
+                    if (item.isPasswordProtected && linkAny.linkPassword) {
+                        (dbLink as any).password_hash = createHash('sha256').update(linkAny.linkPassword).digest('hex');
+                    } else if (!item.isPasswordProtected) {
+                        (dbLink as any).password_hash = null;
                     }
 
                     const { data, error } = await supabase

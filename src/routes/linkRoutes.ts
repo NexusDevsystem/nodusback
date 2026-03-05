@@ -7,6 +7,7 @@ const router = Router();
 // Public routes
 router.get('/public/:username', linkController.getLinksByUsername);
 router.post('/track/:id', linkController.trackClick);
+router.post('/:id/verify-password', linkController.verifyLinkPassword);
 
 // Protected routes (require authentication)
 router.get('/me', authMiddleware, linkController.getMyLinks);

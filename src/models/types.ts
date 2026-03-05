@@ -70,6 +70,8 @@ export interface LinkItemDB {
     schedule_start?: string | null;
     schedule_end?: string | null;
     video_url?: string | null;
+    is_password_protected?: boolean;
+    password_hash?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -185,6 +187,7 @@ export interface LinkItem {
     scheduleStart?: string | null;
     scheduleEnd?: string | null;
     videoUrl?: string;
+    isPasswordProtected?: boolean;
 }
 
 export interface EventItem {
@@ -334,7 +337,9 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         platform: db.platform,
         scheduleStart: db.schedule_start,
         scheduleEnd: db.schedule_end,
-        videoUrl: db.video_url || undefined
+        videoUrl: db.video_url || undefined,
+        isPasswordProtected: db.is_password_protected || false,
+        // NOTE: password_hash is NEVER included in the API response
     };
 }
 
@@ -355,7 +360,9 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         platform: api.platform,
         schedule_start: api.scheduleStart,
         schedule_end: api.scheduleEnd,
-        video_url: api.videoUrl
+        video_url: api.videoUrl,
+        is_password_protected: api.isPasswordProtected ?? false,
+        // NOTE: password_hash is set separately from linkPassword in the controller
     };
 
     // IMPORTANT: Do NOT include the id field here

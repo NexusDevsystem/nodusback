@@ -2,6 +2,7 @@ import { Response, Request } from 'express';
 import { linkService } from '../services/linkService.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -197,6 +198,49 @@ export const linkController = {
         } catch (error: any) {
             console.error('Thumbnail upload error:', error);
             res.status(500).json({ error: 'Error uploading thumbnail' });
+        }
+    },
+
+    // 🔐 Verify password for a password-protected link
+    // Public route — no auth required, but only returns URL if password is correct
+    async verifyLinkPassword(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const { password } = req.body;
+
+            if (!password) {
+                return res.status(400).json({ error: 'Senha não informada' });
+            }
+
+            // Fetch the link directly from the database
+            const { data: link, error } = await supabase
+                .from('links')
+                .select('id, url, is_password_protected, password_hash')
+                .eq('id', id)
+                .single();
+
+            if (error || !link) {
+                return res.status(404).json({ error: 'Link não encontrado' });
+            }
+
+            if (!link.is_password_protected || !link.password_hash) {
+                return res.status(400).json({ error: 'Este link não está protegido por senha' });
+            }
+
+            // Compare SHA-256 hash
+            const inputHash = createHash('sha256').update(password).digest('hex');
+            if (inputHash !== link.password_hash) {
+                return res.status(401).json({ error: 'Senha incorreta' });
+            }
+
+            // Password correct — return the URL
+            // Also track click
+            await linkService.incrementClicks(id).catch(() => { });
+
+            return res.json({ url: link.url });
+        } catch (error) {
+            console.error('Error verifying link password:', error);
+            res.status(500).json({ error: 'Erro ao verificar senha' });
         }
     }
 };
