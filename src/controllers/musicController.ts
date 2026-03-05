@@ -171,6 +171,45 @@ export const musicController = {
                             }
                         }
 
+                        // Deezer album and playlist detection
+                        if (isDeezer && (targetUrl.includes('/album/') || targetUrl.includes('/playlist/'))) {
+                            try {
+                                const entityMatch = targetUrl.match(/\/(album|playlist)\/([0-9]+)/);
+                                const entityType = entityMatch?.[1];
+                                const entityId = entityMatch?.[2];
+                                console.log(`[Metadata] Detected Deezer ${entityType}: ${entityId}`);
+
+                                if (entityId && entityType) {
+                                    const apiRes = await fetch(`https://api.deezer.com/${entityType}/${entityId}`, {
+                                        headers: { 'User-Agent': 'Mozilla/5.0' }
+                                    });
+                                    if (apiRes.ok) {
+                                        const data = await apiRes.json() as any;
+                                        if (data.tracks?.data) {
+                                            console.log(`[Metadata] Found ${data.tracks.data.length} tracks in Deezer ${entityType}`);
+                                            const albumCover = data.cover_xl || data.cover_medium || thumbnailUrl || '';
+                                            return res.json({
+                                                title: data.title || title || (entityType === 'album' ? 'Álbum' : 'Playlist'),
+                                                artist: data.artist?.name || artist || '',
+                                                thumbnailUrl: albumCover,
+                                                type: entityType,
+                                                platform: 'deezer',
+                                                tracks: data.tracks.data.map((t: any) => ({
+                                                    title: t.title,
+                                                    artist: t.artist?.name || data.artist?.name || artist || '',
+                                                    url: t.link,
+                                                    image: albumCover,
+                                                    duration: t.duration
+                                                }))
+                                            });
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[Metadata] Deezer Album/Playlist fetching failed:', e);
+                            }
+                        }
+
                         // Artist refinement for Spotify/Deezer
                         if (!artist) {
                             if (twitterArtist) {
