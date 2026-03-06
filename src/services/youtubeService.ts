@@ -85,9 +85,45 @@ export const handleCallback = async (code: string, userId: string) => {
         .eq('user_id', userId);
 
     if (allIntegrations) {
+        // Fetch current links to check if we need to auto-create one
+        const { data: userData } = await supabase
+            .from('users')
+            .select('links')
+            .eq('id', userId)
+            .single();
+
+        let updatePayload: any = { integrations: allIntegrations };
+
+        if (userData) {
+            const links = Array.isArray(userData.links) ? userData.links : [];
+            const channelId = channel.id;
+
+            // Check if this channel is already linked
+            const hasLink = links.some((l: any) =>
+                l.platform === 'youtube' &&
+                (l.url?.includes(channelId) || l.provider_account_id === channelId)
+            );
+
+            if (!hasLink) {
+                const newLink = {
+                    id: Date.now().toString(),
+                    type: 'link',
+                    platform: 'youtube',
+                    title: profileData.title || 'YouTube',
+                    url: `https://youtube.com/channel/${channelId}`,
+                    isActive: true,
+                    clicks: 0,
+                    layout: 'social',
+                    provider_account_id: channelId,
+                    image: profileData.avatar_url
+                };
+                updatePayload.links = [...links, newLink];
+            }
+        }
+
         await supabase
             .from('users')
-            .update({ integrations: allIntegrations })
+            .update(updatePayload)
             .eq('id', userId);
     }
 
