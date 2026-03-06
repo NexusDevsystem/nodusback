@@ -66,13 +66,14 @@ export const handleCallback = async (code: string, userId: string) => {
         .upsert({
             user_id: userId,
             provider: 'youtube',
+            provider_account_id: channel.id,
             access_token: tokens.access_token,
             refresh_token: tokens.refresh_token,
             profile_data: profileData,
             expires_at: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
             updated_at: new Date().toISOString()
         }, {
-            onConflict: 'user_id,provider'
+            onConflict: 'user_id,provider,provider_account_id'
         });
 
     if (error) throw error;

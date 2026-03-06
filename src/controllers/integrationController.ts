@@ -405,28 +405,39 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
     try {
         const { userId } = (req as any);
         const { provider } = req.params;
+        const { providerAccountId } = req.body; // Allow specifying WHICH account to disconnect
 
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
         if (!provider) return res.status(400).json({ error: 'Missing provider' });
 
-        console.log(`[IntegrationController] Disconnecting ${provider} for user:`, userId);
+        console.log(`[IntegrationController] Disconnecting ${provider} ${providerAccountId ? `(${providerAccountId})` : ''} for user:`, userId);
 
         // 1. Delete from social_integrations table
-        const { error: deleteError } = await supabase
+        let query = supabase
             .from('social_integrations')
             .delete()
             .eq('user_id', userId)
             .eq('provider', provider);
 
+        if (providerAccountId) {
+            query = query.eq('provider_account_id', providerAccountId);
+        }
+
+        const { error: deleteError } = await query;
+
         if (deleteError) throw deleteError;
 
         // 1.5 Delete the corresponding social link
-        await supabase
+        let linkQuery = supabase
             .from('links')
             .delete()
             .eq('user_id', userId)
             .eq('type', 'social')
             .eq('platform', provider);
+
+        // We could also refine the link deletion if we store the account ID in the link, 
+        // but for now, we delete all links of that platform or let the user manage them manually.
+        await linkQuery;
 
         // 2. Update redundant 'integrations' array in 'users' table
         const { data: remainingIntegrations } = await supabase

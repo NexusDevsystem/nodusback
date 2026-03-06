@@ -406,6 +406,7 @@ export interface SocialIntegrationDB {
     id?: string;
     user_id: string; // FK to users(id)
     provider: 'youtube' | 'instagram' | 'tiktok' | 'twitch' | 'kick';
+    provider_account_id?: string | null;
     access_token: string;
     refresh_token?: string;
     expires_at?: string;
