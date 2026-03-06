@@ -427,22 +427,42 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
 
         if (deleteError) throw deleteError;
 
-        // 1.5 Delete the corresponding social link
+        // 1.5 Delete the corresponding social link(s)
         let linkQuery = supabase
             .from('links')
             .delete()
             .eq('user_id', userId)
-            .eq('type', 'social')
             .eq('platform', provider);
 
-        // We could also refine the link deletion if we store the account ID in the link, 
-        // but for now, we delete all links of that platform or let the user manage them manually.
+        if (providerAccountId) {
+            linkQuery = linkQuery.eq('provider_account_id', providerAccountId);
+        } else {
+            // If no specific account ID, we might want to delete by type as well to avoid deleting custom links
+            linkQuery = linkQuery.eq('type', 'social');
+        }
+
         await linkQuery;
+
+        // 1.7 Also update redundant 'links' array in 'users' table
+        const { data: userData } = await supabase
+            .from('users')
+            .select('links')
+            .eq('id', userId)
+            .single();
+
+        if (userData && Array.isArray(userData.links)) {
+            const updatedLinks = userData.links.filter((l: any) => {
+                const isMatch = l.platform === provider &&
+                    (providerAccountId ? (l.provider_account_id === providerAccountId || l.url?.includes(providerAccountId)) : true);
+                return !isMatch;
+            });
+            await supabase.from('users').update({ links: updatedLinks }).eq('id', userId);
+        }
 
         // 2. Update redundant 'integrations' array in 'users' table
         const { data: remainingIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         await supabase
@@ -469,7 +489,7 @@ export const switchInstagramAccount = async (req: Request, res: Response) => {
         // Update the main 'users' table integrations array for frontend consistency
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {

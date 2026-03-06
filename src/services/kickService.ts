@@ -70,7 +70,7 @@ export const ensureKickLink = async (userId: string, kickUsername: string) => {
         // Also update the users table integrations cache
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {
@@ -220,6 +220,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'kick',
+            provider_account_id: profileData.id,
             access_token: accessToken,
             refresh_token: refreshToken,
             profile_data: profileData,
@@ -228,7 +229,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id,provider' })
+            .upsert(integrationData, { onConflict: 'user_id,provider,provider_account_id' })
             .select()
             .single();
 
@@ -281,7 +282,7 @@ export const syncData = async (userId: string) => {
         // Update users integration cache
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {

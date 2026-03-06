@@ -63,7 +63,7 @@ export const ensureTwitchLink = async (userId: string, twitchUsername: string) =
         // Also update the users table integrations cache
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {
@@ -177,6 +177,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'twitch',
+            provider_account_id: profileData.channel_id,
             access_token: accessToken,
             refresh_token: refreshToken,
             profile_data: profileData,
@@ -185,7 +186,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id,provider' })
+            .upsert(integrationData, { onConflict: 'user_id,provider,provider_account_id' })
             .select()
             .single();
 
@@ -310,7 +311,7 @@ export const syncData = async (userId: string) => {
         // Update main users table for fast frontend access
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {

@@ -104,6 +104,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'instagram',
+            provider_account_id: profileData.channel_id,
             access_token: accessToken,
             profile_data: profileData,
             expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // ~60 days
@@ -111,7 +112,7 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id,provider' })
+            .upsert(integrationData, { onConflict: 'user_id,provider,provider_account_id' })
             .select()
             .single();
 
@@ -351,7 +352,7 @@ export const syncFeed = async (userId: string) => {
         // 4. Also sync to the main 'users' table so the frontend sees it immediately in the profile object
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {

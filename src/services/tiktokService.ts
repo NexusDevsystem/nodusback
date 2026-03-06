@@ -93,6 +93,7 @@ export const handleCallback = async (code: string, userId: string, codeVerifier:
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
             provider: 'tiktok',
+            provider_account_id: open_id,
             access_token: access_token,
             refresh_token: refresh_token,
             expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
@@ -101,7 +102,7 @@ export const handleCallback = async (code: string, userId: string, codeVerifier:
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id,provider' })
+            .upsert(integrationData, { onConflict: 'user_id,provider,provider_account_id' })
             .select()
             .single();
 
@@ -110,7 +111,7 @@ export const handleCallback = async (code: string, userId: string, codeVerifier:
         // Update the main 'users' table integrations array for redundancy/easier access
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {
@@ -187,7 +188,7 @@ export const syncFeed = async (userId: string) => {
         // 2. Sync to redundant cache in users table
         const { data: allIntegrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', userId);
 
         if (allIntegrations) {

@@ -81,7 +81,7 @@ export const handleCallback = async (code: string, userId: string) => {
     // Update the main 'users' table integrations array for frontend consistency
     const { data: allIntegrations } = await supabase
         .from('social_integrations')
-        .select('provider, profile_data')
+        .select('provider, provider_account_id, profile_data')
         .eq('user_id', userId);
 
     if (allIntegrations) {
@@ -113,7 +113,7 @@ export const handleCallback = async (code: string, userId: string) => {
                     url: `https://youtube.com/channel/${channelId}`,
                     isActive: true,
                     clicks: 0,
-                    layout: 'social',
+                    layout: 'classic',
                     provider_account_id: channelId,
                     image: profileData.avatar_url
                 };
