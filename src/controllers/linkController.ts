@@ -203,6 +203,60 @@ export const linkController = {
         }
     },
 
+    // 🌐 Proxy upload: Download an external image and save to our Supabase Storage
+    async proxyUpload(req: AuthRequest, res: Response) {
+        try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const { url } = req.body;
+            if (!url) {
+                return res.status(400).json({ error: 'URL is required' });
+            }
+
+            // 1. Download the image
+            const axios = (await import('axios')).default;
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            const buffer = Buffer.from(response.data, 'binary');
+            const contentType = response.headers['content-type'] || 'image/jpeg';
+
+            // 2. Generate filename
+            const extension = contentType.split('/')[1] || 'jpg';
+            const timestamp = Date.now();
+            const filename = `proxy-${timestamp}.${extension}`;
+            const filePath = `${req.profileId}/thumbnails/${filename}`;
+
+            // 3. Upload to Supabase
+            const { error: storageError } = await supabase.storage
+                .from('uploads')
+                .upload(filePath, buffer, {
+                    contentType: contentType,
+                    upsert: false
+                });
+
+            if (storageError) {
+                console.error("Supabase Storage Error (Proxy):", storageError);
+                throw storageError;
+            }
+
+            const { data: publicData } = supabase.storage
+                .from('uploads')
+                .getPublicUrl(filePath);
+
+            res.json({
+                success: true,
+                file: {
+                    url: publicData.publicUrl,
+                    filename: filename
+                }
+            });
+        } catch (error: any) {
+            console.error('Proxy upload error:', error);
+            res.status(500).json({ error: 'Error processing external image' });
+        }
+    },
+
     // 🔐 Verify password for a password-protected link
     // Public route — no auth required, but only returns URL if password is correct
     async verifyLinkPassword(req: Request, res: Response) {

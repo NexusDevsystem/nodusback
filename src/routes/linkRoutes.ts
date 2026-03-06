@@ -13,6 +13,7 @@ router.post('/:id/verify-password', linkController.verifyLinkPassword);
 router.get('/me', authMiddleware, linkController.getMyLinks);
 router.post('/', authMiddleware, linkController.createLink);
 router.post('/thumbnail', authMiddleware, uploadThumbnailMiddleware.single('file'), linkController.uploadThumbnail);
+router.post('/proxy-thumbnail', authMiddleware, linkController.proxyUpload);
 router.put('/bulk', authMiddleware, linkController.replaceAllLinks);
 router.put('/:id', authMiddleware, linkController.updateLink);
 router.delete('/:id', authMiddleware, linkController.deleteLink);
