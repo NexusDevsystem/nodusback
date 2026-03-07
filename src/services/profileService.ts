@@ -13,7 +13,7 @@ export const profileService = {
 
         const { data: integrations } = await supabase
             .from('social_integrations')
-            .select('provider, profile_data')
+            .select('provider, provider_account_id, profile_data')
             .eq('user_id', profile.id);
 
         if (integrations) {
