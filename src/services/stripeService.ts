@@ -53,6 +53,17 @@ export const stripeService = {
         successUrl: string;
         cancelUrl: string;
     }) {
+        // Check for custom URL override in .env
+        const urlKey = params.planId === 'monthly' ? 'STRIPE_MONTHLY_URL' : 'STRIPE_ANNUAL_URL';
+        const customUrl = getEnvKey(urlKey);
+
+        if (customUrl) {
+            // Append client_reference_id to the payment link so our webhook knows who paid
+            const separator = customUrl.includes('?') ? '&' : '?';
+            const finalUrl = `${customUrl}${separator}client_reference_id=${params.userId}`;
+            return { url: finalUrl };
+        }
+
         const monthlyPriceId = getEnvKey('STRIPE_MONTHLY_PRICE_ID');
         const annualPriceId = getEnvKey('STRIPE_ANNUAL_PRICE_ID');
 
