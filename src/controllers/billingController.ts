@@ -66,7 +66,7 @@ export const billingController = {
         switch (event.type) {
             case 'checkout.session.completed': {
                 const session = event.data.object as any;
-                let userId = session.metadata?.userId;
+                let userId = session.metadata?.userId || session.client_reference_id;
                 let planId = session.metadata?.planId;
 
                 console.log('Checkout Session Completed:', session.id);
