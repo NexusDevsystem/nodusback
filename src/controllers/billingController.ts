@@ -94,8 +94,8 @@ export const billingController = {
                         const priceId = fullSession.line_items?.data?.[0]?.price?.id;
                         console.log(`Detected Price ID: ${priceId}`);
 
-                        const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
-                        const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
+                        const monthlyPriceId = stripeService.getEnvKey('STRIPE_MONTHLY_PRICE_ID');
+                        const annualPriceId = stripeService.getEnvKey('STRIPE_ANNUAL_PRICE_ID');
 
                         if (priceId === monthlyPriceId) {
                             planId = 'monthly';
@@ -243,8 +243,8 @@ export const billingController = {
                 console.log(`✅ Found active subscription for ${profile.email} on Stripe: ${subscription.subscriptionId}`);
 
                 // Map Price ID to planId
-                const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
-                const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
+                const monthlyPriceId = stripeService.getEnvKey('STRIPE_MONTHLY_PRICE_ID');
+                const annualPriceId = stripeService.getEnvKey('STRIPE_ANNUAL_PRICE_ID');
 
                 console.log(`🔍 [Billing] Reconciling for customer ${subscription.customerId}`);
                 console.log(`🔍 [Billing] Stripe Plan ID: ${subscription.planId}`);
@@ -275,6 +275,18 @@ export const billingController = {
         } catch (error: any) {
             console.error('Auto Reconcile Error:', error);
             res.status(500).json({ error: error.message || 'Erro durante a reconciliação automática' });
+        }
+    },
+
+    async getConfig(req: any, res: Response) {
+        try {
+            const publishableKey = stripeService.getEnvKey('STRIPE_PUBLISHABLE_KEY');
+            res.json({
+                publishableKey,
+                env: process.env.STRIPE_ENV || 'live'
+            });
+        } catch (error: any) {
+            res.status(500).json({ error: 'Erro ao carregar configuração' });
         }
     }
 };

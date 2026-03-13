@@ -19,4 +19,7 @@ router.get('/invoices', authMiddleware, billingController.getInvoices);
 // Auto-reconcile subscription (authenticated)
 router.post('/auto-reconcile', authMiddleware, billingController.autoReconcile);
 
+// Get Public Config (Public)
+router.get('/config', billingController.getConfig);
+
 export default router;

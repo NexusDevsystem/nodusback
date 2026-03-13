@@ -14,9 +14,20 @@ const getCleanedKey = (key: string) => {
     return cleaned;
 };
 
-// Determine Environment - Locked to LIVE
-const secretKey = process.env.STRIPE_SECRET_KEY_LIVE || process.env.STRIPE_SECRET_KEY;
+// Determine Environment logic
+const isTestMode = process.env.STRIPE_ENV === 'test';
 
+const getEnvKey = (keyName: string) => {
+    // Priority: NAME_TEST or NAME_LIVE or NAME
+    const testKey = process.env[`${keyName}_TEST`];
+    const liveKey = process.env[`${keyName}_LIVE`];
+    const defaultKey = process.env[keyName];
+
+    if (isTestMode) return testKey || defaultKey;
+    return liveKey || defaultKey;
+};
+
+const secretKey = getEnvKey('STRIPE_SECRET_KEY');
 const stripeKey = getCleanedKey(secretKey || '');
 let stripe: Stripe;
 
@@ -27,10 +38,10 @@ try {
     if (!stripeKey) {
         console.warn('⚠️ Stripe Secret Key MISSING! Billing features will fail.');
     } else {
-        console.log(`💳 Stripe initialized in PRODUCTION mode`);
+        console.log(`💳 Stripe initialized in ${isTestMode ? 'TEST' : 'PRODUCTION'} mode`);
     }
 } catch (err: any) {
-    console.error('CRITICAL: Stripe initialization failed:', err.message);
+    console.error(`CRITICAL: Stripe initialization failed (${isTestMode ? 'TEST' : 'LIVE'}):`, err.message);
     stripe = new Stripe('sk_test_dummy_key_to_prevent_crash_on_import', { apiVersion: '2023-10-16' as any });
 }
 
@@ -42,13 +53,13 @@ export const stripeService = {
         successUrl: string;
         cancelUrl: string;
     }) {
-        const monthlyPriceId = process.env.STRIPE_MONTHLY_PRICE_ID_LIVE || process.env.STRIPE_MONTHLY_PRICE_ID;
-        const annualPriceId = process.env.STRIPE_ANNUAL_PRICE_ID_LIVE || process.env.STRIPE_ANNUAL_PRICE_ID;
+        const monthlyPriceId = getEnvKey('STRIPE_MONTHLY_PRICE_ID');
+        const annualPriceId = getEnvKey('STRIPE_ANNUAL_PRICE_ID');
 
         const priceId = params.planId === 'monthly' ? monthlyPriceId : annualPriceId;
 
         if (!priceId) {
-            throw new Error(`Price ID not configured for ${params.planId} in PRODUCTION mode.`);
+            throw new Error(`Price ID not configured for ${params.planId} in ${isTestMode ? 'TEST' : 'PRODUCTION'} mode.`);
         }
 
         return stripe.checkout.sessions.create({
@@ -142,7 +153,11 @@ export const stripeService = {
     },
 
     getWebhookSecret() {
-        const secret = process.env.STRIPE_WEBHOOK_SECRET_LIVE || process.env.STRIPE_WEBHOOK_SECRET;
+        const secret = getEnvKey('STRIPE_WEBHOOK_SECRET');
         return getCleanedKey(secret || '');
+    },
+
+    getEnvKey(key: string) {
+        return getEnvKey(key);
     }
 };
