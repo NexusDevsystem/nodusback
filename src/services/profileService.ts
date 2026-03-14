@@ -36,12 +36,14 @@ export const profileService = {
             .from('users')
             .select('*')
             .ilike('username', username)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('Error fetching profile by username:', error);
             return null;
         }
+
+        if (!data) return null;
 
         const profile = dbToApi(data as UserProfileDB);
         return await this._attachIntegrations(profile, triggerSync);

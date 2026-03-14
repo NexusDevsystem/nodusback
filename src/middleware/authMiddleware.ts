@@ -4,6 +4,7 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nodus_super_secret_jwt_key_change_in_production';
+console.log(`🔐 Auth secret initialized (Length: ${JWT_SECRET.length}, Custom: ${JWT_SECRET !== 'nodus_super_secret_jwt_key_change_in_production'})`);
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -14,7 +15,7 @@ export interface AuthRequest extends Request {
 
 // Simple in-memory cache to avoid hammering Google API on every concurrent request
 const tokenCache = new Map<string, { email: string, expiry: number }>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minute cache
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minute cache
 
 export const authMiddleware = async (
     req: AuthRequest,
@@ -58,51 +59,49 @@ export const authMiddleware = async (
         // --- 2. Check Google token cache ---
         const cached = tokenCache.get(token);
         let email = '';
-
         if (cached && cached.expiry > Date.now()) {
             email = cached.email;
         } else {
-            // Verify the token with Google directly with a 10s timeout and a retry
-            let googleUser;
+            // Verify with Google directly (Standard Access Token verify)
             try {
                 const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
                     headers: { Authorization: `Bearer ${token}` },
-                    timeout: 10000
+                    timeout: 8000 // 8s timeout
                 });
-                googleUser = googleRes.data;
-            } catch (firstErr: any) {
-                console.warn('Google Auth failed on first attempt (status:', firstErr.response?.status, '), retrying once...');
+                email = googleRes.data?.email || '';
+            } catch (err: any) {
+                // If it's a 401, don't retry - it's an auth error.
+                if (err.response?.status === 401) {
+                    console.warn('🔑 Google Auth Rejected (401): Token is invalid or expired.');
+                    return res.status(401).json({ error: 'Sessão expirada. Por favor, faça login novamente.' });
+                }
+
+                // For other errors (timeout, 5xx), retry or throw
+                console.warn(`⚠️ Google Auth Error (${err.response?.status || 'Timeout'}): Retrying once...`);
                 try {
-                    const googleRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    const retryRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
                         headers: { Authorization: `Bearer ${token}` },
-                        timeout: 15000
+                        timeout: 12000
                     });
-                    googleUser = googleRes.data;
+                    email = retryRes.data?.email || '';
                 } catch (retryErr: any) {
-                    // Both attempts failed. If it's a 401, throw a proper auth error
-                    // so the outer catch returns 401 (not 500) to the client.
-                    console.warn('Google Auth retry also failed (status:', retryErr.response?.status, '). Token is invalid or expired.');
-                    const authErr = new Error('Token inválido ou sessão expirada');
-                    (authErr as any).response = { status: retryErr.response?.status || 401 };
-                    throw authErr;
+                    console.error('❌ Google Auth failed after retry:', retryErr.message);
+                    throw retryErr;
                 }
             }
 
-            email = googleUser?.email || '';
-
-            if (email) {
-                tokenCache.set(token, {
-                    email,
-                    expiry: Date.now() + CACHE_DURATION
-                });
+            if (!email) {
+                return res.status(401).json({ error: 'Invalid token: email not provided by Google' });
             }
+
+            // Cache successful verification
+            tokenCache.set(token, {
+                email,
+                expiry: Date.now() + CACHE_DURATION
+            });
         }
 
-        if (!email) {
-            return res.status(401).json({ error: 'Invalid token or email not found' });
-        }
-
-        // Get the user's profile from DB using email (Sanitized exact match)
+        // Get the user's profile from DB using email
         const sanitizedEmail = email.toLowerCase().trim();
         let { data: profile, error: profileError } = await supabase
             .from('users')
