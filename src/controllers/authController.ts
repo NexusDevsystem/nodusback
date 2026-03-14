@@ -47,12 +47,10 @@ export const register = async (req: Request, res: Response) => {
                 name: name?.trim() || sanitizedEmail.split('@')[0],
                 password_hash: passwordHash,
                 auth_provider: 'email',
-                onboarding_completed: false,
-                tutorial_status: 'no',
                 theme_id: 'default',
                 font_family: 'Inter'
             })
-            .select('id, email, name, onboarding_completed, username')
+            .select('id, email, name, username')
             .single();
 
         if (createError) {
@@ -98,7 +96,7 @@ export const login = async (req: Request, res: Response) => {
         // Fetch user
         const { data: user, error: userError } = await supabase
             .from('users')
-            .select('id, email, name, password_hash, auth_provider, onboarding_completed, username')
+            .select('id, email, name, password_hash, auth_provider, username')
             .eq('email', sanitizedEmail)
             .maybeSingle();
 

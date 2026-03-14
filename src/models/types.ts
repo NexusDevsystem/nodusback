@@ -40,14 +40,12 @@ export interface UserProfileDB {
     seo_title?: string | null;
     seo_description?: string | null;
     payment_methods?: any[] | null;
-    onboarding_completed?: boolean;
     referral_source?: string | null;
     created_at?: string;
     updated_at?: string;
     integrations?: any[];
     username_updated_at?: string | null;
     banner_blur_color?: string | null;
-    tutorial_status?: 'yes' | 'no' | 'skip' | null;
     hide_branding?: boolean;
 }
 
@@ -161,12 +159,10 @@ export interface UserProfile {
     seoTitle?: string | null;
     seoDescription?: string | null;
     paymentMethods?: any[] | null;
-    onboardingCompleted?: boolean;
     referralSource?: string | null;
     integrations?: any[];
     usernameUpdatedAt?: string | null;
     bannerBlurColor?: string | null;
-    tutorialStatus?: 'yes' | 'no' | 'skip' | null;
     hideBranding?: boolean;
 }
 
@@ -263,12 +259,10 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         seoTitle: dbProfile.seo_title || null,
         seoDescription: dbProfile.seo_description || null,
         paymentMethods: dbProfile.payment_methods || [],
-        onboardingCompleted: dbProfile.onboarding_completed,
         referralSource: dbProfile.referral_source,
         integrations: dbProfile.integrations || [],
         usernameUpdatedAt: dbProfile.username_updated_at,
         bannerBlurColor: dbProfile.banner_blur_color || null,
-        tutorialStatus: dbProfile.tutorial_status || 'no',
         hideBranding: !!dbProfile.hide_branding
     };
 }
@@ -315,11 +309,9 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.seoTitle !== undefined) dbProfile.seo_title = apiProfile.seoTitle;
     if (apiProfile.seoDescription !== undefined) dbProfile.seo_description = apiProfile.seoDescription;
     if (apiProfile.paymentMethods !== undefined) dbProfile.payment_methods = apiProfile.paymentMethods;
-    if (apiProfile.onboardingCompleted !== undefined) dbProfile.onboarding_completed = apiProfile.onboardingCompleted;
     if (apiProfile.referralSource !== undefined) dbProfile.referral_source = apiProfile.referralSource;
     if (apiProfile.usernameUpdatedAt !== undefined) dbProfile.username_updated_at = apiProfile.usernameUpdatedAt;
     if (apiProfile.bannerBlurColor !== undefined) dbProfile.banner_blur_color = apiProfile.bannerBlurColor;
-    if (apiProfile.tutorialStatus !== undefined) dbProfile.tutorial_status = apiProfile.tutorialStatus;
     if (apiProfile.hideBranding !== undefined) dbProfile.hide_branding = apiProfile.hideBranding;
 
     return dbProfile;
