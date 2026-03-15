@@ -7,6 +7,20 @@ import * as tiktokService from './tiktokService.js';
 import * as twitchService from './twitchService.js';
 
 export const profileService = {
+    // Helper to check and react to plan expiration
+    _checkPlanExpiration(profile: UserProfile): UserProfile {
+        if (profile.planType && profile.planType !== 'free' && profile.subscriptionExpiryDate) {
+            const expiry = new Date(profile.subscriptionExpiryDate);
+            const now = new Date();
+            if (expiry < now) {
+                console.log(`[ProfileService] Plan expired for user ${profile.id} (${profile.username}). Expiry was: ${profile.subscriptionExpiryDate}`);
+                profile.planType = 'free';
+                profile.subscriptionStatus = 'canceled';
+            }
+        }
+        return profile;
+    },
+
     // Helper to attach active integrations to a profile
     async _attachIntegrations(profile: UserProfile, triggerSync: boolean = true): Promise<UserProfile> {
         if (!profile.id) return profile;
@@ -45,7 +59,7 @@ export const profileService = {
 
         if (!data) return null;
 
-        const profile = dbToApi(data as UserProfileDB);
+        const profile = this._checkPlanExpiration(dbToApi(data as UserProfileDB));
         return await this._attachIntegrations(profile, triggerSync);
     },
 
@@ -62,7 +76,7 @@ export const profileService = {
             return null;
         }
 
-        const profile = dbToApi(data as UserProfileDB);
+        const profile = this._checkPlanExpiration(dbToApi(data as UserProfileDB));
         return await this._attachIntegrations(profile);
     },
 
@@ -79,7 +93,7 @@ export const profileService = {
             return null;
         }
 
-        return data ? dbToApi(data as UserProfileDB) : null;
+        return data ? this._checkPlanExpiration(dbToApi(data as UserProfileDB)) : null;
     },
 
     // Get profile by stripe_customer_id
@@ -95,7 +109,7 @@ export const profileService = {
             return null;
         }
 
-        return data ? dbToApi(data as UserProfileDB) : null;
+        return data ? this._checkPlanExpiration(dbToApi(data as UserProfileDB)) : null;
     },
 
     // Update profile
