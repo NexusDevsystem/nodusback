@@ -216,6 +216,11 @@ export const billingController = {
             res.json(invoices);
         } catch (error: any) {
             console.error('Fetch Invoices Error:', error);
+            // If customer doesn't exist or other Stripe error, return empty list
+            // This prevents the whole billing section from crashing due to legacy/test customer IDs
+            if (error.type?.startsWith('Stripe')) {
+                return res.json({ data: [] });
+            }
             res.status(500).json({ error: error.message || 'Falha ao buscar faturas' });
         }
     },

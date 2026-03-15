@@ -63,7 +63,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         // Fetch Latest Users (always include 'nodus' admin)
         const { data: latestUsersRaw, error: latestError } = await supabase
             .from('users')
-            .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, links(count, type), products(count), clicks(count)')
+            .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, links(count), products(count), clicks(count)')
             .order('created_at', { ascending: false })
             .limit(50);
 
@@ -76,7 +76,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         if (!hasNodus) {
             const { data: nodusUser } = await supabase
                 .from('users')
-                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, links(count, type), products(count), clicks(count)')
+                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, links(count), products(count), clicks(count)')
                 .eq('username', 'nodus')
                 .single();
 
