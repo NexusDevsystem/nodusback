@@ -192,3 +192,67 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
         res.status(500).json({ error: 'Erro ao deletar usuário.' });
     }
 };
+
+export const getUserStats = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.userId;
+        const username = req.username;
+        const email = req.email;
+        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+
+        if (!userId || !isAdmin) {
+            res.status(403).json({ error: 'Acesso negado.' });
+            return;
+        }
+
+        const { targetUserId } = req.params;
+
+        // Fetch user data
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id')
+            .eq('id', targetUserId)
+            .single();
+
+        if (userError) throw userError;
+
+        // Fetch Clicks (separated by type)
+        const { data: clicksData, error: clicksError } = await supabase
+            .from('clicks')
+            .select('type')
+            .eq('user_id', targetUserId);
+            
+        if (clicksError) throw clicksError;
+
+        const views = clicksData.filter(c => c.type === 'view').length;
+        const clicks = clicksData.filter(c => c.type === 'click').length;
+
+        // Fetch Link counts
+        const { count: linksCount } = await supabase
+            .from('links')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', targetUserId);
+
+        // Fetch Product counts
+        const { count: productsCount } = await supabase
+            .from('products')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', targetUserId);
+
+        res.json({
+            ...user,
+            views,
+            clicks_count: clicks,
+            links_count: linksCount || 0,
+            products_count: productsCount || 0,
+            // Keep original fields for compatibility with existing components
+            clicks: [{ count: clicks }],
+            links: [{ count: linksCount || 0 }],
+            products: [{ count: productsCount || 0 }]
+        });
+
+    } catch (error: any) {
+        console.error('❌ Error fetching individual user stats:', error);
+        res.status(500).json({ error: 'Erro ao carregar detalhes do usuário.' });
+    }
+};

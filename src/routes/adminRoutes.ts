@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPlatformStats, updateUserProfile, deleteUser } from '../controllers/adminController.js';
+import { getPlatformStats, updateUserProfile, deleteUser, getUserStats } from '../controllers/adminController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -12,5 +12,8 @@ router.patch('/users/:targetUserId', authMiddleware, updateUserProfile);
 
 // Delete user
 router.delete('/users/:targetUserId', authMiddleware, deleteUser);
+
+// Get individual user stats
+router.get('/users/:targetUserId/stats', authMiddleware, getUserStats);
 
 export default router;
