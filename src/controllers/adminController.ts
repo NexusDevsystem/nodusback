@@ -15,68 +15,54 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             return;
         }
 
-        // Fetch Base Counts
-        const { count: totalUsers, error: usersError } = await supabase
-            .from('users')
-            .select('*', { count: 'exact', head: true });
-        if (usersError) throw usersError;
-
-        const { count: totalLinks, error: linksError } = await supabase
-            .from('links')
-            .select('*', { count: 'exact', head: true });
-        if (linksError) throw linksError;
-
-        const { count: totalProducts, error: productsError } = await supabase
-            .from('products')
-            .select('*', { count: 'exact', head: true });
-        if (productsError) throw productsError;
-
-        // Fetch Plan Breakdown
-        const { count: proUsers, error: proError } = await supabase
-            .from('users')
-            .select('*', { count: 'exact', head: true })
-            .neq('plan_type', 'free');
-
-        if (proError) throw proError;
-
-        // Fetch Growth Metrics
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const lastWeek = new Date();
         lastWeek.setDate(lastWeek.getDate() - 7);
 
-        const { count: todayUsers, error: todayError } = await supabase
-            .from('users')
-            .select('*', { count: 'exact', head: true })
-            .gte('created_at', today.toISOString());
+        // Run all queries in parallel for maximum performance
+        const [
+            usersRes,
+            linksRes,
+            productsRes,
+            proRes,
+            todayRes,
+            weeklyRes,
+            latestRes,
+            viewsRes,
+            clicksRes
+        ] = await Promise.all([
+            supabase.from('users').select('*', { count: 'exact', head: true }),
+            supabase.from('links').select('*', { count: 'exact', head: true }),
+            supabase.from('products').select('*', { count: 'exact', head: true }),
+            supabase.from('users').select('*', { count: 'exact', head: true }).neq('plan_type', 'free'),
+            supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+            supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', lastWeek.toISOString()),
+            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id').order('created_at', { ascending: false }).limit(50),
+            supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'view'),
+            supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'click')
+        ]);
 
-        if (todayError) throw todayError;
-
-        const { count: weeklyUsers, error: weeklyError } = await supabase
-            .from('users')
-            .select('*', { count: 'exact', head: true })
-            .gte('created_at', lastWeek.toISOString());
-
-        if (weeklyError) throw weeklyError;
-
-        // Fetch Latest Users (always include 'nodus' admin)
-        const { data: latestUsersRaw, error: latestError } = await supabase
-            .from('users')
-            .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, links(count), products(count), clicks(count)')
-            .order('created_at', { ascending: false })
-            .limit(50);
-
-        if (latestError) throw latestError;
+        // Check for all errors
+        const errors = [usersRes, linksRes, productsRes, proRes, todayRes, weeklyRes, latestRes, viewsRes, clicksRes]
+            .filter(r => r.error)
+            .map(r => r.error);
+        
+        if (errors.length > 0) {
+            console.error('⚠️ Multiple errors in admin stats queries:', errors);
+            // We only throw if critical data is missing
+            if (usersRes.error || latestRes.error) throw usersRes.error || latestRes.error;
+        }
 
         // Ensure nodus is included if missing from the latest
-        let latestUsers = latestUsersRaw || [];
-        const hasNodus = latestUsers.some(u => u.username === 'nodus');
+        let latestUsers = latestRes.data || [];
+        const hasNodus = latestUsers.some((u: any) => u.username === 'nodus');
 
         if (!hasNodus) {
             const { data: nodusUser } = await supabase
                 .from('users')
-                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, links(count), products(count), clicks(count)')
+                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id')
                 .eq('username', 'nodus')
                 .single();
 
@@ -87,41 +73,30 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             latestUsers = latestUsers.slice(0, 50);
         }
 
-        // Fetch Total Views
-        const { count: totalViews, error: viewsError } = await supabase
-            .from('clicks')
-            .select('*', { count: 'exact', head: true })
-            .eq('type', 'view');
-
-        if (viewsError) throw viewsError;
-
-        // Fetch Total Clicks
-        const { count: totalClicks, error: clicksError } = await supabase
-            .from('clicks')
-            .select('*', { count: 'exact', head: true })
-            .eq('type', 'click');
-
-        if (clicksError) throw clicksError;
+        const totalUsers = usersRes.count || 0;
+        const proUsers = proRes.count || 0;
+        const totalViews = viewsRes.count || 0;
+        const totalClicks = clicksRes.count || 0;
 
         // Calculate CTR
-        const globalCTR = totalViews && totalViews > 0
-            ? ((totalClicks || 0) / totalViews) * 100
+        const globalCTR = totalViews > 0
+            ? (totalClicks / totalViews) * 100
             : 0;
 
         res.json({
             summary: {
-                totalUsers: totalUsers || 0,
-                proUsers: proUsers || 0,
-                freeUsers: (totalUsers || 0) - (proUsers || 0),
-                totalLinks: totalLinks || 0,
-                totalProducts: totalProducts || 0,
-                totalViews: totalViews || 0,
-                totalClicks: totalClicks || 0,
+                totalUsers,
+                proUsers,
+                freeUsers: totalUsers - proUsers,
+                totalLinks: linksRes.count || 0,
+                totalProducts: productsRes.count || 0,
+                totalViews,
+                totalClicks,
                 globalCTR: globalCTR.toFixed(2),
             },
             growth: {
-                today: todayUsers || 0,
-                thisWeek: weeklyUsers || 0
+                today: todayRes.count || 0,
+                thisWeek: weeklyRes.count || 0
             },
             latestUsers: latestUsers || []
         });
@@ -207,48 +182,32 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
 
         const { targetUserId } = req.params;
 
-        // Fetch user data
-        const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id')
-            .eq('id', targetUserId)
-            .single();
+        // Fetch everything in parallel
+        const [userRes, viewsRes, clicksRes, linksRes, productsRes] = await Promise.all([
+            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id').eq('id', targetUserId).single(),
+            supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'view'),
+            supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'click'),
+            supabase.from('links').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId),
+            supabase.from('products').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId)
+        ]);
 
-        if (userError) throw userError;
+        if (userRes.error) throw userRes.error;
 
-        // Fetch Clicks (separated by type)
-        const { data: clicksData, error: clicksError } = await supabase
-            .from('clicks')
-            .select('type')
-            .eq('user_id', targetUserId);
-            
-        if (clicksError) throw clicksError;
-
-        const views = clicksData.filter(c => c.type === 'view').length;
-        const clicks = clicksData.filter(c => c.type === 'click').length;
-
-        // Fetch Link counts
-        const { count: linksCount } = await supabase
-            .from('links')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', targetUserId);
-
-        // Fetch Product counts
-        const { count: productsCount } = await supabase
-            .from('products')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', targetUserId);
+        const views = viewsRes.count || 0;
+        const clicks = clicksRes.count || 0;
+        const linksCount = linksRes.count || 0;
+        const productsCount = productsRes.count || 0;
 
         res.json({
-            ...user,
+            ...userRes.data,
             views,
             clicks_count: clicks,
-            links_count: linksCount || 0,
-            products_count: productsCount || 0,
+            links_count: linksCount,
+            products_count: productsCount,
             // Keep original fields for compatibility with existing components
             clicks: [{ count: clicks }],
-            links: [{ count: linksCount || 0 }],
-            products: [{ count: productsCount || 0 }]
+            links: [{ count: linksCount }],
+            products: [{ count: productsCount }]
         });
 
     } catch (error: any) {
