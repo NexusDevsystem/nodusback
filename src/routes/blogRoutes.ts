@@ -9,6 +9,7 @@ router.get('/admin', authMiddleware, blogController.getAdminPosts);
 router.post('/', authMiddleware, blogController.createPost);
 router.patch('/:id', authMiddleware, blogController.updatePost);
 router.delete('/:id', authMiddleware, blogController.deletePost);
+router.put('/reorder', authMiddleware, blogController.reorderPosts);
 
 // Public routes
 router.get('/', optionalAuthMiddleware, blogController.getAllPosts);

@@ -131,6 +131,7 @@ export interface BlogPostDB {
     published_at?: string;
     created_at?: string;
     updated_at?: string;
+    position?: number;
 }
 
 
@@ -247,6 +248,7 @@ export interface BlogPost {
     likesCount: number;
     publishedAt?: string;
     createdAt?: string;
+    position?: number;
 }
 
 // Mapping Functions
@@ -497,7 +499,8 @@ export function blogPostDbToApi(db: BlogPostDB): BlogPost {
         isPublished: db.is_published,
         likesCount: db.likes_count || 0,
         publishedAt: db.published_at,
-        createdAt: db.created_at
+        createdAt: db.created_at,
+        position: db.position || 0
     };
 }
 
@@ -514,5 +517,6 @@ export function blogPostApiToDb(api: Partial<BlogPost>): Partial<BlogPostDB> {
     if (api.isPublished !== undefined) db.is_published = api.isPublished;
     if (api.likesCount !== undefined) db.likes_count = api.likesCount;
     if (api.publishedAt !== undefined) db.published_at = api.publishedAt;
+    if (api.position !== undefined) db.position = api.position;
     return db;
 }

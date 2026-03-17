@@ -12,7 +12,7 @@ export const getAllPosts = async (req: AuthRequest, res: Response) => {
             .from('blog_posts')
             .select('*')
             .eq('is_published', true)
-            .order('published_at', { ascending: false });
+            .order('position', { ascending: true });
 
         if (error) throw error;
 
@@ -36,7 +36,7 @@ export const getAdminPosts = async (req: AuthRequest, res: Response) => {
         const { data, error } = await supabase
             .from('blog_posts')
             .select('*')
-            .order('created_at', { ascending: false });
+            .order('position', { ascending: true });
 
         if (error) throw error;
 
@@ -97,6 +97,7 @@ export const createPost = async (req: AuthRequest, res: Response) => {
             .from('blog_posts')
             .insert({
                 ...postData,
+                position: postData.position ?? 0,
                 published_at: postData.is_published ? new Date().toISOString() : null
             })
             .select()
@@ -108,6 +109,39 @@ export const createPost = async (req: AuthRequest, res: Response) => {
     } catch (error: any) {
         console.error('Error creating blog post:', error);
         return res.status(500).json({ error: 'Failed to create blog post' });
+    }
+};
+
+/**
+ * Superadmin: Reorder blog posts
+ */
+export const reorderPosts = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Acesso negado' });
+        }
+
+        const { posts } = req.body;
+        if (!Array.isArray(posts)) {
+            return res.status(400).json({ error: 'Invalid data format' });
+        }
+
+        // Use a transaction or multiple updates
+        // Supabase doesn't support bulk update with different values easily in one call without extra extensions
+        // but we can loop through them or use a rpc
+        const updates = posts.map((post: any, index: number) => 
+            supabase
+                .from('blog_posts')
+                .update({ position: index })
+                .eq('id', post.id)
+        );
+
+        await Promise.all(updates);
+
+        return res.json({ success: true });
+    } catch (error: any) {
+        console.error('Error reordering blog posts:', error);
+        return res.status(500).json({ error: 'Failed to reorder blog posts' });
     }
 };
 
