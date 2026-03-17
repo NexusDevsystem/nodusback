@@ -170,3 +170,36 @@ export const deletePost = async (req: AuthRequest, res: Response) => {
         return res.status(500).json({ error: 'Failed to delete blog post' });
     }
 };
+
+/**
+ * Public: Upvote a blog post
+ */
+export const upvotePost = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        
+        const { data: current, error: fetchError } = await supabase
+            .from('blog_posts')
+            .select('likes_count')
+            .eq('id', id)
+            .single();
+            
+        if (fetchError || !current) {
+            return res.status(404).json({ error: 'Post not found' });
+        }
+        
+        const { data: updated, error: updateError } = await supabase
+            .from('blog_posts')
+            .update({ likes_count: (current.likes_count || 0) + 1 })
+            .eq('id', id)
+            .select()
+            .single();
+            
+        if (updateError) throw updateError;
+
+        return res.json(blogPostDbToApi(updated as BlogPostDB));
+    } catch (error: any) {
+        console.error('Error upvoting blog post:', error);
+        return res.status(500).json({ error: 'Failed to upvote blog post' });
+    }
+};

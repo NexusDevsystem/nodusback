@@ -7,6 +7,7 @@ const router = Router();
 // Public routes
 router.get('/', optionalAuthMiddleware, blogController.getAllPosts);
 router.get('/:slug', optionalAuthMiddleware, blogController.getPostBySlug);
+router.post('/:id/upvote', optionalAuthMiddleware, blogController.upvotePost);
 
 // Admin routes (Protected by authMiddleware and role check in controller)
 router.get('/admin/posts', authMiddleware, blogController.getAdminPosts);
