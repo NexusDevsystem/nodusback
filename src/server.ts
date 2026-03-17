@@ -77,11 +77,22 @@ app.use(hpp());
 // 3. Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 1000, // Increased for editor/development
+    max: 1000, 
     standardHeaders: true,
     legacyHeaders: false,
-    message: 'Too many requests from this IP, please try again after 15 minutes'
+    message: 'Too many requests from this IP'
 });
+
+// 🔐 Strict Rate Limiting for Auth (Brute-force protection)
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20, // Only 20 attempts per 15 minutes
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many login attempts, please try again after 15 minutes'
+});
+
+app.use('/api/auth/', authLimiter);
 app.use(limiter);
 
 // 2. Request logging

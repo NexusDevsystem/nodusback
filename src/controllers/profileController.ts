@@ -81,16 +81,7 @@ export const profileController = {
             }
 
             const updates = req.body;
-
-            // Sanitize customCSS to prevent XSS
-            if (updates.customCSS) {
-                // @ts-ignore
-                updates.customCSS = xss(updates.customCSS, {
-                    whiteList: {}, // Minimal whitelist, strip tags mostly
-                    stripIgnoreTag: true,
-                    stripIgnoreTagBody: ['script'] // Explicitly remove script tags
-                });
-            }
+            delete updates.customCSS;
 
             const profile = await profileService.updateProfile(req.userId, updates);
 

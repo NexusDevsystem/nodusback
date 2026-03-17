@@ -97,12 +97,27 @@ export const linkController = {
     async updateLink(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
-            const link = await linkService.updateLink(id, req.body);
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
 
-            if (!link) {
+            // 🔐 OWNERSHIP CHECK: Ensure the link belongs to the user
+            const { data: existingLink } = await supabase
+                .from('links')
+                .select('user_id')
+                .eq('id', id)
+                .single();
+
+            if (!existingLink) {
                 return res.status(404).json({ error: 'Link not found' });
             }
 
+            if (existingLink.user_id !== req.profileId) {
+                console.warn(`🚨 [SECURITY] User ${req.profileId} attempted to update link ${id} belonging to ${existingLink.user_id}`);
+                return res.status(403).json({ error: 'Forbidden: You do not own this link' });
+            }
+
+            const link = await linkService.updateLink(id, req.body);
             res.json(link);
         } catch (error) {
             console.error('Error updating link:', error);
@@ -114,12 +129,27 @@ export const linkController = {
     async deleteLink(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
-            const deleted = await linkService.deleteLink(id);
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
 
-            if (!deleted) {
+            // 🔐 OWNERSHIP CHECK: Ensure the link belongs to the user
+            const { data: existingLink } = await supabase
+                .from('links')
+                .select('user_id')
+                .eq('id', id)
+                .single();
+
+            if (!existingLink) {
                 return res.status(404).json({ error: 'Link not found' });
             }
 
+            if (existingLink.user_id !== req.profileId) {
+                console.warn(`🚨 [SECURITY] User ${req.profileId} attempted to delete link ${id} belonging to ${existingLink.user_id}`);
+                return res.status(403).json({ error: 'Forbidden: You do not own this link' });
+            }
+
+            const deleted = await linkService.deleteLink(id);
             res.status(204).send();
         } catch (error) {
             console.error('Error deleting link:', error);
@@ -215,9 +245,29 @@ export const linkController = {
                 return res.status(400).json({ error: 'URL is required' });
             }
 
+            // 🔐 SSRF PROTECTION: Prevent accessing internal resources or non-standard protocols
+            try {
+                const parsedUrl = new URL(url);
+                if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                    return res.status(400).json({ error: 'Invalid protocol' });
+                }
+                
+                // Block private/local IP ranges
+                const hostname = parsedUrl.hostname;
+                if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.')) {
+                    return res.status(400).json({ error: 'Restricted domain' });
+                }
+            } catch (e) {
+                return res.status(400).json({ error: 'Malformed URL' });
+            }
+
             // 1. Download the image
             const axios = (await import('axios')).default;
-            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            const response = await axios.get(url, { 
+                responseType: 'arraybuffer',
+                timeout: 5000,
+                maxContentLength: 5 * 1024 * 1024 // Limit to 5MB
+            });
             const buffer = Buffer.from(response.data, 'binary');
             const contentType = response.headers['content-type'] || 'image/jpeg';
 
