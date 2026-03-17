@@ -116,6 +116,22 @@ export interface AnalyticsEvent {
     created_at: string;
 }
 
+export interface BlogPostDB {
+    id?: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    content: string;
+    image_url?: string;
+    category: string;
+    author: string;
+    color?: string;
+    is_published: boolean;
+    published_at?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
 
 // API types (camelCase for frontend compatibility)
 export interface UserProfile {
@@ -214,6 +230,21 @@ export interface Product {
     url: string;
     discountCode?: string;
     collection?: string;
+}
+
+export interface BlogPost {
+    id: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    content: string;
+    imageUrl?: string;
+    category: string;
+    author: string;
+    color?: string;
+    isPublished: boolean;
+    publishedAt?: string;
+    createdAt?: string;
 }
 
 // Mapping Functions
@@ -447,5 +478,37 @@ export function eventApiToDb(api: Partial<EventItem>, userId: string): Partial<E
     if (api.scheduleStart !== undefined) db.schedule_start = api.scheduleStart;
     if (api.scheduleEnd !== undefined) db.schedule_end = api.scheduleEnd;
 
+    return db;
+}
+
+export function blogPostDbToApi(db: BlogPostDB): BlogPost {
+    return {
+        id: db.id || '',
+        title: db.title,
+        slug: db.slug,
+        excerpt: db.excerpt,
+        content: db.content,
+        imageUrl: db.image_url,
+        category: db.category,
+        author: db.author,
+        color: db.color,
+        isPublished: db.is_published,
+        publishedAt: db.published_at,
+        createdAt: db.created_at
+    };
+}
+
+export function blogPostApiToDb(api: Partial<BlogPost>): Partial<BlogPostDB> {
+    const db: Partial<BlogPostDB> = {};
+    if (api.title !== undefined) db.title = api.title;
+    if (api.slug !== undefined) db.slug = api.slug;
+    if (api.excerpt !== undefined) db.excerpt = api.excerpt;
+    if (api.content !== undefined) db.content = api.content;
+    if (api.imageUrl !== undefined) db.image_url = api.imageUrl;
+    if (api.category !== undefined) db.category = api.category;
+    if (api.author !== undefined) db.author = api.author;
+    if (api.color !== undefined) db.color = api.color;
+    if (api.isPublished !== undefined) db.is_published = api.isPublished;
+    if (api.publishedAt !== undefined) db.published_at = api.publishedAt;
     return db;
 }

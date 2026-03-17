@@ -11,6 +11,7 @@ export interface AuthRequest extends Request {
     profileId?: string;
     username?: string;
     email?: string;
+    role?: 'user' | 'superadmin';
 }
 
 // Simple in-memory cache to avoid hammering Google API on every concurrent request
@@ -50,7 +51,9 @@ export const authMiddleware = async (
             req.profileId = profile.id;
             req.username = profile.username;
             req.email = payload.email;
-            console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Username: ${profile.username || 'N/A'})`);
+            req.role = payload.email.toLowerCase() === 'jaoomarcos75@gmail.com' ? 'superadmin' : 'user';
+            
+            console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Role: ${req.role})`);
             return next();
         } catch (jwtError) {
             // Not a valid internal JWT → fall through to Google verification
@@ -148,8 +151,9 @@ export const authMiddleware = async (
         req.profileId = profile.id;
         req.username = profile.username;
         req.email = sanitizedEmail;
+        req.role = sanitizedEmail === 'jaoomarcos75@gmail.com' ? 'superadmin' : 'user';
 
-        console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Onboarded: ${profile.onboarding_completed ?? 'N/A'}, Username: ${profile.username || 'N/A'})`);
+        console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Role: ${req.role})`);
 
         next();
     } catch (error: any) {
