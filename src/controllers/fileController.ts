@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import { supabase } from '../config/supabaseClient.js';
 
 // Extend Express Request interface to include user and file
 interface MulterRequest extends Request {
@@ -77,6 +78,17 @@ const fileController = {
             const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
             const fileUrl = `${baseUrl}/uploads/files/${userId}/${multerReq.file.filename}`;
 
+            // Register asset in database for permanent tracking
+            await supabase
+                .from('blog_assets')
+                .insert({
+                    user_id: userId,
+                    filename: multerReq.file.filename,
+                    url: fileUrl,
+                    mimetype: multerReq.file.mimetype,
+                    size: multerReq.file.size
+                });
+
             res.json({
                 success: true,
                 message: 'File uploaded successfully',
@@ -142,6 +154,13 @@ const fileController = {
 
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
+                
+                // Remove from database tracking
+                await supabase
+                    .from('blog_assets')
+                    .delete()
+                    .eq('filename', safeFilename);
+
                 res.json({ success: true, message: 'File deleted successfully' });
             } else {
                 res.status(404).json({ error: true, message: 'File not found' });
