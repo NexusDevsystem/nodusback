@@ -49,11 +49,16 @@ export const upload = multer({
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
         // Allowed file types
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        const allowedTypes = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'application/pdf', 'application/msword', 
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'video/mp4', 'video/webm'
+        ];
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('Invalid file type. Only Images, PDFs and Docs are allowed.'));
+            cb(new Error('Invalid file type. Only Images, Videos, PDFs and Docs are allowed.'));
         }
     }
 });
@@ -86,7 +91,8 @@ const fileController = {
             });
         } catch (error: any) {
             console.error('Upload error:', error);
-            res.status(500).json({ error: true, message: 'Error uploading file', details: error.message });
+            const status = error.message?.includes('Invalid file type') ? 400 : 500;
+            res.status(status).json({ error: true, message: error.message || 'Error uploading file' });
         }
     },
 
