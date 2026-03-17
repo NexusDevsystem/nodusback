@@ -20,28 +20,8 @@ if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Configure Multer Storage
-const storage = multer.diskStorage({
-    destination: (req: Request, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
-        const userId = (req as any).userId;
-        if (!userId) {
-            return cb(new Error('User not authenticated'), '');
-        }
-
-        const userDir = path.join(UPLOADS_DIR, userId);
-        if (!fs.existsSync(userDir)) {
-            fs.mkdirSync(userDir, { recursive: true });
-        }
-        cb(null, userDir);
-    },
-    filename: (req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-        // Sanitize filename: remove special chars, keep extension
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
-        cb(null, `${name}-${uniqueSuffix}${ext}`);
-    }
-});
+// Configure Multer Storage (Using Memory Storage for direct upload to Supabase)
+const storage = multer.memoryStorage();
 
 export const upload = multer({
     storage: storage,
@@ -75,16 +55,40 @@ const fileController = {
             }
 
             const userId = (req as any).userId;
-            const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-            const fileUrl = `${baseUrl}/uploads/files/${userId}/${multerReq.file.filename}`;
+            
+            // Generate a unique filename to avoid collisions
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            const ext = path.extname(multerReq.file.originalname);
+            const name = path.basename(multerReq.file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
+            const fileName = `${name}-${uniqueSuffix}${ext}`;
+            const filePath = `${userId}/${fileName}`;
+
+            // Upload to Supabase Storage
+            const { data, error } = await supabase.storage
+                .from('uploads')
+                .upload(filePath, multerReq.file.buffer, {
+                    contentType: multerReq.file.mimetype,
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            if (error) {
+                console.error('Supabase storage upload error:', error);
+                throw new Error('Failed to upload file to cloud storage');
+            }
+
+            // Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('uploads')
+                .getPublicUrl(filePath);
 
             // Register asset in database for permanent tracking
             await supabase
                 .from('blog_assets')
                 .insert({
                     user_id: userId,
-                    filename: multerReq.file.filename,
-                    url: fileUrl,
+                    filename: fileName,
+                    url: publicUrl,
                     mimetype: multerReq.file.mimetype,
                     size: multerReq.file.size
                 });
@@ -94,9 +98,9 @@ const fileController = {
                 message: 'File uploaded successfully',
                 file: {
                     name: multerReq.file.originalname,
-                    filename: multerReq.file.filename,
+                    filename: fileName,
                     size: multerReq.file.size,
-                    url: fileUrl,
+                    url: publicUrl,
                     mimetype: multerReq.file.mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -112,29 +116,31 @@ const fileController = {
     listFiles: async (req: Request, res: Response) => {
         try {
             const userId = (req as any).userId;
-            const userDir = path.join(UPLOADS_DIR, userId);
+            
+            const { data: files, error } = await supabase.storage
+                .from('uploads')
+                .list(userId, {
+                    limit: 100,
+                    offset: 0,
+                    sortBy: { column: 'created_at', order: 'desc' },
+                });
 
-            if (!fs.existsSync(userDir)) {
-                return res.json({ success: true, files: [] });
-            }
+            if (error) throw error;
 
-            const files = fs.readdirSync(userDir).map(filename => {
-                const filePath = path.join(userDir, filename);
-                const stats = fs.statSync(filePath);
-                const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+            const formattedFiles = (files || []).map(file => {
+                const { data: { publicUrl } } = supabase.storage
+                    .from('uploads')
+                    .getPublicUrl(`${userId}/${file.name}`);
 
                 return {
-                    filename,
-                    url: `${baseUrl}/uploads/files/${userId}/${filename}`,
-                    size: stats.size,
-                    uploadedAt: stats.mtime.toISOString()
+                    filename: file.name,
+                    url: publicUrl,
+                    size: file.metadata?.size || 0,
+                    uploadedAt: file.created_at
                 };
             });
 
-            // Sort by newest first
-            files.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-
-            res.json({ success: true, files });
+            res.json({ success: true, files: formattedFiles });
         } catch (error: any) {
             console.error('List files error:', error);
             res.status(500).json({ error: true, message: 'Error listing files' });
@@ -147,24 +153,24 @@ const fileController = {
             const userId = (req as any).userId;
             const { filename } = req.params;
 
-            // Security check: prevent directory traversal
+            // Security check: prevent directory traversal (though Supabase handles this)
             const safeFilename = path.basename(filename);
-            const userDir = path.join(UPLOADS_DIR, userId);
-            const filePath = path.join(userDir, safeFilename);
+            const filePath = `${userId}/${safeFilename}`;
 
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
+            const { data, error } = await supabase.storage
+                .from('uploads')
+                .remove([filePath]);
+
+            if (error) throw error;
                 
-                // Remove from database tracking
-                await supabase
-                    .from('blog_assets')
-                    .delete()
-                    .eq('filename', safeFilename);
+            // Remove from database tracking
+            await supabase
+                .from('blog_assets')
+                .delete()
+                .eq('filename', safeFilename)
+                .eq('user_id', userId);
 
-                res.json({ success: true, message: 'File deleted successfully' });
-            } else {
-                res.status(404).json({ error: true, message: 'File not found' });
-            }
+            res.json({ success: true, message: 'File deleted successfully' });
         } catch (error: any) {
             console.error('Delete file error:', error);
             res.status(500).json({ error: true, message: 'Error deleting file' });
