@@ -297,6 +297,7 @@ export const syncData = async (userId: string) => {
             ...integration.profile_data,
             follower_count: followersData.total || integration.profile_data.follower_count,
             is_live: isLive,
+            stream_title: isLive && streamData.data?.[0]?.title ? streamData.data[0].title : (integration.profile_data.stream_title || null),
             current_stream: isLive ? streamData.data[0] : null
         };
 
@@ -342,8 +343,8 @@ export const checkAndSync = async (userId: string) => {
         const now = new Date();
         const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
 
-        // Sync every 30 mins
-        if (diffMinutes >= 30) {
+        // Sync every 5 mins for live detector
+        if (diffMinutes >= 5) {
             syncData(userId).catch(e => console.error('[TwitchSync] Failed:', e));
         }
     } catch (e) {

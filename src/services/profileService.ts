@@ -219,8 +219,8 @@ export const profileService = {
     // Public Bootstrap (Profile + Links + Products) by username
     async getPublicBootstrapData(username: string) {
         // 1. Get profile first as we need the user_id for links/products
-        // Pass false to disable automatic social background syncing for public views
-        const profile = await this.getProfileByUsername(username, false);
+        // Now passing true to permit background social syncing for public views if data is stale
+        const profile = await this.getProfileByUsername(username, true);
         if (!profile) return null;
 
         // 2. Fetch links and products in parallel using the user_id
