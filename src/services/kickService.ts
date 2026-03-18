@@ -295,3 +295,31 @@ export const syncData = async (userId: string) => {
         console.error('[KickService] Sync error:', err);
     }
 };
+
+/**
+ * Check if we need to sync Kick data (every 15 mins)
+ */
+export const checkAndSync = async (userId: string) => {
+    try {
+        const { data: integration } = await supabase
+            .from('social_integrations')
+            .select('id, updated_at')
+            .eq('user_id', userId)
+            .eq('provider', 'kick')
+            .limit(1)
+            .maybeSingle();
+
+        if (!integration) return;
+
+        const lastSync = integration.updated_at ? new Date(integration.updated_at) : new Date(0);
+        const now = new Date();
+        const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
+
+        // Sync every 15 mins for better live detection
+        if (diffMinutes >= 15) {
+            syncData(userId).catch(e => console.error('[KickSync] Failed:', e));
+        }
+    } catch (e) {
+        console.error('[KickSync] Check error:', e);
+    }
+};

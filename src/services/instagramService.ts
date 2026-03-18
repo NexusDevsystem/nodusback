@@ -13,13 +13,10 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Scopes for Instagram Login for Business
+    // Minimum scopes (only what is strictly necessary)
     const scopes = [
-        'instagram_business_basic',
-        'instagram_business_manage_messages',
-        'instagram_business_manage_comments',
-        'instagram_business_content_publish',
-        'instagram_business_manage_insights'
+        'instagram_basic',
+        'instagram_content_publish'
     ].join(',');
 
     const baseUrl = 'https://www.instagram.com/oauth/authorize';

@@ -5,6 +5,8 @@ import { productService } from './productService.js';
 import * as instagramService from './instagramService.js';
 import * as tiktokService from './tiktokService.js';
 import * as twitchService from './twitchService.js';
+import * as kickService from './kickService.js';
+import * as youtubeService from './youtubeService.js';
 
 export const profileService = {
     // Helper to check and react to plan expiration
@@ -39,6 +41,8 @@ export const profileService = {
             instagramService.checkAndSync(profile.id).catch(e => console.error('[InstagramSync] Failed:', e));
             tiktokService.checkAndSync(profile.id).catch(e => console.error('[TikTokSync] Failed:', e));
             twitchService.checkAndSync(profile.id).catch(e => console.error('[TwitchSync] Failed:', e));
+            kickService.checkAndSync(profile.id).catch(e => console.error('[KickSync] Failed:', e));
+            youtubeService.checkAndSync(profile.id).catch(e => console.error('[YouTubeSync] Failed:', e));
         }
 
         return profile;
