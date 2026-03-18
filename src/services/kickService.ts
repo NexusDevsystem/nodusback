@@ -325,10 +325,10 @@ export const checkAndSync = async (userId: string) => {
 
         const lastSync = integration.updated_at ? new Date(integration.updated_at) : new Date(0);
         const now = new Date();
-        const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
+        const diffSeconds = Math.floor((now.getTime() - lastSync.getTime()) / 1000);
 
-        // Sync every 2 mins for better live detection
-        if (diffMinutes >= 2) {
+        // Sync every 10 seconds for truly instant-feeling live detection
+        if (diffSeconds >= 10) {
             syncData(userId).catch(e => console.error('[KickSync] Failed:', e));
         }
     } catch (e) {

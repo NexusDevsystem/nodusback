@@ -251,8 +251,8 @@ export const checkAndSync = async (userId: string) => {
         const now = new Date();
         const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
 
-        // Sync every 5 mins for live detection
-        if (diffMinutes >= 5) {
+        // Sync every 2 mins for live detection (YouTube quota management)
+        if (diffMinutes >= 2) {
             syncData(userId).catch(e => console.error('[YouTubeSync] Failed:', e));
         }
     } catch (err) {
