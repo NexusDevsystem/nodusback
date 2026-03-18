@@ -13,7 +13,7 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Define correct scope for bio-link (READ-ONLY)
+    // Standalone Instagram Login for Business/Professional
     const scopes = ['instagram_basic'].join(',');
 
     // IMPORTANT: In prod, backendBaseUrl should be your Railway URL
