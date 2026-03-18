@@ -259,16 +259,28 @@ export const syncData = async (userId: string) => {
 
         if (!integration) return;
 
-        // Fetch latest channel data
-        const username = integration.profile_data.username;
-        const channelRes = await fetch(`https://api.kick.com/public/v1/channels/${username}`);
+        // Fetch latest channel data using the stored token
+        const channelRes = await fetch(`https://api.kick.com/public/v1/channels`, {
+            headers: { 'Authorization': `Bearer ${integration.access_token}` }
+        });
         const channelData = await channelRes.json() as any;
+
+        let isLive = false;
+        let followerCount = integration.profile_data.follower_count;
+        let currentStream = null;
+
+        if (channelData && Array.isArray(channelData.data) && channelData.data.length > 0) {
+            const c = channelData.data[0];
+            followerCount = c.followers_count || followerCount;
+            isLive = c.is_live_now || false;
+            // Kick v1 API may return channel stats
+        }
 
         const updatedProfileData = {
             ...integration.profile_data,
-            follower_count: channelData.followers_count || integration.profile_data.follower_count,
-            is_live: channelData.livestream !== null,
-            current_stream: channelData.livestream
+            follower_count: followerCount,
+            is_live: isLive,
+            current_stream: currentStream
         };
 
         await supabase
