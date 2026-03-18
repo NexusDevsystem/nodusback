@@ -37,8 +37,6 @@ const allowedOrigins = [
     'http://localhost:5173',
     'https://nodus-frontend.vercel.app',
     'https://nodus.app',
-    'https://www.noduscc.com.br',
-    'https://noduscc.com.br',
     'https://nodus.my',
     'https://www.nodus.my'
 ];

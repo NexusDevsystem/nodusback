@@ -88,7 +88,7 @@ export const ensureKickLink = async (userId: string, kickUsername: string) => {
 /**
  * Generates the Kick Auth URL with PKCE
  */
-export const getAuthUrl = (userId: string, origin?: string) => {
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
     const { CLIENT_ID, REDIRECT_URI } = getKickConfig();
     const verifier = generateCodeVerifier();
     const challenge = generateCodeChallenge(verifier);
@@ -100,6 +100,10 @@ export const getAuthUrl = (userId: string, origin?: string) => {
         origin: origin || 'production'
     })).toString('base64');
 
+    const finalRedirectUri = backendBaseUrl 
+        ? `${backendBaseUrl}/api/integrations/kick/callback` 
+        : (REDIRECT_URI || '');
+
     const scopes = [
         'user:read',
         'channel:read'
@@ -108,7 +112,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const baseUrl = 'https://id.kick.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: CLIENT_ID || '',
-        redirect_uri: REDIRECT_URI || '',
+        redirect_uri: finalRedirectUri,
         response_type: 'code',
         scope: scopes,
         state: state,
@@ -122,10 +126,14 @@ export const getAuthUrl = (userId: string, origin?: string) => {
 /**
  * Handles the OAuth callback from Kick with PKCE
  */
-export const handleCallback = async (code: string, userId: string, stateVerifier?: string): Promise<SocialIntegrationDB | null> => {
+export const handleCallback = async (code: string, userId: string, stateVerifier?: string, backendBaseUrl?: string): Promise<SocialIntegrationDB | null> => {
     try {
         const { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI } = getKickConfig();
         console.log(`[KickService] Handling callback for user ${userId}...`);
+
+        const finalRedirectUri = backendBaseUrl 
+            ? `${backendBaseUrl}/api/integrations/kick/callback` 
+            : (REDIRECT_URI || '');
 
         // 1. Exchange code for tokens
         const tokenParams = new URLSearchParams({
@@ -133,7 +141,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
             client_secret: CLIENT_SECRET || '',
             code,
             grant_type: 'authorization_code',
-            redirect_uri: REDIRECT_URI || '',
+            redirect_uri: finalRedirectUri,
             code_verifier: stateVerifier || '' // Mandatory for PKCE
         });
 

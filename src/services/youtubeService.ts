@@ -19,11 +19,21 @@ const SCOPES = [
 /**
  * Generate the Google OAuth URL
  */
-export const getAuthUrl = (userId: string, origin?: string) => {
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
     // We pass userId and origin in the state to retrieve them in the callback
     const state = Buffer.from(JSON.stringify({ userId, origin })).toString('base64');
 
-    return oauth2Client.generateAuthUrl({
+    const finalRedirectUri = backendBaseUrl 
+        ? `${backendBaseUrl}/api/integrations/youtube/callback` 
+        : (process.env.YOUTUBE_REDIRECT_URI || '');
+
+    const client = new google.auth.OAuth2(
+        process.env.YOUTUBE_CLIENT_ID,
+        process.env.YOUTUBE_CLIENT_SECRET,
+        finalRedirectUri
+    );
+
+    return client.generateAuthUrl({
         access_type: 'offline', // Important to get a refreshToken
         scope: SCOPES,
         state: state,
@@ -34,9 +44,19 @@ export const getAuthUrl = (userId: string, origin?: string) => {
 /**
  * Handle the OAuth2 callback, exchange code for tokens and fetch channel data
  */
-export const handleCallback = async (code: string, userId: string) => {
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
+export const handleCallback = async (code: string, userId: string, backendBaseUrl?: string) => {
+    const finalRedirectUri = backendBaseUrl 
+        ? `${backendBaseUrl}/api/integrations/youtube/callback` 
+        : (process.env.YOUTUBE_REDIRECT_URI || '');
+
+    const client = new google.auth.OAuth2(
+        process.env.YOUTUBE_CLIENT_ID,
+        process.env.YOUTUBE_CLIENT_SECRET,
+        finalRedirectUri
+    );
+
+    const { tokens } = await client.getToken(code);
+    client.setCredentials(tokens);
 
     // Fetch channel information
     const youtube = google.youtube({ version: 'v3', auth: oauth2Client });

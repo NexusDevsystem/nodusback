@@ -81,14 +81,18 @@ export const ensureTwitchLink = async (userId: string, twitchUsername: string) =
 /**
  * Generates the Twitch Auth URL
  */
-export const getAuthUrl = (userId: string, origin?: string) => {
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
     const state = Buffer.from(JSON.stringify({ userId, origin: origin || 'production' })).toString('base64');
 
     const { CLIENT_ID, REDIRECT_URI } = getTwitchConfig();
 
+    const finalRedirectUri = backendBaseUrl 
+        ? `${backendBaseUrl}/api/integrations/twitch/callback` 
+        : (REDIRECT_URI || '');
+
     console.log('[TwitchService] Generating Auth URL with:', {
         clientId: CLIENT_ID ? 'set' : 'MISSING',
-        redirectUri: REDIRECT_URI
+        redirectUri: finalRedirectUri
     });
 
     const scopes = [
@@ -99,7 +103,7 @@ export const getAuthUrl = (userId: string, origin?: string) => {
     const baseUrl = 'https://id.twitch.tv/oauth2/authorize';
     const params = new URLSearchParams({
         client_id: CLIENT_ID || '',
-        redirect_uri: REDIRECT_URI || '',
+        redirect_uri: finalRedirectUri,
         response_type: 'code',
         scope: scopes,
         state: state
@@ -111,10 +115,14 @@ export const getAuthUrl = (userId: string, origin?: string) => {
 /**
  * Handles the OAuth callback from Twitch
  */
-export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
+export const handleCallback = async (code: string, userId: string, backendBaseUrl?: string): Promise<SocialIntegrationDB | null> => {
     try {
         const { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI } = getTwitchConfig();
         console.log(`[TwitchService] Handling callback for user ${userId}...`);
+
+        const finalRedirectUri = backendBaseUrl 
+            ? `${backendBaseUrl}/api/integrations/twitch/callback` 
+            : (REDIRECT_URI || '');
 
         // 1. Exchange code for tokens
         const tokenParams = new URLSearchParams({
@@ -122,12 +130,15 @@ export const handleCallback = async (code: string, userId: string): Promise<Soci
             client_secret: CLIENT_SECRET || '',
             code,
             grant_type: 'authorization_code',
-            redirect_uri: REDIRECT_URI || ''
+            redirect_uri: finalRedirectUri
         });
 
         const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
             method: 'POST',
-            body: tokenParams
+            body: tokenParams.toString(),
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
         });
 
         const tokenData = await tokenRes.json() as any;

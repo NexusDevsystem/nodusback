@@ -7,43 +7,51 @@ const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
 
 /**
  * Generates the Instagram Login (for Business/Professional) Auth URL
- * This allows professional accounts to login directly via Instagram without a Facebook Page.
+ * We now make the redirect_uri dynamic to work both in dev and prod!
  */
-export const getAuthUrl = (userId: string, origin?: string) => {
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
     const csrfState = Math.random().toString(36).substring(7);
     const state = `${csrfState}_${userId}_${origin || 'production'}`;
 
-    // Minimum scopes (only what is strictly necessary)
-    const scopes = [
-        'instagram_basic',
-        'instagram_content_publish'
-    ].join(',');
+    // Define correct scope for bio-link (READ-ONLY)
+    const scopes = ['instagram_basic'].join(',');
+
+    // IMPORTANT: In prod, backendBaseUrl should be your Railway URL
+    // We try to use the backendBaseUrl first, then fallback to current process env
+    const finalRedirectUri = backendBaseUrl 
+        ? `${backendBaseUrl}/api/integrations/instagram/callback` 
+        : (REDIRECT_URI || '');
 
     const baseUrl = 'https://www.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
-        redirect_uri: REDIRECT_URI || '',
+        redirect_uri: finalRedirectUri,
         scope: scopes,
         response_type: 'code',
         state: state
     });
 
+    console.log(`[InstagramService] Auth URL with redirect: ${finalRedirectUri}`);
     return `${baseUrl}?${params.toString()}`;
 };
 
 /**
  * Handles the OAuth callback for Instagram Login (Professional)
  */
-export const handleCallback = async (code: string, userId: string): Promise<SocialIntegrationDB | null> => {
+export const handleCallback = async (code: string, userId: string, backendBaseUrl?: string): Promise<SocialIntegrationDB | null> => {
     try {
         console.log(`[InstagramService] Handling Instagram Login callback for user ${userId}...`);
+
+        const finalRedirectUri = backendBaseUrl 
+            ? `${backendBaseUrl}/api/integrations/instagram/callback` 
+            : (REDIRECT_URI || '');
 
         // 1. Exchange short-lived token
         const params = new URLSearchParams();
         params.append('client_id', APP_ID || '');
         params.append('client_secret', APP_SECRET || '');
         params.append('grant_type', 'authorization_code');
-        params.append('redirect_uri', REDIRECT_URI || '');
+        params.append('redirect_uri', finalRedirectUri);
         params.append('code', code);
 
         const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
