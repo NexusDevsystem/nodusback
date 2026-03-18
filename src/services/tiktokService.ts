@@ -165,3 +165,31 @@ export const syncFeed = async (userId: string) => {
         throw error;
     }
 };
+/**
+ * Check if we need to sync TikTok data (every 60 mins)
+ */
+export const checkAndSync = async (userId: string) => {
+    try {
+        const { data: integration } = await supabase
+            .from('social_integrations')
+            .select('id, updated_at')
+            .eq('user_id', userId)
+            .eq('provider', 'tiktok')
+            .limit(1)
+            .maybeSingle();
+
+        if (!integration) return;
+
+        const lastSync = integration.updated_at ? new Date(integration.updated_at) : new Date(0);
+        const now = new Date();
+        const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / (1000 * 60));
+
+        // Sync if older than 60 minutes
+        if (diffMinutes >= 60) {
+            console.log(`[TikTokService] Auto-syncing for user ${userId} (Last sync: ${diffMinutes}m ago)`);
+            syncFeed(userId).catch(err => console.error('[TikTokSync] Background sync error:', err));
+        }
+    } catch (err) {
+        console.error('[TikTokSync] Check error:', err);
+    }
+};

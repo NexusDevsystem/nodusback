@@ -38,11 +38,11 @@ export const profileService = {
 
         // Trigger background sync for social data if needed
         if (profile.id && triggerSync) {
-            instagramService.checkAndSync(profile.id).catch(e => console.error('[InstagramSync] Failed:', e));
-            tiktokService.checkAndSync(profile.id).catch(e => console.error('[TikTokSync] Failed:', e));
-            twitchService.checkAndSync(profile.id).catch(e => console.error('[TwitchSync] Failed:', e));
-            kickService.checkAndSync(profile.id).catch(e => console.error('[KickSync] Failed:', e));
-            youtubeService.checkAndSync(profile.id).catch(e => console.error('[YouTubeSync] Failed:', e));
+            instagramService.checkAndSync(profile.id).catch((e: any) => console.error('[InstagramSync] Failed:', e));
+            tiktokService.checkAndSync(profile.id).catch((e: any) => console.error('[TikTokSync] Failed:', e));
+            twitchService.checkAndSync(profile.id).catch((e: any) => console.error('[TwitchSync] Failed:', e));
+            kickService.checkAndSync(profile.id).catch((e: any) => console.error('[KickSync] Failed:', e));
+            youtubeService.checkAndSync(profile.id).catch((e: any) => console.error('[YouTubeSync] Failed:', e));
         }
 
         return profile;
