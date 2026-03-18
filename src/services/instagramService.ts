@@ -22,7 +22,7 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
         ? `${backendBaseUrl}/api/integrations/instagram/callback` 
         : (REDIRECT_URI || '');
 
-    const baseUrl = 'https://api.instagram.com/oauth/authorize';
+    const baseUrl = 'https://www.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: finalRedirectUri,
@@ -54,7 +54,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         params.append('redirect_uri', finalRedirectUri);
         params.append('code', code);
 
-        const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
+        const tokenResponse = await fetch('https://www.instagram.com/oauth/access_token', {
             method: 'POST',
             body: params
         });

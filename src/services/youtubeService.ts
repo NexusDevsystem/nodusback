@@ -59,7 +59,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
     client.setCredentials(tokens);
 
     // Fetch channel information
-    const youtube = google.youtube({ version: 'v3', auth: client });
+    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
     const response = await youtube.channels.list({
         part: ['snippet', 'statistics'],
         mine: true

@@ -126,7 +126,7 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
         const { code, state, error: authError } = req.query;
         let origin = '';
         let userId = '';
-        
+
         try {
             if (state) {
                 const base64State = (state as string).replace(/ /g, '+');
@@ -216,7 +216,7 @@ export const handleKickCallback = async (req: Request, res: Response) => {
         let origin = '';
         let userId = '';
         let verifier = '';
-        
+
         try {
             if (state) {
                 const base64State = (state as string).replace(/ /g, '+');
@@ -349,10 +349,10 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
         const { providerAccountId } = req.body;
 
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-        
+
         let query = supabase.from('social_integrations').delete().eq('user_id', userId).eq('provider', provider);
         if (providerAccountId) query = query.eq('provider_account_id', providerAccountId);
-        
+
         const { error: deleteError } = await query;
         if (deleteError) throw deleteError;
 
