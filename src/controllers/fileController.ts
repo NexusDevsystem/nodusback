@@ -61,7 +61,10 @@ const fileController = {
             const ext = path.extname(multerReq.file.originalname);
             const name = path.basename(multerReq.file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
             const fileName = `${name}-${uniqueSuffix}${ext}`;
-            const filePath = `${userId}/${fileName}`;
+            const folder = (req.query.folder as string) || '';
+            const type = (req.query.type as string) || 'user_upload';
+            const storageFolder = folder ? `${folder}/` : '';
+            const filePath = `${userId}/${storageFolder}${fileName}`;
 
             // Upload to Supabase Storage
             const { data, error } = await supabase.storage
@@ -82,15 +85,16 @@ const fileController = {
                 .from('uploads')
                 .getPublicUrl(filePath);
 
-            // Register asset in database for permanent tracking
+            // Register asset in database for permanent tracking and precise filtering
             await supabase
                 .from('blog_assets')
                 .insert({
-                    user_id: userId,
+                    user_id: (req as any).profileId, // Using profileId for consistency with other parts of system
                     filename: fileName,
                     url: publicUrl,
                     mimetype: multerReq.file.mimetype,
-                    size: multerReq.file.size
+                    size: multerReq.file.size,
+                    asset_type: type
                 });
 
             res.json({
@@ -112,35 +116,23 @@ const fileController = {
         }
     },
 
-    // List Files
     listFiles: async (req: Request, res: Response) => {
         try {
-            const userId = (req as any).userId;
+            const profileId = (req as any).profileId;
             
-            const { data: files, error } = await supabase.storage
-                .from('uploads')
-                .list(userId, {
-                    limit: 100,
-                    offset: 0,
-                    sortBy: { column: 'created_at', order: 'desc' },
-                });
+            // 🔥 CRITICAL: Don't list from storage anymore! 
+            // Query only assets registered in the DB as 'user_upload'
+            // This ensures total isolation for the File Manager.
+            const { data: dbFiles, error } = await supabase
+                .from('blog_assets')
+                .select('*')
+                .eq('user_id', profileId)
+                .eq('asset_type', 'user_upload')
+                .order('created_at', { ascending: false });
 
             if (error) throw error;
 
-            const formattedFiles = (files || []).map(file => {
-                const { data: { publicUrl } } = supabase.storage
-                    .from('uploads')
-                    .getPublicUrl(`${userId}/${file.name}`);
-
-                return {
-                    filename: file.name,
-                    url: publicUrl,
-                    size: file.metadata?.size || 0,
-                    uploadedAt: file.created_at
-                };
-            });
-
-            res.json({ success: true, files: formattedFiles });
+            res.json({ success: true, files: dbFiles || [] });
         } catch (error: any) {
             console.error('List files error:', error);
             res.status(500).json({ error: true, message: 'Error listing files' });
@@ -150,25 +142,39 @@ const fileController = {
     // Delete File
     deleteFile: async (req: Request, res: Response) => {
         try {
-            const userId = (req as any).userId;
+            const profileId = (req as any).profileId;
             const { filename } = req.params;
 
-            // Security check: prevent directory traversal (though Supabase handles this)
-            const safeFilename = path.basename(filename);
-            const filePath = `${userId}/${safeFilename}`;
+            // Get basic file info from URL/filename in storage relative to user root
+            // Security: We get file by filename and user_id to ensure ownership
+            const { data: fileRecord, error: fetchErr } = await supabase
+                .from('blog_assets')
+                .select('url, asset_type')
+                .eq('filename', filename)
+                .eq('user_id', profileId)
+                .single();
 
-            const { data, error } = await supabase.storage
+            if (fetchErr || !fileRecord) {
+                return res.status(404).json({ error: true, message: 'File not found' });
+            }
+
+            // Path construction depends on asset type (blog assets are in a subfolder)
+            const storageFolder = fileRecord.asset_type === 'blog' ? 'blog/' : '';
+            const filePath = `${profileId}/${storageFolder}${filename}`;
+
+            // 1. Delete from Supabase Storage
+            const { error: storageErr } = await supabase.storage
                 .from('uploads')
                 .remove([filePath]);
 
-            if (error) throw error;
+            if (storageErr) throw storageErr;
                 
-            // Remove from database tracking
+            // 2. Remove from database tracking
             await supabase
                 .from('blog_assets')
                 .delete()
-                .eq('filename', safeFilename)
-                .eq('user_id', userId);
+                .eq('filename', filename)
+                .eq('user_id', profileId);
 
             res.json({ success: true, message: 'File deleted successfully' });
         } catch (error: any) {
