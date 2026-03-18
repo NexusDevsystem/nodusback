@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabaseClient.js';
 import { SocialIntegrationDB } from '../models/types.js';
+import { realtimeManager } from '../realtime/RealtimeManager.js';
 
 // Environment variables access inside functions to ensure they are loaded after dotenv.config()
 const getTwitchConfig = () => ({
@@ -316,10 +317,17 @@ export const syncData = async (userId: string) => {
             .eq('user_id', userId);
 
         if (allIntegrations) {
-            await supabase
+            const { data: userData } = await supabase
                 .from('users')
                 .update({ integrations: allIntegrations })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('username')
+                .single();
+
+            // NOTIFY REALTIME CLIENTS
+            if (userData?.username) {
+                realtimeManager.notifyUpdate(userData.username);
+            }
         }
 
     } catch (err) {

@@ -1,6 +1,7 @@
 
 import { google } from 'googleapis';
 import { supabase } from '../config/supabaseClient.js';
+import { realtimeManager } from '../realtime/RealtimeManager.js';
 import 'dotenv/config';
 
 const oauth2Client = new google.auth.OAuth2(
@@ -221,10 +222,17 @@ export const syncData = async (userId: string) => {
             .eq('user_id', userId);
 
         if (allIntegrations) {
-            await supabase
+            const { data: userData } = await supabase
                 .from('users')
                 .update({ integrations: allIntegrations })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('username')
+                .single();
+
+            // NOTIFY REALTIME CLIENTS
+            if (userData?.username) {
+                realtimeManager.notifyUpdate(userData.username);
+            }
         }
 
     } catch (err) {

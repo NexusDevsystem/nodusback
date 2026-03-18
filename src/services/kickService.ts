@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabaseClient.js';
 import { SocialIntegrationDB } from '../models/types.js';
+import { realtimeManager } from '../realtime/RealtimeManager.js';
 import crypto from 'crypto';
 
 const getKickConfig = () => ({
@@ -298,10 +299,17 @@ export const syncData = async (userId: string) => {
             .eq('user_id', userId);
 
         if (allIntegrations) {
-            await supabase
+            const { data: userData } = await supabase
                 .from('users')
                 .update({ integrations: allIntegrations })
-                .eq('id', userId);
+                .eq('id', userId)
+                .select('username')
+                .single();
+
+            // NOTIFY REALTIME CLIENTS
+            if (userData?.username) {
+                realtimeManager.notifyUpdate(userData.username);
+            }
         }
     } catch (err) {
         console.error('[KickService] Sync error:', err);
