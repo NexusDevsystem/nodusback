@@ -22,7 +22,7 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
         ? `${backendBaseUrl}/api/integrations/instagram/callback` 
         : (REDIRECT_URI || '');
 
-    const baseUrl = 'https://www.instagram.com/oauth/authorize';
+    const baseUrl = 'https://api.instagram.com/oauth/authorize';
     const params = new URLSearchParams({
         client_id: APP_ID || '',
         redirect_uri: finalRedirectUri,
