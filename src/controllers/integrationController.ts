@@ -7,13 +7,25 @@ import * as youtubeService from '../services/youtubeService.js';
 import * as kickService from '../services/kickService.js';
 import { supabase } from '../config/supabaseClient.js';
 
+const getBackendBaseUrl = (req: Request) => {
+    const host = req.get('host') || '';
+    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+
+    if (isLocal) {
+        return `http://${host}`;
+    }
+
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    return `${protocol}://${host}`;
+};
+
+
 export const getTikTokAuthUrl = (req: Request, res: Response) => {
     try {
         const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         const url = tiktokService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
         res.json({ url });
@@ -39,8 +51,7 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Invalid state or missing PKCE verifier' });
         }
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         await tiktokService.handleCallback(code as string, userId, verifier, backendBaseUrl);
 
@@ -62,8 +73,7 @@ export const getInstagramAuthUrl = (req: Request, res: Response) => {
         const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         const url = instagramService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
         res.json({ url });
@@ -88,8 +98,7 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Invalid state or missing userId' });
         }
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         await instagramService.handleCallback(code as string, userId, backendBaseUrl);
 
@@ -111,8 +120,7 @@ export const getTwitchAuthUrl = (req: Request, res: Response) => {
         const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         const url = twitchService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
         res.json({ url });
@@ -147,8 +155,7 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
             return res.redirect(`${redirectUrl}/admin?error=twitch_invalid_state`);
         }
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         await twitchService.handleCallback(code as string, userId, backendBaseUrl);
         res.redirect(`${redirectUrl}/admin?success=twitch`);
@@ -163,8 +170,7 @@ export const getYoutubeAuthUrl = (req: Request, res: Response) => {
         const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         const url = youtubeService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
         res.json({ url });
@@ -181,8 +187,7 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
         const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
         const { userId, origin } = stateData;
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         await youtubeService.handleCallback(code as string, userId, backendBaseUrl);
 
@@ -200,8 +205,7 @@ export const getKickAuthUrl = (req: Request, res: Response) => {
         const { userId, origin } = req.query;
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         const url = kickService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
         res.json({ url });
@@ -234,8 +238,7 @@ export const handleKickCallback = async (req: Request, res: Response) => {
             return res.redirect(`${redirectUrl}/admin?error=kick_auth_denied`);
         }
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
+        const backendBaseUrl = getBackendBaseUrl(req);
 
         await kickService.handleCallback(code as string, userId, verifier, backendBaseUrl);
         res.redirect(`${redirectUrl}/admin?success=kick`);
