@@ -45,14 +45,18 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
 
         await tiktokService.handleCallback(code as string, userId, verifier, backendBaseUrl);
 
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const host = req.get('host') || '';
+        const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+        const defaultFrontendUrl = isLocal ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'https://www.nodus.my');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?success=tiktok`);
     } catch (error: any) {
         console.error('TikTok Callback error:', error);
         const state = req.query.state as string;
         const origin = state?.split('_')[3];
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const host = req.get('host') || '';
+        const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+        const defaultFrontendUrl = isLocal ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'https://www.nodus.my');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?error=tiktok`);
     }
@@ -94,14 +98,18 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
 
         await instagramService.handleCallback(code as string, userId, backendBaseUrl);
 
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const host = req.get('host') || '';
+        const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+        const defaultFrontendUrl = isLocal ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'https://www.nodus.my');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?success=instagram`);
     } catch (error: any) {
         console.error('Instagram Callback error:', error);
         const state = req.query.state as string;
         const origin = state?.split('_')[2];
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const host = req.get('host') || '';
+        const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+        const defaultFrontendUrl = isLocal ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'https://www.nodus.my');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?error=instagram`);
     }
@@ -137,7 +145,9 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
             }
         } catch (e) { }
 
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const host = req.get('host') || '';
+        const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+        const defaultFrontendUrl = isLocal ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'https://www.nodus.my');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
 
         if (authError || !code) {
@@ -155,7 +165,7 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
         res.redirect(`${redirectUrl}/admin?success=twitch`);
     } catch (error: any) {
         console.error('Twitch Callback error:', error);
-        res.redirect(`https://www.nodus.my/admin?error=twitch`);
+        res.redirect(`http://localhost:5173/admin?error=twitch`);
     }
 };
 
@@ -187,12 +197,14 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
 
         await youtubeService.handleCallback(code as string, userId, backendBaseUrl);
 
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const host = req.get('host') || '';
+        const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+        const defaultFrontendUrl = isLocal ? 'http://localhost:5173' : (process.env.FRONTEND_URL || 'https://www.nodus.my');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?success=youtube`);
     } catch (error: any) {
         console.error('YouTube Callback error:', error);
-        res.redirect(`https://www.nodus.my/admin?error=youtube`);
+        res.redirect(`http://localhost:5173/admin?error=youtube`);
     }
 };
 
