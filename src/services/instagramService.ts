@@ -40,164 +40,6 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
 };
 
 /**
- * Handles the OAuth callback for Instagram Login (Professional)
- */
-export const handleCallback = async (code: string, userId: string, backendBaseUrl?: string): Promise<SocialIntegrationDB | null> => {
-    try {
-        console.log(`[InstagramService] Handling Instagram Login callback for user ${userId}...`);
-
-        const finalRedirectUri = backendBaseUrl 
-            ? `${backendBaseUrl}/api/integrations/instagram/callback` 
-            : (REDIRECT_URI || '');
-
-        // 1. Exchange short-lived token
-        const params = new URLSearchParams();
-        params.append('client_id', APP_ID || '');
-        params.append('client_secret', APP_SECRET || '');
-        params.append('grant_type', 'authorization_code');
-        params.append('redirect_uri', finalRedirectUri);
-        params.append('code', code);
-
-        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&client_secret=${APP_SECRET}&redirect_uri=${finalRedirectUri}&code=${code}`;
-        const finalTokenResponse = await fetch(tokenUrl);
-        const tokenData = await finalTokenResponse.json() as any;
-
-        if (tokenData.error) {
-            throw new Error(`Instagram Token Error: ${tokenData.error.message || JSON.stringify(tokenData.error)}`);
-        }
-
-        let accessToken = tokenData.access_token;
-        const igUserId = tokenData.user_id || tokenData.id; // Capture user ID from response
-
-        // 2. Exchange for Long-Lived Token (60 days)
-        try {
-            const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${accessToken}`;
-            const longLivedRes = await fetch(longLivedUrl);
-            const longLivedData = await longLivedRes.json() as any;
-
-            if (longLivedData.access_token) {
-                accessToken = longLivedData.access_token;
-                console.log('[InstagramService] Long-lived token acquired via Facebook Graph');
-            }
-        } catch (err) {
-            console.warn('[InstagramService] Long-lived token exchange failed:', err);
-        }
-
-        // 3. Get User Profile via Instagram Graph API (Specific for Instagram Login tokens)
-        // Note: For Instagram Login, we use graph.instagram.com/me even for professional data
-        const profileFields = 'id,username,name,profile_picture_url,followers_count';
-        const profileUrl = `https://graph.instagram.com/me?fields=${profileFields}&access_token=${accessToken}`;
-
-        console.log('[InstagramService] Fetching profile from:', profileUrl.split('access_token=')[0] + 'access_token=***');
-
-        const profileRes = await fetch(profileUrl);
-        const profileDataRaw = await profileRes.json() as any;
-
-        if (profileDataRaw.error) {
-            console.error('[InstagramService] Profile API Error:', profileDataRaw.error);
-            // Don't throw here, try to use what we have or fallbacks to avoid blocking the integration
-        }
-
-        console.log('[InstagramService] Raw profile data received:', JSON.stringify(profileDataRaw));
-
-        const profileData = {
-            username: profileDataRaw.username || 'instagram_user',
-            avatar_url: profileDataRaw.profile_picture_url || null,
-            follower_count: profileDataRaw.followers_count || null,
-            channel_id: profileDataRaw.id || igUserId,
-        };
-
-        const integrationData: SocialIntegrationDB = {
-            user_id: userId,
-            provider: 'instagram',
-            provider_account_id: profileData.channel_id,
-            access_token: accessToken,
-            profile_data: profileData,
-            expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // ~60 days
-        };
-
-        const { data, error } = await supabase
-            .from('social_integrations')
-            .upsert(integrationData, { onConflict: 'user_id,provider,provider_account_id' })
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        // Run sync in background
-        syncFeed(userId).catch(syncError => {
-            console.error('[InstagramService] Initial sync failed:', syncError);
-        });
-
-        return data;
-    } catch (error) {
-        console.error('[InstagramService] Auth Error:', error);
-        throw error;
-    }
-};
-
-/**
- * Switch the active Instagram account for an existing integration
- */
-export const switchInstagramAccount = async (userId: string, channelId: string) => {
-    try {
-        const { data: integration, error } = await supabase
-            .from('social_integrations')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('provider', 'instagram')
-            .single();
-
-        if (error || !integration) throw new Error('Integration not found');
-
-        const available = integration.profile_data.available_accounts || [];
-        const newAccount = available.find((acc: any) => acc.channel_id === channelId);
-
-        if (!newAccount) throw new Error('Account not found in available list');
-
-        const updatedProfileData = {
-            ...integration.profile_data,
-            username: newAccount.username,
-            avatar_url: newAccount.avatar_url,
-            follower_count: newAccount.follower_count,
-            channel_id: newAccount.channel_id
-        };
-
-        // Update integration
-        const { error: updateError } = await supabase
-            .from('social_integrations')
-            .update({ profile_data: updatedProfileData })
-            .eq('id', integration.id);
-
-        if (updateError) throw updateError;
-
-        // Clear existing Instagram links to prevent overlap
-        const { data: collection } = await supabase
-            .from('links')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('platform', 'instagram')
-            .limit(1)
-            .maybeSingle();
-
-        if (collection) {
-            await supabase
-                .from('links')
-                .delete()
-                .eq('parent_id', collection.id);
-        }
-
-        // Trigger sync for the new account
-        await syncFeed(userId);
-
-        return updatedProfileData;
-    } catch (error) {
-        console.error('Error switching Instagram account:', error);
-        throw error;
-    }
-};
-
-/**
  * Syncs the Instagram media feed for Instagram Login (Professional) API
  */
 export const syncFeed = async (userId: string) => {
@@ -402,3 +244,162 @@ export const checkAndSync = async (userId: string) => {
         console.error('[InstagramService] Sync check error:', err);
     }
 };
+
+export const handleCallback = async (code: string, userId: string, backendBaseUrl?: string): Promise<SocialIntegrationDB | null> => {
+    try {
+        console.log(`[InstagramService] Handling Instagram Login callback for user ${userId}...`);
+
+        const finalRedirectUri = backendBaseUrl 
+            ? `${backendBaseUrl}/api/integrations/instagram/callback` 
+            : (REDIRECT_URI || '');
+
+        console.log(`[InstagramService] Using App ID: ${APP_ID?.substring(0, 5)}***`);
+        console.log(`[InstagramService] Callback Redirect URI: ${finalRedirectUri}`);
+
+        // 1. Exchange short-lived token
+        const params = new URLSearchParams();
+        params.append('client_id', APP_ID || '');
+        params.append('client_secret', APP_SECRET || '');
+        params.append('grant_type', 'authorization_code');
+        params.append('redirect_uri', finalRedirectUri);
+        params.append('code', code);
+
+        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&client_secret=${APP_SECRET}&redirect_uri=${finalRedirectUri}&code=${code}`;
+        const finalTokenResponse = await fetch(tokenUrl);
+        const tokenData = await finalTokenResponse.json() as any;
+
+        if (tokenData.error) {
+            throw new Error(`Instagram Token Error: ${tokenData.error.message || JSON.stringify(tokenData.error)}`);
+        }
+
+        let accessToken = tokenData.access_token;
+        const igUserId = tokenData.user_id || tokenData.id; // Capture user ID from response
+
+        // 2. Exchange for Long-Lived Token (60 days)
+        try {
+            const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${accessToken}`;
+            const longLivedRes = await fetch(longLivedUrl);
+            const longLivedData = await longLivedRes.json() as any;
+
+            if (longLivedData.access_token) {
+                accessToken = longLivedData.access_token;
+                console.log('[InstagramService] Long-lived token acquired via Facebook Graph');
+            }
+        } catch (err) {
+            console.warn('[InstagramService] Long-lived token exchange failed:', err);
+        }
+
+        // 3. Get User Profile via Instagram Graph API (Specific for Instagram Login tokens)
+        // Note: For Instagram Login, we use graph.instagram.com/me even for professional data
+        const profileFields = 'id,username,name,profile_picture_url,followers_count';
+        const profileUrl = `https://graph.instagram.com/me?fields=${profileFields}&access_token=${accessToken}`;
+
+        console.log('[InstagramService] Fetching profile from:', profileUrl.split('access_token=')[0] + 'access_token=***');
+
+        const profileRes = await fetch(profileUrl);
+        const profileDataRaw = await profileRes.json() as any;
+
+        if (profileDataRaw.error) {
+            console.error('[InstagramService] Profile API Error:', profileDataRaw.error);
+            // Don't throw here, try to use what we have or fallbacks to avoid blocking the integration
+        }
+
+        console.log('[InstagramService] Raw profile data received:', JSON.stringify(profileDataRaw));
+
+        const profileData = {
+            username: profileDataRaw.username || 'instagram_user',
+            avatar_url: profileDataRaw.profile_picture_url || null,
+            follower_count: profileDataRaw.followers_count || null,
+            channel_id: profileDataRaw.id || igUserId,
+        };
+
+        const integrationData: SocialIntegrationDB = {
+            user_id: userId,
+            provider: 'instagram',
+            provider_account_id: profileData.channel_id,
+            access_token: accessToken,
+            profile_data: profileData,
+            expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // ~60 days
+        };
+
+        const { data, error } = await supabase
+            .from('social_integrations')
+            .upsert(integrationData, { onConflict: 'user_id,provider,provider_account_id' })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Run sync in background
+        syncFeed(userId).catch(syncError => {
+            console.error('[InstagramService] Initial sync failed:', syncError);
+        });
+
+        return data;
+    } catch (error) {
+        console.error('[InstagramService] Auth Error:', error);
+        throw error;
+    }
+};
+
+/**
+ * Switch the active Instagram account for an existing integration
+ */
+export const switchInstagramAccount = async (userId: string, channelId: string) => {
+    try {
+        const { data: integration, error } = await supabase
+            .from('social_integrations')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('provider', 'instagram')
+            .single();
+
+        if (error || !integration) throw new Error('Integration not found');
+
+        const available = integration.profile_data.available_accounts || [];
+        const newAccount = available.find((acc: any) => acc.channel_id === channelId);
+
+        if (!newAccount) throw new Error('Account not found in available list');
+
+        const updatedProfileData = {
+            ...integration.profile_data,
+            username: newAccount.username,
+            avatar_url: newAccount.avatar_url,
+            follower_count: newAccount.follower_count,
+            channel_id: newAccount.channel_id
+        };
+
+        // Update integration
+        const { error: updateError } = await supabase
+            .from('social_integrations')
+            .update({ profile_data: updatedProfileData })
+            .eq('id', integration.id);
+
+        if (updateError) throw updateError;
+
+        // Clear existing Instagram links to prevent overlap
+        const { data: collection } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('platform', 'instagram')
+            .limit(1)
+            .maybeSingle();
+
+        if (collection) {
+            await supabase
+                .from('links')
+                .delete()
+                .eq('parent_id', collection.id);
+        }
+
+        // Trigger sync for the new account
+        await syncFeed(userId);
+
+        return updatedProfileData;
+    } catch (error) {
+        console.error('Error switching Instagram account:', error);
+        throw error;
+    }
+};
+
