@@ -115,15 +115,38 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         const channelId = channel.id;
 
         // Check if this channel is already linked in the links table
+        console.log(`🎬 [youtubeService] Handling callback for user: ${userId}, channel: ${channelId}`);
         const { data: existingLink } = await supabase
             .from('links')
-            .select('id')
+            .select('id, type, platform')
             .eq('user_id', userId)
-            .eq('platform', 'youtube')
             .or(`url.ilike.%${channelId}%,provider_account_id.eq.${channelId}`)
             .maybeSingle();
 
-        if (!existingLink) {
+        if (existingLink) {
+            console.log(`📝 [youtubeService] Updating existing link: ${existingLink.id}`);
+            const { error: updateError } = await supabase
+                .from('links')
+                .update({ 
+                    type: 'social', 
+                    layout: 'social',
+                    platform: 'youtube', // Crucial for frontend detection
+                    url: `https://youtube.com/channel/${channelId}`,
+                    image: profileData.avatar_url,
+                    provider_account_id: channelId,
+                    providerAccountId: channelId,
+                    title: profileData.title || 'YouTube',
+                    is_active: true,
+                    isActive: true,
+                    is_archived: false,
+                    isArchived: false,
+                })
+                .eq('id', existingLink.id);
+            
+            if (updateError) console.error('❌ [youtubeService] Update error:', updateError);
+            else console.log('✅ [youtubeService] Update successful');
+        } else {
+            console.log('✨ [youtubeService] Creating new YouTube link');
             // Get the current highest position to place this at the end
             const { data: lastLink } = await supabase
                 .from('links')
@@ -136,19 +159,25 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
 
             const position = lastLink ? (lastLink.position ?? 0) + 1 : 0;
 
-            await supabase.from('links').insert({
+            const { error: insertError } = await supabase.from('links').insert({
                 user_id: userId,
                 title: profileData.title || 'YouTube',
                 url: `https://youtube.com/channel/${channelId}`,
                 is_active: true,
+                isActive: true,
                 is_archived: false,
-                type: 'link',
+                isArchived: false,
+                type: 'social',
                 platform: 'youtube',
-                layout: 'classic',
+                layout: 'social',
                 position,
                 image: profileData.avatar_url,
-                provider_account_id: channelId
+                provider_account_id: channelId,
+                providerAccountId: channelId
             });
+
+            if (insertError) console.error('❌ [youtubeService] Insert error:', insertError);
+            else console.log('✅ [youtubeService] Insert successful');
         }
     }
 

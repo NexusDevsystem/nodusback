@@ -181,10 +181,12 @@ export const syncFeed = async (userId: string) => {
                 title: 'TikTok',
                 url: `https://tiktok.com/@${integration.profile_data.username}`,
                 is_active: true,
+                isActive: true,
                 is_archived: false,
-                type: 'link',
+                isArchived: false,
+                type: 'social',
                 platform: 'tiktok',
-                layout: 'classic',
+                layout: 'social',
                 position,
                 image: integration.profile_data.avatar_url
             });

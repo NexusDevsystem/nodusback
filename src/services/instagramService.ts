@@ -285,10 +285,12 @@ export const syncFeed = async (userId: string) => {
                     title: 'Instagram',
                     url: `https://instagram.com/${updatedProfile.username}`,
                     is_active: true,
+                    isActive: true,
                     is_archived: false,
-                    type: 'link',
+                    isArchived: false,
+                    type: 'social',
                     platform: 'instagram',
-                    layout: 'classic',
+                    layout: 'social',
                     position: 0
                 })
                 .select()
