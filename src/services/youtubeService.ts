@@ -134,12 +134,9 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
                     url: `https://youtube.com/channel/${channelId}`,
                     image: profileData.avatar_url,
                     provider_account_id: channelId,
-                    providerAccountId: channelId,
                     title: profileData.title || 'YouTube',
                     is_active: true,
-                    isActive: true,
                     is_archived: false,
-                    isArchived: false,
                 })
                 .eq('id', existingLink.id);
             
@@ -164,16 +161,13 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
                 title: profileData.title || 'YouTube',
                 url: `https://youtube.com/channel/${channelId}`,
                 is_active: true,
-                isActive: true,
                 is_archived: false,
-                isArchived: false,
                 type: 'social',
                 platform: 'youtube',
                 layout: 'social',
                 position,
                 image: profileData.avatar_url,
-                provider_account_id: channelId,
-                providerAccountId: channelId
+                provider_account_id: channelId
             });
 
             if (insertError) console.error('❌ [youtubeService] Insert error:', insertError);
