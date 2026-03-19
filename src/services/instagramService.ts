@@ -19,18 +19,11 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
         ? `${backendBaseUrl}/api/integrations/instagram/callback` 
         : (REDIRECT_URI || '');
 
-    // IMPORTANT: For Business/Professional API, we MUST use Facebook Login flow
-    const baseUrl = 'https://www.facebook.com/v19.0/dialog/oauth';
-
-    // Scopes needed for Instagram Graph API (Professional)
-    const scopes = [
-        'instagram_basic',
-        'instagram_manage_insights',
-        'pages_show_list',
-        'pages_read_engagement',
-        'public_profile',
-        'email'
-    ].join(',');
+    // Instagram Basic Display API (The BLACK screen)
+    const baseUrl = 'https://api.instagram.com/oauth/authorize';
+    
+    // Scopes for Basic Display
+    const scopes = ['instagram_graph_user_profile', 'instagram_graph_user_media'].join(',');
 
     const params = new URLSearchParams({
         client_id: APP_ID || '',
@@ -40,7 +33,7 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
         state: state
     });
 
-    console.log(`[InstagramService] Auth URL with redirect: ${finalRedirectUri}`);
+    console.log(`[InstagramService] Auth URL (Classic Black Screen) with redirect: ${finalRedirectUri}`);
     return `${baseUrl}?${params.toString()}`;
 };
 
@@ -59,35 +52,33 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         const params = new URLSearchParams();
         params.append('client_id', APP_ID || '');
         params.append('client_secret', APP_SECRET || '');
+        params.append('grant_type', 'authorization_code');
         params.append('redirect_uri', finalRedirectUri);
         params.append('code', code);
 
-        const tokenResponse = await fetch('https://graph.facebook.com/v19.0/oauth/access_token', {
-            method: 'GET', // Facebook uses GET for token exchange
-            params: params as any
-        } as any);
+        const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
+            method: 'POST',
+            body: params
+        });
 
-        // Fetch API doesn't have a 'params' option like axios, we must append to URL
-        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&client_secret=${APP_SECRET}&redirect_uri=${finalRedirectUri}&code=${code}`;
-        const finalTokenResponse = await fetch(tokenUrl);
-        const tokenData = await finalTokenResponse.json() as any;
+        const tokenData = await tokenResponse.json() as any;
 
-        if (tokenData.error) {
-            throw new Error(`Instagram Token Error: ${tokenData.error.message || JSON.stringify(tokenData.error)}`);
+        if (tokenData.error_message || tokenData.error) {
+            throw new Error(`Instagram Token Error: ${tokenData.error_message || tokenData.error.message || JSON.stringify(tokenData.error)}`);
         }
 
         let accessToken = tokenData.access_token;
-        const igUserId = tokenData.user_id || tokenData.id; // Capture ID from Facebook/Instagram response
+        const igUserId = tokenData.user_id;
 
         // 2. Exchange for Long-Lived Token (60 days)
         try {
-            const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${accessToken}`;
+            const longLivedUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${accessToken}`;
             const longLivedRes = await fetch(longLivedUrl);
             const longLivedData = await longLivedRes.json() as any;
 
             if (longLivedData.access_token) {
                 accessToken = longLivedData.access_token;
-                console.log('[InstagramService] Long-lived token acquired via Facebook Graph');
+                console.log('[InstagramService] Long-lived token acquired via Instagram API');
             }
         } catch (err) {
             console.warn('[InstagramService] Long-lived token exchange failed:', err);
