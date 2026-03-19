@@ -132,7 +132,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
                     layout: 'social',
                     platform: 'youtube', // Crucial for frontend detection
                     url: `https://youtube.com/channel/${channelId}`,
-                    image: profileData.avatar_url,
+                    icon: profileData.avatar_url, // Correct column name is 'icon'
                     provider_account_id: channelId,
                     title: profileData.title || 'YouTube',
                     is_active: true,
@@ -166,7 +166,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
                 platform: 'youtube',
                 layout: 'social',
                 position,
-                image: profileData.avatar_url,
+                icon: profileData.avatar_url, // Correct column name is 'icon'
                 provider_account_id: channelId
             });
 

@@ -186,7 +186,7 @@ export const syncFeed = async (userId: string) => {
                 platform: 'tiktok',
                 layout: 'social',
                 position,
-                image: integration.profile_data.avatar_url
+                icon: integration.profile_data.avatar_url
             });
         }
 
