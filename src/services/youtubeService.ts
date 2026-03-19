@@ -106,46 +106,50 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         .eq('user_id', userId);
 
     if (allIntegrations) {
-        // Fetch current links to check if we need to auto-create one
-        const { data: userData } = await supabase
-            .from('users')
-            .select('links')
-            .eq('id', userId)
-            .single();
-
-        let updatePayload: any = { integrations: allIntegrations };
-
-        if (userData) {
-            const links = Array.isArray(userData.links) ? userData.links : [];
-            const channelId = channel.id;
-
-            // Check if this channel is already linked
-            const hasLink = links.some((l: any) =>
-                l.platform === 'youtube' &&
-                (l.url?.includes(channelId) || l.provider_account_id === channelId)
-            );
-
-            if (!hasLink) {
-                const newLink = {
-                    id: Date.now().toString(),
-                    type: 'link',
-                    platform: 'youtube',
-                    title: profileData.title || 'YouTube',
-                    url: `https://youtube.com/channel/${channelId}`,
-                    isActive: true,
-                    clicks: 0,
-                    layout: 'classic',
-                    provider_account_id: channelId,
-                    image: profileData.avatar_url
-                };
-                updatePayload.links = [...links, newLink];
-            }
-        }
-
+        // Update user's integration cache
         await supabase
             .from('users')
-            .update(updatePayload)
+            .update({ integrations: allIntegrations })
             .eq('id', userId);
+
+        const channelId = channel.id;
+
+        // Check if this channel is already linked in the links table
+        const { data: existingLink } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('platform', 'youtube')
+            .or(`url.ilike.%${channelId}%,provider_account_id.eq.${channelId}`)
+            .maybeSingle();
+
+        if (!existingLink) {
+            // Get the current highest position to place this at the end
+            const { data: lastLink } = await supabase
+                .from('links')
+                .select('position')
+                .eq('user_id', userId)
+                .is('parent_id', null)
+                .order('position', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const position = lastLink ? (lastLink.position ?? 0) + 1 : 0;
+
+            await supabase.from('links').insert({
+                user_id: userId,
+                title: profileData.title || 'YouTube',
+                url: `https://youtube.com/channel/${channelId}`,
+                is_active: true,
+                is_archived: false,
+                type: 'link',
+                platform: 'youtube',
+                layout: 'classic',
+                position,
+                image: profileData.avatar_url,
+                provider_account_id: channelId
+            });
+        }
     }
 
     return profileData;

@@ -156,8 +156,52 @@ export const syncFeed = async (userId: string) => {
         const videoData = await videoRes.json() as any;
         const videos = videoData.data?.videos || [];
 
-        // Save videos to DB
-        // ... (similar logic to Instagram sync)
+        // 1. Ensure TikTok link exists in the links table
+        const { data: existingLink } = await supabase
+            .from('links')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('platform', 'tiktok')
+            .maybeSingle();
+
+        if (!existingLink) {
+            const { data: lastLink } = await supabase
+                .from('links')
+                .select('position')
+                .eq('user_id', userId)
+                .is('parent_id', null)
+                .order('position', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const position = lastLink ? (lastLink.position ?? 0) + 1 : 0;
+
+            await supabase.from('links').insert({
+                user_id: userId,
+                title: 'TikTok',
+                url: `https://tiktok.com/@${integration.profile_data.username}`,
+                is_active: true,
+                is_archived: false,
+                type: 'link',
+                platform: 'tiktok',
+                layout: 'classic',
+                position,
+                image: integration.profile_data.avatar_url
+            });
+        }
+
+        // 2. Update user's integration cache
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, provider_account_id, profile_data')
+            .eq('user_id', userId);
+
+        if (allIntegrations) {
+            await supabase
+                .from('users')
+                .update({ integrations: allIntegrations })
+                .eq('id', userId);
+        }
 
         return videos;
     } catch (error) {
