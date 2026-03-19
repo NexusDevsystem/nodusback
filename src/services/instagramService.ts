@@ -264,9 +264,12 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         params.append('redirect_uri', finalRedirectUri);
         params.append('code', code);
 
-        const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&client_secret=${APP_SECRET}&redirect_uri=${finalRedirectUri}&code=${code}`;
-        const finalTokenResponse = await fetch(tokenUrl);
-        const tokenData = await finalTokenResponse.json() as any;
+        const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
+            method: 'POST',
+            body: params
+        });
+
+        const tokenData = await tokenResponse.json() as any;
 
         if (tokenData.error) {
             throw new Error(`Instagram Token Error: ${tokenData.error.message || JSON.stringify(tokenData.error)}`);
