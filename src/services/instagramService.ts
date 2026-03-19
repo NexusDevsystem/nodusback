@@ -54,6 +54,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         const params = new URLSearchParams();
         params.append('client_id', APP_ID || '');
         params.append('client_secret', APP_SECRET || '');
+        params.append('grant_type', 'authorization_code');
         params.append('redirect_uri', finalRedirectUri);
         params.append('code', code);
 
