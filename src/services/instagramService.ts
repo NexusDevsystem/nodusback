@@ -19,17 +19,12 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
         ? `${backendBaseUrl}/api/integrations/instagram/callback` 
         : (REDIRECT_URI || '');
 
-    // IMPORTANT: For Business/Professional API, we MUST use Facebook Login flow
-    const baseUrl = 'https://www.facebook.com/v19.0/dialog/oauth';
+    // NEW: "Instagram API with Instagram Login" (The BLACK screen for Professionals)
+    const baseUrl = 'https://api.instagram.com/oauth/authorize';
     
-    // Scopes needed for Instagram Graph API (Professional)
+    // New 2025/2026 Scopes for Professionals - KEEPING IT MINIMAL (Read-only)
     const scopes = [
-        'instagram_basic',
-        'instagram_manage_insights',
-        'pages_show_list',
-        'pages_read_engagement',
-        'public_profile',
-        'email'
+        'instagram_business_basic'
     ].join(',');
 
     const params = new URLSearchParams({
@@ -40,7 +35,7 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
         state: state
     });
 
-    console.log(`[InstagramService] Auth URL (Facebook Business flow) with redirect: ${finalRedirectUri}`);
+    console.log(`[InstagramService] Auth URL (New Instagram Login flow) with redirect: ${finalRedirectUri}`);
     return `${baseUrl}?${params.toString()}`;
 };
 
