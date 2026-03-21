@@ -206,30 +206,42 @@ export const deletePost = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Public: Upvote a blog post
+ * Public: Upvote a blog post (Unique per fingerprint)
  */
 export const upvotePost = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        
-        const { data: current, error: fetchError } = await supabase
-            .from('blog_posts')
-            .select('likes_count')
-            .eq('id', id)
-            .single();
-            
-        if (fetchError || !current) {
-            return res.status(404).json({ error: 'Post not found' });
+        const { fingerprint } = req.body;
+
+        if (!fingerprint) {
+            return res.status(400).json({ error: 'Fingerprint required for like' });
         }
         
-        const { data: updated, error: updateError } = await supabase
+        // Insert into likes table to track unique like (Trigger will handle the count update)
+        // If it already exists, just return current data
+        const { error: insertError } = await supabase
+            .from('blog_post_likes')
+            .insert({ 
+                post_id: id, 
+                fingerprint: fingerprint 
+            });
+            
+        // 23505 is the error code for unique constraint violation (already liked)
+        if (insertError && insertError.code !== '23505') {
+            console.error('Error recording like:', insertError);
+            throw insertError;
+        }
+        
+        // Fetch updated post data
+        const { data: updated, error: fetchError } = await supabase
             .from('blog_posts')
-            .update({ likes_count: (current.likes_count || 0) + 1 })
+            .select('*')
             .eq('id', id)
-            .select()
             .single();
             
-        if (updateError) throw updateError;
+        if (fetchError || !updated) {
+            return res.status(404).json({ error: 'Post not found' });
+        }
 
         return res.json(blogPostDbToApi(updated as BlogPostDB));
     } catch (error: any) {
