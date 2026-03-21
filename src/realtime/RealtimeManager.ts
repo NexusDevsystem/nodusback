@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { profileService } from '../services/profileService.js';
 
 interface Client {
     username: string;
@@ -7,6 +8,38 @@ interface Client {
 
 class RealtimeManager {
     private clients: Client[] = [];
+    private watcherInterval: NodeJS.Timeout | null = null;
+
+    constructor() {
+        // Start the background watcher to keep "Live" status updated for active viewers
+        this.startWatcher();
+    }
+
+    /**
+     * Background watcher that triggers social syncs for active usernames
+     */
+    private startWatcher() {
+        if (this.watcherInterval) return;
+
+        this.watcherInterval = setInterval(async () => {
+            const activeUsernames = [...new Set(this.clients.map(c => c.username))];
+            
+            if (activeUsernames.length === 0) return;
+
+            console.log(`[RealtimeWatcher] Checking ${activeUsernames.length} active profiles: ${activeUsernames.join(', ')}`);
+            
+            // Loop through active profiles and trigger sync
+            for (const username of activeUsernames) {
+                try {
+                    // Calling getProfileByUsername with triggerSync: true 
+                    // This kicks off Twitch/YouTube/Kick status checks in background
+                    await profileService.getProfileByUsername(username, true);
+                } catch (err) {
+                    console.error(`[RealtimeWatcher] Failed to sync ${username}:`, err);
+                }
+            }
+        }, 10000); // Check every 10 seconds for anyone currently watching
+    }
 
     /**
      * Add a new SSE client connection
