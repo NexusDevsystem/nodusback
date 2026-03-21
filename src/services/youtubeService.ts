@@ -250,6 +250,7 @@ export const syncData = async (userId: string) => {
             ...integration.profile_data,
             subscriber_count: parseInt(channel.statistics?.subscriberCount || '0'),
             is_live: isLive,
+            channelId: channel.id,
             last_synced: new Date().toISOString()
         };
 
