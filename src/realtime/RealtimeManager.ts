@@ -38,7 +38,7 @@ class RealtimeManager {
                     console.error(`[RealtimeWatcher] Failed to sync ${username}:`, err);
                 }
             }
-        }, 10000); // Check every 10 seconds for anyone currently watching
+        }, 2500); // Check every 2.5 seconds for truly instant live detection (as requested)
     }
 
     /**

@@ -344,7 +344,7 @@ export const checkAndSync = async (userId: string) => {
         const diffSeconds = Math.floor((now.getTime() - lastSync.getTime()) / 1000);
 
         // Sync every 10 seconds for truly instant-feeling live detection
-        if (diffSeconds >= 10) {
+        if (diffSeconds >= 2) {
             syncData(userId).catch(e => console.error('[KickSync] Failed:', e));
         }
     } catch (e) {
