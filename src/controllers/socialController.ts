@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
+import { profileService } from '../services/profileService.js';
 
 export const socialController = {
 
@@ -114,6 +115,73 @@ export const socialController = {
         } catch (error: any) {
             console.error('[SocialController] Error fetching YouTube info:', error);
             res.status(500).json({ error: 'Internal server error', details: error.message });
+        }
+    },
+    
+    /**
+     * Serves a dynamic HTML page with Open Graph and Twitter meta tags for a specific profile.
+     * This is used by social media scrapers (Twitter, WhatsApp, etc.) to show a preview card with the image.
+     */
+    async shareProfile(req: Request, res: Response) {
+        try {
+            const { username } = req.params;
+            if (!username) return res.status(400).send('Username required');
+
+            const profile = await profileService.getProfileByUsername(username);
+            if (!profile) return res.status(404).send('Profile not found');
+
+            // Find the OG image. 
+            // Priority: 1. Manual field (if exists) -> 2. Generated card in storage -> 3. Avatar fallback
+            const ogImage = (profile as any).ogImageUrl || 
+                            `https://api.nodus.my/uploads/${profile.id}/og/share-card.png` || 
+                            profile.avatarUrl || 
+                            'https://nodus.my/og-default.png';
+            
+            const profileUrl = `https://nodus.my/${username}`;
+            const title = profile.seoTitle || `${profile.name} (@${username}) | Nodus`;
+            const description = profile.seoDescription || profile.bio || 'Confira meus links e projetos no Nodus.';
+
+            const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="${profileUrl}">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${ogImage}">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="${profileUrl}">
+    <meta property="twitter:title" content="${title}">
+    <meta property="twitter:description" content="${description}">
+    <meta property="twitter:image" content="${ogImage}">
+
+    <!-- Redirection for Humans -->
+    <script>
+        window.location.href = "${profileUrl}";
+    </script>
+</head>
+<body style="background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
+    <div style="text-align: center;">
+        <h2>Carregando perfil de ${profile.name}...</h2>
+        <p>Você será redirecionado em instantes.</p>
+        <a href="${profileUrl}" style="color: #ffdf00; text-decoration: none;">Clique aqui se não for redirecionado automaticamente.</a>
+    </div>
+</body>
+</html>
+            `;
+
+            res.send(html);
+        } catch (error) {
+            console.error('[SocialController] Error serving share page:', error);
+            res.status(500).send('Server Error');
         }
     }
 };
