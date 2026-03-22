@@ -183,5 +183,75 @@ export const socialController = {
             console.error('[SocialController] Error serving share page:', error);
             res.status(500).send('Server Error');
         }
+    },
+    
+    /**
+     * Serves a bot-friendly HTML for blog posts with OG tags.
+     */
+    async shareBlog(req: Request, res: Response) {
+        try {
+            const { slug } = req.params;
+            if (!slug) return res.status(400).send('Slug required');
+
+            const { data: post, error } = await supabase
+                .from('blog_posts')
+                .select('*')
+                .eq('slug', slug)
+                .maybeSingle();
+
+            if (error || !post) return res.status(404).send('Post not found');
+
+            // The image we expect to be there. 
+            // We use a predictable URL that the frontend will upload to.
+            // Note: Replace [PROJECT_REF] with the actual Supabase project ID if needed, 
+            // but for Nodus it seems it's public via this proxy or direct URL.
+            const ogImage = `https://nodusback-production.up.railway.app/uploads/blog-cards/${slug}.png` || post.image_url || 'https://nodus.my/og-default.png';
+            
+            const blogUrl = `https://nodus.my/blog/${slug}`;
+            const title = `${post.title} | Nodus Blog`;
+            const description = post.excerpt || 'Leia este artigo completo no Nodus Blog.';
+
+            const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="${blogUrl}">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${ogImage}">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="${blogUrl}">
+    <meta property="twitter:title" content="${title}">
+    <meta property="twitter:description" content="${description}">
+    <meta property="twitter:image" content="${ogImage}">
+
+    <!-- Redirection for Humans -->
+    <script>
+        window.location.href = "${blogUrl}";
+    </script>
+</head>
+<body style="background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
+    <div style="text-align: center;">
+        <h2>Lendo o artigo: ${post.title}...</h2>
+        <p>Você será redirecionado em instantes.</p>
+        <a href="${blogUrl}" style="color: #ffdf00; text-decoration: none;">Clique aqui se não for redirecionado automaticamente.</a>
+    </div>
+</body>
+</html>
+            `;
+
+            res.send(html);
+        } catch (error) {
+            console.error('[SocialController] Error serving blog share page:', error);
+            res.status(500).send('Server Error');
+        }
     }
 };

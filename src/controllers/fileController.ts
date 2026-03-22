@@ -181,6 +181,46 @@ const fileController = {
             console.error('Delete file error:', error);
             res.status(500).json({ error: true, message: 'Error deleting file' });
         }
+    },
+
+    // Public: Sync generated share card image.
+    // This is called by the frontend to ensure social robots see the latest card.
+    syncBlogCard: async (req: Request, res: Response) => {
+        try {
+            const { slug } = req.params;
+            const { image } = req.body; // base64 dataUrl
+
+            if (!slug || !image) return res.status(400).json({ error: 'Missing data' });
+
+            // Security: Check if post exists
+            const { data: post } = await supabase.from('blog_posts').select('id').eq('slug', slug).single();
+            if (!post) return res.status(404).json({ error: 'Post not found' });
+
+            // Convert base64 to buffer
+            const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+            const buffer = Buffer.from(base64Data, 'base64');
+            const fileName = `blog-cards/${slug}.png`;
+
+            // Upload directly to 'uploads' bucket in a public folder
+            const { error: uploadError } = await supabase.storage
+                .from('uploads')
+                .upload(`blog-cards/${slug}.png`, buffer, {
+                    contentType: 'image/png',
+                    upsert: true
+                });
+
+            if (uploadError) throw uploadError;
+
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('uploads')
+                .getPublicUrl(fileName);
+
+            res.json({ success: true, url: publicUrl });
+        } catch (error: any) {
+            console.error('Sync blog card error:', error);
+            res.status(500).json({ error: true, message: error.message });
+        }
     }
 };
 

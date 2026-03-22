@@ -9,4 +9,7 @@ router.get('/youtube', socialController.getYoutubeChannelInfo);
 // GET /api/social/share/:username (Bot-friendly OG redirector)
 router.get('/share/:username', socialController.shareProfile);
 
+// GET /api/social/blog/:slug (Bot-friendly OG redirector for articles)
+router.get('/blog/:slug', socialController.shareBlog);
+
 export default router;
