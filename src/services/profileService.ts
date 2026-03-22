@@ -2,6 +2,7 @@ import { supabase } from '../config/supabaseClient.js';
 import { UserProfile, UserProfileDB, dbToApi, apiToDb } from '../models/types.js';
 import { linkService } from './linkService.js';
 import { productService } from './productService.js';
+import { storeService } from './storeService.js';
 import * as instagramService from './instagramService.js';
 import * as tiktokService from './tiktokService.js';
 import * as twitchService from './twitchService.js';
@@ -200,39 +201,43 @@ export const profileService = {
         return !data; // Available if no data found
     },
 
-    // Bootstrap data for Editor (Profile + Links + Products)
+    // Bootstrap data for Editor (Profile + Links + Products + Stores)
     async getBootstrapData(userId: string) {
         // Run all queries in parallel for maximum speed
-        const [profile, links, products] = await Promise.all([
+        const [profile, links, products, stores] = await Promise.all([
             this.getProfileByUserId(userId),
             linkService.getLinksByProfileId(userId),
-            productService.getProductsByProfileId(userId)
+            productService.getProductsByProfileId(userId),
+            storeService.getStoresByProfileId(userId)
         ]);
 
         return {
             profile,
             links,
-            products
+            products,
+            stores
         };
     },
 
-    // Public Bootstrap (Profile + Links + Products) by username
+    // Public Bootstrap (Profile + Links + Products + Stores) by username
     async getPublicBootstrapData(username: string) {
         // 1. Get profile first as we need the user_id for links/products
         // Now passing true to permit background social syncing for public views if data is stale
         const profile = await this.getProfileByUsername(username, true);
         if (!profile) return null;
 
-        // 2. Fetch links and products in parallel using the user_id
-        const [links, products] = await Promise.all([
+        // 2. Fetch links, products and stores in parallel using the user_id
+        const [links, products, stores] = await Promise.all([
             linkService.getLinksByProfileId(profile.id!, true),
-            productService.getProductsByProfileId(profile.id!)
+            productService.getProductsByProfileId(profile.id!),
+            storeService.getStoresByProfileId(profile.id!)
         ]);
 
         return {
             profile,
             links,
-            products
+            products,
+            stores
         };
     }
 };

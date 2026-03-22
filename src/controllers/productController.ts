@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { productService } from '../services/productService.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
+import { storeService } from '../services/storeService.js';
 
 export const productController = {
     // Get all products for authenticated user
@@ -109,6 +110,26 @@ export const productController = {
         } catch (error) {
             console.error('Error replacing products:', error);
             res.status(500).json({ error: 'Failed to replace products' });
+        }
+    },
+
+    // Replace all stores (bulk update)
+    async replaceAllStores(req: AuthRequest, res: Response) {
+        try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const { stores } = req.body;
+            if (!Array.isArray(stores)) {
+                return res.status(400).json({ error: 'Invalid request: stores must be an array' });
+            }
+
+            const savedStores = await storeService.replaceAllStores(req.profileId, stores);
+            res.json(savedStores);
+        } catch (error) {
+            console.error('Error replacing stores:', error);
+            res.status(500).json({ error: 'Failed to replace stores' });
         }
     }
 };

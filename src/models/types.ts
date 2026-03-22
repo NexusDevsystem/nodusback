@@ -103,6 +103,19 @@ export interface ProductDB {
     discount_code?: string;
     clicks?: number;
     position?: number;
+    store_id?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface StoreDB {
+    id?: string;
+    user_id: string;
+    name: string;
+    description?: string;
+    image_url?: string;
+    position?: number;
+    is_active?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -227,12 +240,23 @@ export interface EventItem {
 
 export interface Product {
     id: string;
+    clientId?: string;
     name: string;
     price?: string;
     image: string;
     url: string;
     discountCode?: string;
     collection?: string;
+    storeId?: string;
+}
+
+export interface Store {
+    id: string;
+    name: string;
+    description?: string;
+    imageUrl?: string;
+    position: number;
+    isActive: boolean;
 }
 
 export interface BlogPost {
@@ -420,7 +444,8 @@ export function productDbToApi(db: ProductDB): Product {
         price: db.price,
         image: db.image,
         url: db.url,
-        discountCode: db.discount_code
+        discountCode: db.discount_code,
+        storeId: db.store_id
     };
 }
 
@@ -435,7 +460,30 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
         price: api.price,
         image: api.image,
         url: api.url,
-        discount_code: api.discountCode
+        discount_code: api.discountCode,
+        store_id: api.storeId
+    };
+}
+
+export function storeDbToApi(db: StoreDB): Store {
+    return {
+        id: db.id || '',
+        name: db.name,
+        description: db.description,
+        imageUrl: db.image_url,
+        position: db.position || 0,
+        isActive: db.is_active ?? true
+    };
+}
+
+export function storeApiToDb(api: Partial<Store>, userId: string): Partial<StoreDB> {
+    return {
+        user_id: userId,
+        name: api.name,
+        description: api.description,
+        image_url: api.imageUrl,
+        position: api.position,
+        is_active: api.isActive
     };
 }
 

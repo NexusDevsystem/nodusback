@@ -11,6 +11,7 @@ router.get('/public/:username', productController.getProductsByUsername);
 router.get('/me', authMiddleware, productController.getMyProducts);
 router.post('/', authMiddleware, productController.createProduct);
 router.put('/bulk', authMiddleware, productController.replaceAllProducts);
+router.put('/stores/bulk', authMiddleware, productController.replaceAllStores);
 router.put('/:id', authMiddleware, productController.updateProduct);
 router.delete('/:id', authMiddleware, productController.deleteProduct);
 
