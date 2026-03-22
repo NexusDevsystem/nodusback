@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
+import { supabase } from '../config/supabaseClient.js';
 
 export const socialController = {
 
