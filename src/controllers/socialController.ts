@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
-import { supabase } from '../config/supabaseClient.js';
+import { blogService } from '../services/blogService.js';
 
 export const socialController = {
 
@@ -194,13 +194,8 @@ export const socialController = {
             const { slug } = req.params;
             if (!slug) return res.status(400).send('Slug required');
 
-            const { data: post, error } = await supabase
-                .from('blog_posts')
-                .select('*')
-                .eq('slug', slug)
-                .maybeSingle();
-
-            if (error || !post) return res.status(404).send('Post not found');
+            const post = await blogService.getPostBySlug(slug);
+            if (!post) return res.status(404).send('Post not found');
 
             // The image we expect to be there. 
             // We use a predictable URL that the frontend will upload to.
