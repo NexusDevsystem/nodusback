@@ -88,9 +88,12 @@ export const createPost = async (req: AuthRequest, res: Response) => {
                 .toLowerCase()
                 .trim()
                 .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .replace(/[^\w ]+/g, '')
-                .replace(/ +/g, '-');
+                .replace(/[\u0300-\u036f]/g, '') // Remove accents
+                .replace(/[^\w ]+/g, '')        // Remove non-alphanumeric
+                .split(/\s+/)                  // Split by spaces
+                .slice(0, 6)                   // Take first 6 words
+                .join('-')                     // Join with hyphens
+                .substring(0, 50);             // Max 50 chars
         }
 
         const { data, error } = await supabase
