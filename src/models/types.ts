@@ -104,6 +104,7 @@ export interface ProductDB {
     clicks?: number;
     position?: number;
     store_id?: string;
+    is_active?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -116,6 +117,7 @@ export interface StoreDB {
     image_url?: string;
     position?: number;
     is_active?: boolean;
+    disabled_collections?: string[];
     created_at?: string;
     updated_at?: string;
 }
@@ -248,6 +250,7 @@ export interface Product {
     discountCode?: string;
     collection?: string;
     storeId?: string;
+    isActive?: boolean;
 }
 
 export interface Store {
@@ -257,6 +260,8 @@ export interface Store {
     imageUrl?: string;
     position: number;
     isActive: boolean;
+    collections?: string[];
+    disabledCollections?: string[];
 }
 
 export interface BlogPost {
@@ -445,7 +450,8 @@ export function productDbToApi(db: ProductDB): Product {
         image: db.image,
         url: db.url,
         discountCode: db.discount_code,
-        storeId: db.store_id
+        storeId: db.store_id,
+        isActive: db.is_active ?? true
     };
 }
 
@@ -461,7 +467,8 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
         image: api.image,
         url: api.url,
         discount_code: api.discountCode,
-        store_id: api.storeId
+        store_id: api.storeId,
+        is_active: api.isActive
     };
 }
 
@@ -472,7 +479,8 @@ export function storeDbToApi(db: StoreDB): Store {
         description: db.description,
         imageUrl: db.image_url,
         position: db.position || 0,
-        isActive: db.is_active ?? true
+        isActive: db.is_active ?? true,
+        disabledCollections: db.disabled_collections || []
     };
 }
 
@@ -483,7 +491,8 @@ export function storeApiToDb(api: Partial<Store>, userId: string): Partial<Store
         description: api.description,
         image_url: api.imageUrl,
         position: api.position,
-        is_active: api.isActive
+        is_active: api.isActive,
+        disabled_collections: api.disabledCollections
     };
 
     if (api.id) db.id = api.id;

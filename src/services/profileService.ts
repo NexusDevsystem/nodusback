@@ -206,9 +206,9 @@ export const profileService = {
         // Run all queries in parallel for maximum speed
         const [profile, links, products, stores] = await Promise.all([
             this.getProfileByUserId(userId),
-            linkService.getLinksByProfileId(userId),
-            productService.getProductsByProfileId(userId),
-            storeService.getStoresByProfileId(userId)
+            linkService.getLinksByProfileId(userId, false),
+            productService.getProductsByProfileId(userId, false),
+            storeService.getStoresByProfileId(userId, false)
         ]);
 
         return {
@@ -226,11 +226,11 @@ export const profileService = {
         const profile = await this.getProfileByUsername(username, true);
         if (!profile) return null;
 
-        // 2. Fetch links, products and stores in parallel using the user_id
+        // 2. Fetch links, products and stores in parallel using the user_id (publicView = true)
         const [links, products, stores] = await Promise.all([
             linkService.getLinksByProfileId(profile.id!, true),
-            productService.getProductsByProfileId(profile.id!),
-            storeService.getStoresByProfileId(profile.id!)
+            productService.getProductsByProfileId(profile.id!, true),
+            storeService.getStoresByProfileId(profile.id!, true)
         ]);
 
         return {

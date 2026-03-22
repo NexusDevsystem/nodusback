@@ -32,6 +32,7 @@ export const linkService = {
             return link;
         }).filter(link => {
             if (!publicView) return true;
+            if (link.isActive === false) return false;
             if (link.scheduleStart && new Date(link.scheduleStart) > now) return false;
             if (link.scheduleEnd && new Date(link.scheduleEnd) < now) return false;
             return true;

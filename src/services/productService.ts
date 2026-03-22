@@ -3,7 +3,7 @@ import { Product, ProductDB, productDbToApi, productApiToDb } from '../models/ty
 
 export const productService = {
     // Get all products for a profile (by user_id)
-    async getProductsByProfileId(userId: string): Promise<Product[]> {
+    async getProductsByProfileId(userId: string, publicView = false): Promise<Product[]> {
         const { data, error } = await supabase
             .from('products')
             .select('*')
@@ -16,7 +16,12 @@ export const productService = {
         }
 
         const dbProducts = data as ProductDB[];
-        return dbProducts.map(db => productDbToApi(db));
+        return dbProducts
+            .map(db => productDbToApi(db))
+            .filter(product => {
+                if (!publicView) return true;
+                return product.isActive !== false;
+            });
     },
 
     // Create a new product

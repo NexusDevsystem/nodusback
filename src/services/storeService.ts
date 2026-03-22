@@ -2,7 +2,7 @@ import { supabase } from '../config/supabaseClient.js';
 import { Store, StoreDB, storeDbToApi, storeApiToDb } from '../models/types.js';
 
 export const storeService = {
-    async getStoresByProfileId(userId: string): Promise<Store[]> {
+    async getStoresByProfileId(userId: string, publicView = false): Promise<Store[]> {
         const { data, error } = await supabase
             .from('stores')
             .select('*')
@@ -14,7 +14,13 @@ export const storeService = {
             return [];
         }
 
-        return (data as StoreDB[]).map(storeDbToApi);
+        const dbStores = data as StoreDB[];
+        return dbStores
+            .map(db => storeDbToApi(db))
+            .filter(store => {
+                if (!publicView) return true;
+                return store.isActive !== false;
+            });
     },
 
     async replaceAllStores(userId: string, stores: Store[]): Promise<Store[]> {

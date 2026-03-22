@@ -35,7 +35,7 @@ export const productController = {
                 return res.status(404).json({ error: 'Profile not found' });
             }
 
-            const products = await productService.getProductsByProfileId(profile.id);
+            const products = await productService.getProductsByProfileId(profile.id, true);
             res.json(products);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch products' });
