@@ -6,6 +6,7 @@ const router = Router();
 
 // Routes
 router.post('/sync-blog/:slug', fileController.syncBlogCard);
+router.post('/sync-profile/:username', fileController.syncProfileCard);
 
 // Protected routes (apply auth only after the public sync route)
 router.use(authMiddleware);
