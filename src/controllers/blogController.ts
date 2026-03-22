@@ -252,3 +252,31 @@ export const upvotePost = async (req: AuthRequest, res: Response) => {
         return res.status(500).json({ error: 'Failed to upvote blog post' });
     }
 };
+
+/**
+ * Public: Increment blog post views
+ */
+export const incrementViews = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        
+        // Use a simple update to increment
+        const { data: current } = await supabase
+            .from('blog_posts')
+            .select('views_count')
+            .eq('id', id)
+            .single();
+
+        if (current) {
+            await supabase
+                .from('blog_posts')
+                .update({ views_count: (current.views_count || 0) + 1 })
+                .eq('id', id);
+        }
+
+        return res.json({ success: true });
+    } catch (error: any) {
+        console.error('Error incrementing views:', error);
+        return res.status(500).json({ error: 'Failed to increment views' });
+    }
+};

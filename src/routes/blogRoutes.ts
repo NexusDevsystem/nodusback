@@ -15,5 +15,6 @@ router.put('/reorder', authMiddleware, blogController.reorderPosts);
 router.get('/', optionalAuthMiddleware, blogController.getAllPosts);
 router.get('/:slug', optionalAuthMiddleware, blogController.getPostBySlug);
 router.post('/:id/upvote', optionalAuthMiddleware, blogController.upvotePost);
+router.post('/:id/view', optionalAuthMiddleware, blogController.incrementViews);
 
 export default router;

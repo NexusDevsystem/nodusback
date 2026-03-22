@@ -128,6 +128,7 @@ export interface BlogPostDB {
     color?: string;
     is_published: boolean;
     likes_count: number;
+    views_count: number;
     published_at?: string;
     created_at?: string;
     updated_at?: string;
@@ -246,6 +247,7 @@ export interface BlogPost {
     color?: string;
     isPublished: boolean;
     likesCount: number;
+    viewsCount: number;
     publishedAt?: string;
     createdAt?: string;
     position?: number;
@@ -498,6 +500,7 @@ export function blogPostDbToApi(db: BlogPostDB): BlogPost {
         color: db.color,
         isPublished: db.is_published,
         likesCount: db.likes_count || 0,
+        viewsCount: db.views_count || 0,
         publishedAt: db.published_at,
         createdAt: db.created_at,
         position: db.position || 0
@@ -516,6 +519,7 @@ export function blogPostApiToDb(api: Partial<BlogPost>): Partial<BlogPostDB> {
     if (api.color !== undefined) db.color = api.color;
     if (api.isPublished !== undefined) db.is_published = api.isPublished;
     if (api.likesCount !== undefined) db.likes_count = api.likesCount;
+    if (api.viewsCount !== undefined) db.views_count = api.viewsCount;
     if (api.publishedAt !== undefined) db.published_at = api.publishedAt;
     if (api.position !== undefined) db.position = api.position;
     return db;
