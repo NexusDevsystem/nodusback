@@ -201,7 +201,7 @@ export const socialController = {
             // We use a predictable URL that the frontend will upload to.
             // Note: Replace [PROJECT_REF] with the actual Supabase project ID if needed, 
             // but for Nodus it seems it's public via this proxy or direct URL.
-            const ogImage = `https://nodusback-production.up.railway.app/uploads/blog-cards/${slug}.png` || post.image_url || 'https://nodus.my/og-default.png';
+            const ogImage = `https://nodusback-production.up.railway.app/api/files/download/blog-cards/${slug}.png` || post.imageUrl || 'https://nodus.my/og-default.png';
             
             const blogUrl = `https://nodus.my/blog/${slug}`;
             const title = `${post.title} | Nodus Blog`;
