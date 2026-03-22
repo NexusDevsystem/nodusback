@@ -477,14 +477,18 @@ export function storeDbToApi(db: StoreDB): Store {
 }
 
 export function storeApiToDb(api: Partial<Store>, userId: string): Partial<StoreDB> {
-    return {
+    const db: Partial<StoreDB> = {
         user_id: userId,
-        name: api.name,
+        name: api.name || '',
         description: api.description,
         image_url: api.imageUrl,
         position: api.position,
         is_active: api.isActive
     };
+
+    if (api.id) db.id = api.id;
+
+    return db;
 }
 
 export interface SocialIntegrationDB {

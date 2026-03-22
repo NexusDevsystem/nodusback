@@ -19,27 +19,51 @@ export const storeService = {
 
     async replaceAllStores(userId: string, stores: Store[]): Promise<Store[]> {
         try {
-            // Delete existing
-            await supabase
-                .from('stores')
-                .delete()
-                .eq('user_id', userId);
-
-            if (stores.length === 0) return [];
-
+            // Transform for DB
             const dbStores = stores.map((store, index) => ({
                 ...storeApiToDb(store, userId),
                 position: index
             }));
 
+            // Delete stores that are no longer in our list
+            const storeIdsToKeep = stores.map(s => s.id).filter(id => id && !id.startsWith('new-'));
+            if (storeIdsToKeep.length > 0) {
+                await supabase
+                    .from('stores')
+                    .delete()
+                    .eq('user_id', userId)
+                    .not('id', 'in', storeIdsToKeep);
+            } else {
+                await supabase
+                    .from('stores')
+                    .delete()
+                    .eq('user_id', userId);
+            }
+
+            if (dbStores.length === 0) return [];
+
+            // Upsert all stores (updates existing, inserts new)
             const { data, error } = await supabase
                 .from('stores')
-                .insert(dbStores)
+                .upsert(dbStores, { onConflict: 'id' })
                 .select();
 
             if (error) {
-                console.error('Error in bulk stores update:', error);
-                return [];
+                console.error('Error in bulk stores update (upsert):', error);
+                
+                // Fallback: Delete and insert approach if upsert somehow fails (e.g. ID conflicts)
+                console.log('Attempting fallback delete/insert for stores...');
+                await supabase.from('stores').delete().eq('user_id', userId);
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from('stores')
+                    .insert(dbStores)
+                    .select();
+                
+                if (fallbackError) {
+                    console.error('Fallback failed:', fallbackError);
+                    return [];
+                }
+                return (fallbackData as StoreDB[]).map(storeDbToApi);
             }
 
             return (data as StoreDB[]).map(storeDbToApi);
