@@ -5,12 +5,11 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 const router = Router();
 
 // Routes
-router.post('/sync-blog/:slug', fileController.syncBlogCard);
-router.post('/sync-profile/:username', fileController.syncProfileCard);
-
-// Protected routes (apply auth only after the public sync route)
+// Protected routes (require valid JWT)
 router.use(authMiddleware);
 
+router.post('/sync-blog/:slug', fileController.syncBlogCard);
+router.post('/sync-profile/:username', fileController.syncProfileCard);
 router.post('/', upload.single('file'), fileController.uploadFile);
 router.get('/', fileController.listFiles);
 router.delete('/:filename', fileController.deleteFile);

@@ -102,7 +102,7 @@ app.use((req, res, next) => {
 
 // 2. Body Parser with Webhook Support
 app.use(express.json({
-    limit: '50mb',
+    limit: '2mb', // Reduced from 50mb to prevent DoS payloads
     verify: (req: any, res, buf) => {
         // Stripe Webhook needs the raw body
         if (req.originalUrl.includes('/billing/webhook') || req.path.includes('/billing/webhook')) {

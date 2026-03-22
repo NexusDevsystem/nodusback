@@ -8,7 +8,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         const username = req.username;
         const email = req.email;
 
-        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+        const isAdmin = username === 'nodus';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode acessar esta rota.' });
@@ -112,7 +112,7 @@ export const updateUserProfile = async (req: AuthRequest, res: Response): Promis
         const userId = req.userId;
         const username = req.username;
         const email = req.email;
-        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+        const isAdmin = username === 'nodus';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode realizar esta ação.' });
@@ -143,7 +143,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
         const userId = req.userId;
         const username = req.username;
         const email = req.email;
-        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+        const isAdmin = username === 'nodus';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode realizar esta ação.' });
@@ -173,7 +173,7 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
         const userId = req.userId;
         const username = req.username;
         const email = req.email;
-        const isAdmin = username === 'nodus' || email === 'jaoomarcos75@gmail.com';
+        const isAdmin = username === 'nodus';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado.' });

@@ -4,8 +4,11 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabaseClient.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nodus_super_secret_jwt_key_change_in_production';
-const RESET_SECRET = process.env.RESET_SECRET || 'nodus_reset_secret_key';
+const JWT_SECRET = process.env.JWT_SECRET!;
+const RESET_SECRET = process.env.RESET_SECRET!;
+if (!JWT_SECRET || !RESET_SECRET) {
+    throw new Error('JWT_SECRET or RESET_SECRET not defined');
+}
 const SALT_ROUNDS = 12;
 
 export const register = async (req: Request, res: Response) => {

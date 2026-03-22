@@ -191,8 +191,19 @@ const fileController = {
 
             if (!slug || !image) return res.status(400).json({ error: 'Missing data' });
 
-            const { data: post } = await supabase.from('blog_posts').select('id').eq('slug', slug).single();
+            const profileId = (req as any).profileId;
+            const { data: post } = await supabase
+                .from('blog_posts')
+                .select('id, user_id')
+                .eq('slug', slug)
+                .single();
+
             if (!post) return res.status(404).json({ error: 'Post not found' });
+            
+            // 🔐 Ownership Check
+            if (post.user_id !== profileId) {
+                return res.status(403).json({ error: 'Acesso negado. Você não é o autor deste post.' });
+            }
 
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
             const buffer = Buffer.from(base64Data, 'base64');
@@ -223,8 +234,13 @@ const fileController = {
 
             if (!username || !image) return res.status(400).json({ error: 'Missing data' });
 
-            const { data: profile } = await supabase.from('profiles').select('id').eq('username', username).single();
-            if (!profile) return res.status(404).json({ error: 'Profile not found' });
+            // 🔐 Ownership Check
+            const profileId = (req as any).profileId;
+            const { data: profile } = await supabase.from('users').select('id, username').eq('id', profileId).single();
+            
+            if (!profile || (profile.username !== username && (req as any).role !== 'superadmin')) {
+                return res.status(403).json({ error: 'Acesso negado. Você só pode sincronizar seu próprio perfil.' });
+            }
 
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
             const buffer = Buffer.from(base64Data, 'base64');

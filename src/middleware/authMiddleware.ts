@@ -3,8 +3,11 @@ import { supabase } from '../config/supabaseClient.js';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nodus_super_secret_jwt_key_change_in_production';
-console.log(`🔐 Auth secret initialized (Length: ${JWT_SECRET.length}, Custom: ${JWT_SECRET !== 'nodus_super_secret_jwt_key_change_in_production'})`);
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET is not defined in environment variables');
+}
+console.log(`🔐 Auth secret initialized (Length: ${JWT_SECRET.length})`);
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -51,7 +54,7 @@ export const authMiddleware = async (
             req.profileId = profile.id;
             req.username = profile.username;
             req.email = payload.email;
-            req.role = payload.email.toLowerCase() === 'jaoomarcos75@gmail.com' ? 'superadmin' : 'user';
+            req.role = profile.username === 'nodus' ? 'superadmin' : 'user';
             
             console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Role: ${req.role})`);
             return next();
@@ -151,7 +154,8 @@ export const authMiddleware = async (
         req.profileId = profile.id;
         req.username = profile.username;
         req.email = sanitizedEmail;
-        req.role = sanitizedEmail === 'jaoomarcos75@gmail.com' ? 'superadmin' : 'user';
+            // In the future, role check can be profile.role === 'admin' 
+            req.role = profile.username === 'nodus' ? 'superadmin' : 'user';
 
         console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Role: ${req.role})`);
 

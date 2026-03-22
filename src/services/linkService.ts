@@ -1,7 +1,7 @@
 import { supabase } from '../config/supabaseClient.js';
 import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.js';
 import { eventService } from './eventService.js';
-import { createHash } from 'crypto';
+import bcrypt from 'bcrypt';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -275,10 +275,11 @@ export const linkService = {
                         delete dbLink.id;
                     }
 
-                    // 🔐 Hash password if provided
+                    // 🔐 Hash password if provided using bcrypt for security
                     const linkAny = item as any;
+                    const SALT_ROUNDS = 10;
                     if (item.isPasswordProtected && linkAny.linkPassword) {
-                        (dbLink as any).password_hash = createHash('sha256').update(linkAny.linkPassword).digest('hex');
+                        (dbLink as any).password_hash = await bcrypt.hash(linkAny.linkPassword, SALT_ROUNDS);
                     } else if (!item.isPasswordProtected) {
                         (dbLink as any).password_hash = null;
                     }
