@@ -20,12 +20,14 @@ const SCOPES = [
  * Generate the Google OAuth URL
  */
 export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
-    // We pass userId and origin in the state to retrieve them in the callback
     const state = Buffer.from(JSON.stringify({ userId, origin })).toString('base64');
 
-    const finalRedirectUri = backendBaseUrl 
-        ? `${backendBaseUrl}/api/integrations/youtube/callback` 
-        : (process.env.YOUTUBE_REDIRECT_URI || '');
+    // Always prefer the fixed YOUTUBE_REDIRECT_URI env var if set.
+    // The dynamic backendBaseUrl can be wrong (http vs https) in production environments like Railway.
+    const finalRedirectUri = process.env.YOUTUBE_REDIRECT_URI 
+        || (backendBaseUrl ? `${backendBaseUrl}/api/integrations/youtube/callback` : '');
+
+    console.log(`[YouTubeService] Auth URL redirect_uri: ${finalRedirectUri}`);
 
     const client = new google.auth.OAuth2(
         process.env.YOUTUBE_CLIENT_ID,
@@ -34,10 +36,10 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
     );
 
     return client.generateAuthUrl({
-        access_type: 'offline', // Important to get a refreshToken
+        access_type: 'offline',
         scope: SCOPES,
         state: state,
-        prompt: 'consent' // Forces showing the consent screen to ensure refresh_token is provided
+        prompt: 'consent'
     });
 };
 
@@ -45,9 +47,12 @@ export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: str
  * Handle the OAuth2 callback, exchange code for tokens and fetch channel data
  */
 export const handleCallback = async (code: string, userId: string, backendBaseUrl?: string) => {
-    const finalRedirectUri = backendBaseUrl 
-        ? `${backendBaseUrl}/api/integrations/youtube/callback` 
-        : (process.env.YOUTUBE_REDIRECT_URI || '');
+    // Always prefer the fixed YOUTUBE_REDIRECT_URI env var if set.
+    // The dynamic backendBaseUrl can be wrong (http vs https) in Railway.
+    const finalRedirectUri = process.env.YOUTUBE_REDIRECT_URI 
+        || (backendBaseUrl ? `${backendBaseUrl}/api/integrations/youtube/callback` : '');
+
+    console.log(`[YouTubeService] Callback redirect_uri: ${finalRedirectUri}`);
 
     const client = new google.auth.OAuth2(
         process.env.YOUTUBE_CLIENT_ID,
@@ -58,28 +63,33 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
     const { tokens } = await client.getToken(code);
     client.setCredentials(tokens);
 
-    // Fetch channel information
-    const youtube = google.youtube({ version: 'v3', auth: client });
-    const response = await youtube.channels.list({
-        part: ['snippet', 'statistics'],
-        mine: true
-    });
-
-    const channel = response.data.items?.[0];
-    if (!channel) {
-        throw new Error('No YouTube channel found for this account.');
-    }
-
-    const profileData = {
-        channelId: channel.id,
-        username: (channel.snippet as any)?.customUrl?.replace('@', '') || channel.snippet?.title,
-        title: channel.snippet?.title,
-        avatar_url: channel.snippet?.thumbnails?.high?.url || channel.snippet?.thumbnails?.default?.url,
-        subscriber_count: parseInt(channel.statistics?.subscriberCount || '0'),
-        view_count: parseInt(channel.statistics?.viewCount || '0'),
-        video_count: parseInt(channel.statistics?.videoCount || '0'),
+    let profileData: any = {
         last_synced: new Date().toISOString()
     };
+
+    try {
+        const youtube = google.youtube({ version: 'v3', auth: client });
+        const response = await youtube.channels.list({
+            part: ['snippet', 'statistics'],
+            mine: true
+        });
+
+        const channel = response.data.items?.[0];
+        if (channel) {
+            profileData = {
+                channelId: channel.id,
+                username: (channel.snippet as any)?.customUrl?.replace('@', '') || channel.snippet?.title,
+                title: channel.snippet?.title,
+                avatar_url: channel.snippet?.thumbnails?.high?.url || channel.snippet?.thumbnails?.default?.url,
+                subscriber_count: parseInt(channel.statistics?.subscriberCount || '0'),
+                view_count: parseInt(channel.statistics?.viewCount || '0'),
+                video_count: parseInt(channel.statistics?.videoCount || '0'),
+                last_synced: new Date().toISOString()
+            };
+        }
+    } catch (channelError: any) {
+        console.warn('⚠️ [YouTubeService] Could not fetch channel data (quota?). Saving tokens only.', channelError?.message);
+    }
 
     // Save to Supabase
     const { error } = await supabase
@@ -87,7 +97,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         .upsert({
             user_id: userId,
             provider: 'youtube',
-            provider_account_id: channel.id,
+            provider_account_id: profileData.channelId || null,
             access_token: tokens.access_token,
             refresh_token: tokens.refresh_token,
             profile_data: profileData,
@@ -115,7 +125,12 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
             .update({ integrations: allIntegrations })
             .eq('id', userId);
 
-        const channelId = channel.id;
+        const channelId = profileData.channelId;
+
+        if (!channelId) {
+            console.warn('⚠️ [youtubeService] No channelId available (quota hit?), skipping link upsert.');
+            return profileData;
+        }
 
         // Check if this channel is already linked in the links table
         console.log(`🎬 [youtubeService] Handling callback for user: ${userId}, channel: ${channelId}`);
@@ -308,10 +323,10 @@ export const checkAndSync = async (userId: string) => {
 
         const lastSync = integration.updated_at ? new Date(integration.updated_at) : new Date(0);
         const now = new Date();
-        const diffSeconds = Math.floor((now.getTime() - lastSync.getTime()) / 1000);
+        const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / 1000 / 60);
 
-        // Sync every 2 seconds for live detection
-        if (diffSeconds >= 2) {
+        // Sync every 6 hours to avoid burning the YouTube API free quota (10,000 units/day)
+        if (diffMinutes >= 360) {
             syncData(userId).catch(e => console.error('[YouTubeSync] Failed:', e));
         }
     } catch (err) {
