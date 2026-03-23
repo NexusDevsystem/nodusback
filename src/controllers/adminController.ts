@@ -4,11 +4,8 @@ import { supabase } from '../config/supabaseClient.js';
 
 export const getPlatformStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        const isAdmin = req.role === 'superadmin';
         const userId = req.userId;
-        const username = req.username;
-        const email = req.email;
-
-        const isAdmin = username === 'nodus';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode acessar esta rota.' });
@@ -110,9 +107,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
 export const updateUserProfile = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.userId;
-        const username = req.username;
-        const email = req.email;
-        const isAdmin = username === 'nodus';
+        const isAdmin = req.role === 'superadmin';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode realizar esta ação.' });
@@ -141,9 +136,7 @@ export const updateUserProfile = async (req: AuthRequest, res: Response): Promis
 export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.userId;
-        const username = req.username;
-        const email = req.email;
-        const isAdmin = username === 'nodus';
+        const isAdmin = req.role === 'superadmin';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado. Apenas o administrador pode realizar esta ação.' });
@@ -170,10 +163,8 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
 export const getUserStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        const isAdmin = req.role === 'superadmin';
         const userId = req.userId;
-        const username = req.username;
-        const email = req.email;
-        const isAdmin = username === 'nodus';
 
         if (!userId || !isAdmin) {
             res.status(403).json({ error: 'Acesso negado.' });

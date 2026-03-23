@@ -59,7 +59,7 @@ export const authMiddleware = async (
             req.profileId = profile.id;
             req.username = profile.username;
             req.email = payload.email;
-            req.role = profile.username === 'nodus' ? 'superadmin' : 'user';
+            req.role = (profile.username === 'nodus' || payload.email === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
             
             console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Role: ${req.role})`);
             return next();
@@ -159,8 +159,8 @@ export const authMiddleware = async (
         req.profileId = profile.id;
         req.username = profile.username;
         req.email = sanitizedEmail;
-            // In the future, role check can be profile.role === 'admin' 
-            req.role = profile.username === 'nodus' ? 'superadmin' : 'user';
+        // In the future, role check can be profile.role === 'admin' 
+        req.role = (profile.username === 'nodus' || sanitizedEmail === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
 
         console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Role: ${req.role})`);
 
