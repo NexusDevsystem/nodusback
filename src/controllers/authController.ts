@@ -1,14 +1,24 @@
+import 'dotenv/config';
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabaseClient.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-const RESET_SECRET = process.env.RESET_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET;
+const RESET_SECRET = process.env.RESET_SECRET;
+
 if (!JWT_SECRET || !RESET_SECRET) {
-    throw new Error('JWT_SECRET or RESET_SECRET not defined');
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('JWT_SECRET or RESET_SECRET not defined in production');
+    } else {
+        console.warn('⚠️ WARNING: JWT Auth Secrets missing in dev. Using temporary fallbacks.');
+    }
 }
+
+const FINAL_JWT_SECRET = JWT_SECRET || 'nodus_temporary_dev_secret_key_2026';
+const FINAL_RESET_SECRET = RESET_SECRET || 'nodus_temporary_dev_reset_key_2026';
+
 const SALT_ROUNDS = 12;
 
 export const register = async (req: Request, res: Response) => {
@@ -64,7 +74,7 @@ export const register = async (req: Request, res: Response) => {
         // Generate JWT
         const token = jwt.sign(
             { userId: newUser.id, email: sanitizedEmail, provider: 'email' },
-            JWT_SECRET,
+            FINAL_JWT_SECRET,
             { expiresIn: '30d' }
         );
 
@@ -125,7 +135,7 @@ export const login = async (req: Request, res: Response) => {
         // Generate JWT
         const token = jwt.sign(
             { userId: user.id, email: sanitizedEmail, provider: 'email' },
-            JWT_SECRET,
+            FINAL_JWT_SECRET,
             { expiresIn: '30d' }
         );
 
@@ -250,7 +260,7 @@ export const verifyResetCode = async (req: Request, res: Response) => {
         // Generate a temporary reset token (valid for 15 mins)
         const resetToken = jwt.sign(
             { userId: otp.user_id, email: sanitizedEmail, purpose: 'password_reset' },
-            RESET_SECRET,
+            FINAL_RESET_SECRET,
             { expiresIn: '15m' }
         );
 
@@ -280,7 +290,7 @@ export const resetPassword = async (req: Request, res: Response) => {
         // Verify token
         let decoded: any;
         try {
-            decoded = jwt.verify(resetToken, RESET_SECRET);
+            decoded = jwt.verify(resetToken, FINAL_RESET_SECRET);
         } catch (err) {
             return res.status(401).json({ error: 'Sessão de redefinição inválida ou expirada.' });
         }

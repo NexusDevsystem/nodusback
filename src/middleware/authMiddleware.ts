@@ -1,13 +1,21 @@
+import 'dotenv/config';
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabaseClient.js';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
 if (!JWT_SECRET) {
-    throw new Error('JWT_SECRET is not defined in environment variables');
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('JWT_SECRET is not defined in environment variables');
+    } else {
+        console.warn('⚠️ WARNING: JWT_SECRET is not defined. Using temporary fallback secret for development.');
+    }
 }
-console.log(`🔐 Auth secret initialized (Length: ${JWT_SECRET.length})`);
+
+const FINAL_JWT_SECRET = JWT_SECRET || 'nodus_temporary_dev_secret_key_2026';
+console.log(`🔐 Auth secret initialized (Length: ${FINAL_JWT_SECRET.length})`);
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -37,7 +45,7 @@ export const authMiddleware = async (
 
         // --- 1. Try internal JWT first (email/password users) ---
         try {
-            const payload = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
+            const payload = jwt.verify(token, FINAL_JWT_SECRET) as { userId: string; email: string };
 
             // Valid internal token - look up profile directly in DB
             const { data: profile, error: profileError } = await supabase
