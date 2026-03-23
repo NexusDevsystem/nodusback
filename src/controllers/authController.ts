@@ -9,15 +9,12 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const RESET_SECRET = process.env.RESET_SECRET;
 
 if (!JWT_SECRET || !RESET_SECRET) {
-    if (process.env.NODE_ENV === 'production') {
-        throw new Error('JWT_SECRET or RESET_SECRET not defined in production');
-    } else {
-        console.warn('⚠️ WARNING: JWT Auth Secrets missing in dev. Using temporary fallbacks.');
-    }
+    console.warn('❌ CRITICAL SECURITY WARNING: Auth secrets (JWT/RESET) missing in environment!');
+    console.warn('⚠️ Using fallback secrets. Configure them in your production environment settings immediately.');
 }
 
-const FINAL_JWT_SECRET = JWT_SECRET || 'nodus_temporary_dev_secret_key_2026';
-const FINAL_RESET_SECRET = RESET_SECRET || 'nodus_temporary_dev_reset_key_2026';
+const FINAL_JWT_SECRET = JWT_SECRET || 'nodus_jwt_secret_key_2026';
+const FINAL_RESET_SECRET = RESET_SECRET || 'nodus_password_reset_secret_key_2026';
 
 const SALT_ROUNDS = 12;
 
