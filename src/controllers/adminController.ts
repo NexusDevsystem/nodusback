@@ -28,7 +28,8 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             weeklyRes,
             latestRes,
             viewsRes,
-            clicksRes
+            clicksRes,
+            uniqueVisitorsRes
         ] = await Promise.all([
             supabase.from('users').select('*', { count: 'exact', head: true }),
             supabase.from('links').select('*', { count: 'exact', head: true }),
@@ -38,11 +39,12 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', lastWeek.toISOString()),
             supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id').order('created_at', { ascending: false }).limit(50),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'view'),
-            supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'click')
+            supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'click'),
+            supabase.from('clicks').select('fingerprint').eq('type', 'view').not('fingerprint', 'is', null)
         ]);
 
         // Check for all errors
-        const errors = [usersRes, linksRes, productsRes, proRes, todayRes, weeklyRes, latestRes, viewsRes, clicksRes]
+        const errors = [usersRes, linksRes, productsRes, proRes, todayRes, weeklyRes, latestRes, viewsRes, clicksRes, uniqueVisitorsRes]
             .filter(r => r.error)
             .map(r => r.error);
         
@@ -74,6 +76,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         const proUsers = proRes.count || 0;
         const totalViews = viewsRes.count || 0;
         const totalClicks = clicksRes.count || 0;
+        const uniqueVisitors = new Set((uniqueVisitorsRes.data || []).map((v: any) => v.fingerprint)).size;
 
         // Calculate CTR
         const globalCTR = totalViews > 0
@@ -88,6 +91,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
                 totalLinks: linksRes.count || 0,
                 totalProducts: productsRes.count || 0,
                 totalViews,
+                uniqueVisitors,
                 totalClicks,
                 globalCTR: globalCTR.toFixed(2),
             },

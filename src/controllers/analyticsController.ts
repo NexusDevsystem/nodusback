@@ -79,15 +79,15 @@ export const analyticsController = {
 
     async trackView(req: AuthRequest, res: Response) {
         try {
-            const { profileId } = req.body;
+            const { profileId, fingerprint } = req.body;
             if (!profileId) {
                 console.error('❌ [Analytics] trackView: missing profileId in body');
                 return res.status(400).json({ error: 'profileId is required' });
             }
 
-            console.log(`📊 [Analytics] trackView: profileId=${profileId}`);
+            console.log(`📊 [Analytics] trackView: profileId=${profileId}${fingerprint ? `, fingerprint=${fingerprint}` : ''}`);
 
-            await analyticsService.trackView(profileId);
+            await analyticsService.trackView(profileId, fingerprint);
 
             res.status(201).json({ success: true });
         } catch (error: any) {

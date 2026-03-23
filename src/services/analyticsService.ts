@@ -158,11 +158,12 @@ export const analyticsService = {
     },
 
     // Track a page view event
-    async trackView(userId: string): Promise<void> {
-        console.log(`📊 [Analytics] trackView: userId=${userId}`);
+    async trackView(userId: string, fingerprint?: string): Promise<void> {
+        console.log(`📊 [Analytics] trackView: userId=${userId}${fingerprint ? `, fingerprint=${fingerprint}` : ''}`);
         const payload = {
             user_id: userId,
-            type: 'view'
+            type: 'view',
+            fingerprint: fingerprint || null
         };
 
         const { error } = await supabase
