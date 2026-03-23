@@ -131,10 +131,10 @@ export const socialController = {
             const profile = await profileService.getProfileByUsername(username);
             if (!profile) return res.status(404).send('Profile not found');
 
-            // Priority: 1. Manual field (if exists) -> 2. Generated card in storage -> 3. Avatar fallback
+            // Priority: 1. Manual field -> 2. Avatar fallback -> 3. Generated card path
             const ogImage = (profile as any).ogImageUrl || 
-                            `https://gadqvlcijsmgtbwydvay.supabase.co/storage/v1/object/public/uploads/profile-cards/${username}.png` || 
                             profile.avatarUrl || 
+                            `https://gadqvlcijsmgtbwydvay.supabase.co/storage/v1/object/public/uploads/profile-cards/${username}.png` || 
                             'https://nodus.my/og-default.png';
             
             const profileUrl = `https://nodus.my/${username}`;
