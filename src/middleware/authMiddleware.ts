@@ -58,7 +58,8 @@ export const authMiddleware = async (
             req.profileId = profile.id;
             req.username = profile.username;
             req.email = payload.email;
-            req.role = (profile.username === 'nodus' || payload.email === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
+            const adminEmails = (process.env.ADMIN_EMAILS || '').split(',');
+            req.role = (profile.username === 'nodus' || adminEmails.includes(payload.email)) ? 'superadmin' : 'user';
             
             console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Role: ${req.role})`);
             return next();
