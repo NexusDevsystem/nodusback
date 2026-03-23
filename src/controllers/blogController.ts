@@ -49,18 +49,33 @@ export const getAdminPosts = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Public: Get single post by slug
+ * Public: Get single post by slug OR short id (first 8 chars of UUID)
  */
 export const getPostBySlug = async (req: AuthRequest, res: Response) => {
     try {
         const { slug } = req.params;
-        const { data, error } = await supabase
+
+        // First try matching by slug
+        let { data, error } = await supabase
             .from('blog_posts')
             .select('*')
             .eq('slug', slug)
             .maybeSingle();
 
         if (error) throw error;
+
+        // If no match by slug, try matching by short ID prefix (first 8 chars of UUID)
+        if (!data && slug.length === 8) {
+            const { data: dataById, error: errorById } = await supabase
+                .from('blog_posts')
+                .select('*')
+                .like('id', `${slug}%`)
+                .maybeSingle();
+
+            if (errorById) throw errorById;
+            data = dataById;
+        }
+
         if (!data) return res.status(404).json({ error: 'Post not found' });
 
         return res.json(blogPostDbToApi(data as BlogPostDB));
