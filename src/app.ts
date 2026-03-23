@@ -119,7 +119,7 @@ app.use((req, res, next) => {
 
 // Body Parser with Webhook Support
 app.use(express.json({
-    limit: '2mb',
+    limit: '10mb',
     verify: (req: any, res, buf) => {
         if (req.originalUrl.includes('/billing/webhook') || req.path.includes('/billing/webhook')) {
             req.rawBody = buf;
