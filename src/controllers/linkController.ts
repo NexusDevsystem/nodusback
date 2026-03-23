@@ -5,16 +5,12 @@ import { supabase } from '../config/supabaseClient.js';
 import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { fileTypeFromBuffer } from 'file-type';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Ensure uploads directory exists - Note: link thumbnails are stored separately
 // so they don't clutter the user's main file manager.
-const UPLOADS_DIR = path.join(__dirname, '../../uploads/links');
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads/links');
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }

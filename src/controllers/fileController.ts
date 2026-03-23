@@ -12,11 +12,9 @@ interface MulterRequest extends Request {
     user?: any;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Ensure uploads directory exists
-const UPLOADS_DIR = path.join(__dirname, '../../uploads/files');
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads/files');
+
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }

@@ -45,7 +45,8 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
 
         await tiktokService.handleCallback(code as string, userId, verifier, backendBaseUrl);
 
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
+        const defaultFrontendUrl = process.env.FRONTEND_URL;
+        if (!defaultFrontendUrl) throw new Error('FRONTEND_URL missing');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
         res.redirect(`${redirectUrl}/admin?success=tiktok`);
     } catch (error: any) {
@@ -342,7 +343,12 @@ export const handleInstagramWebhook = async (req: Request, res: Response) => {
         const mode = req.query['hub.mode'];
         const token = req.query['hub.verify_token'];
         const challenge = req.query['hub.challenge'];
-        const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'nodus_secure_token_2026';
+        const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+
+        if (!verifyToken) {
+            console.error('❌ META_WEBHOOK_VERIFY_TOKEN missing in .env');
+            return res.status(500).send('Internal Server Error: Missing verification token');
+        }
 
         if (mode === 'subscribe' && token === verifyToken) {
             res.set('Content-Type', 'text/plain');

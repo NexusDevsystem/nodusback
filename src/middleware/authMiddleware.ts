@@ -7,11 +7,10 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
-    console.warn('❌ CRITICAL SECURITY WARNING: JWT_SECRET is not defined in environment variables!');
-    console.warn('⚠️ Running with unsafe fallback secret. PLEASE SET JWT_SECRET IN YOUR DEPLOYMENT PANEL ASAP.');
+    throw new Error('❌ VARIAVEL DE AMBIENTE FALTANDO: JWT_SECRET deve estar no .env para o middleware de autenticação funcionar.');
 }
 
-const FINAL_JWT_SECRET = JWT_SECRET || 'nodus_jwt_secret_key_2026';
+const FINAL_JWT_SECRET = JWT_SECRET;
 console.log(`🔐 Auth secret initialized (Length: ${FINAL_JWT_SECRET.length})`);
 
 export interface AuthRequest extends Request {
@@ -160,7 +159,8 @@ export const authMiddleware = async (
         req.username = profile.username;
         req.email = sanitizedEmail;
         // In the future, role check can be profile.role === 'admin' 
-        req.role = (profile.username === 'nodus' || sanitizedEmail === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
+        const adminEmails = (process.env.ADMIN_EMAILS || '').split(',');
+        req.role = (profile.username === 'nodus' || adminEmails.includes(sanitizedEmail)) ? 'superadmin' : 'user';
 
         console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Role: ${req.role})`);
 

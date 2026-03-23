@@ -32,17 +32,17 @@ const stripeKey = getCleanedKey(secretKey || '');
 let stripe: Stripe;
 
 try {
-    stripe = new Stripe(stripeKey || 'sk_test_dummy_key_to_prevent_crash_on_import', {
+    if (!stripeKey) {
+        throw new Error('❌ STRIPE_SECRET_KEY faltando no .env');
+    }
+    stripe = new Stripe(stripeKey, {
         apiVersion: '2023-10-16' as any
     });
-    if (!stripeKey) {
-        console.warn('⚠️ Stripe Secret Key MISSING! Billing features will fail.');
-    } else {
-        console.log(`💳 Stripe initialized in ${isTestMode ? 'TEST' : 'PRODUCTION'} mode`);
-    }
+    console.log(`💳 Stripe initialized in ${isTestMode ? 'TEST' : 'PRODUCTION'} mode`);
 } catch (err: any) {
-    console.error(`CRITICAL: Stripe initialization failed (${isTestMode ? 'TEST' : 'LIVE'}):`, err.message);
-    stripe = new Stripe('sk_test_dummy_key_to_prevent_crash_on_import', { apiVersion: '2023-10-16' as any });
+    console.error(`❌ Erro crítico: Stripe não pôde ser inicializado:`, err.message);
+    // Allow the process to continue so other parts of the app can work, 
+    // but stripe will be undefined and throw on usage (which is safer than dummy keys)
 }
 
 export const stripeService = {

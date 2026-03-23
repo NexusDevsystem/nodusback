@@ -1,0 +1,26 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+    "^file-type$": "<rootDir>/src/__mocks__/file-type.ts"
+  },
+  "transform": {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        "tsconfig": {
+          "module": "CommonJS",
+          "moduleResolution": "node",
+          "esModuleInterop": true,
+          "allowSyntheticDefaultImports": true
+        },
+        "diagnostics": false
+      }
+    ]
+  },
+  "testMatch": ["**/__tests__/**/*.test.ts"],
+  "verbose": true,
+  "forceExit": true,
+  "testTimeout": 30000
+}
