@@ -92,24 +92,42 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
     }
 
     // Save to Supabase
-    const { error } = await supabase
+    // Manual upsert: check if existing row for this user+provider, then update or insert
+    const { data: existingIntegration } = await supabase
         .from('social_integrations')
-        .upsert({
-            user_id: userId,
-            provider: 'youtube',
-            provider_account_id: profileData.channelId || null,
-            access_token: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-            profile_data: profileData,
-            expires_at: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
-            updated_at: new Date().toISOString()
-        }, {
-            onConflict: 'user_id,provider'
-        });
+        .select('id')
+        .eq('user_id', userId)
+        .eq('provider', 'youtube')
+        .maybeSingle();
 
-    if (error) {
-        console.error('❌ [YouTubeService] Supabase Upsert Error:', error);
-        throw error;
+    const integrationPayload = {
+        user_id: userId,
+        provider: 'youtube',
+        provider_account_id: profileData.channelId || null,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        profile_data: profileData,
+        expires_at: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+        updated_at: new Date().toISOString()
+    };
+
+    let saveError: any = null;
+    if (existingIntegration) {
+        const { error } = await supabase
+            .from('social_integrations')
+            .update(integrationPayload)
+            .eq('id', existingIntegration.id);
+        saveError = error;
+    } else {
+        const { error } = await supabase
+            .from('social_integrations')
+            .insert(integrationPayload);
+        saveError = error;
+    }
+
+    if (saveError) {
+        console.error('❌ [YouTubeService] Supabase Save Error:', saveError);
+        throw saveError;
     }
 
     // Update the main 'users' table integrations array for frontend consistency
