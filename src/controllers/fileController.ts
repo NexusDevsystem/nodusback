@@ -71,7 +71,7 @@ const fileController = {
                 .from('uploads')
                 .upload(filePath, multerReq.file.buffer, {
                     contentType: multerReq.file.mimetype,
-                    cacheControl: '3600',
+                    cacheControl: '31536000',
                     upsert: false
                 });
 
