@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { supabase } from '../config/supabaseClient.js';
+import { fileTypeFromBuffer } from 'file-type';
 
 // Extend Express Request interface to include user and file
 interface MulterRequest extends Request {
@@ -52,6 +53,20 @@ const fileController = {
 
             if (!multerReq.file) {
                 return res.status(400).json({ error: true, message: 'No file uploaded' });
+            }
+
+            // 🕵️ VALIDATE MAGIC BYTES (MIME Type Sniffing)
+            const realType = await fileTypeFromBuffer(multerReq.file.buffer);
+            
+            // Only validate if detection is possible (text/svg/etc might return undefined)
+            if (realType) {
+                 const allowedMimeGroups = ['image/', 'video/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument'];
+                 const isRealAllowed = allowedMimeGroups.some(group => realType.mime.startsWith(group));
+                 
+                 if (!isRealAllowed) {
+                    console.warn(`🚨 [SECURITY] Blocked malicious upload attempt from user ${(req as any).profileId}: ${multerReq.file.originalname} (Detected real type: ${realType.mime})`);
+                    return res.status(400).json({ error: true, message: 'O conteúdo do arquivo não condiz com as extensões suportadas.' });
+                 }
             }
 
             const userId = (req as any).userId;

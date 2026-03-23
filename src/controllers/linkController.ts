@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import { fileTypeFromBuffer } from 'file-type';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,22 +102,6 @@ export const linkController = {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            // 🔐 OWNERSHIP CHECK: Ensure the link belongs to the user
-            const { data: existingLink } = await supabase
-                .from('links')
-                .select('user_id')
-                .eq('id', id)
-                .single();
-
-            if (!existingLink) {
-                return res.status(404).json({ error: 'Link not found' });
-            }
-
-            if (existingLink.user_id !== req.profileId) {
-                console.warn(`🚨 [SECURITY] User ${req.profileId} attempted to update link ${id} belonging to ${existingLink.user_id}`);
-                return res.status(403).json({ error: 'Forbidden: You do not own this link' });
-            }
-
             const link = await linkService.updateLink(id, req.body);
             res.json(link);
         } catch (error) {
@@ -133,21 +118,6 @@ export const linkController = {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            // 🔐 OWNERSHIP CHECK: Ensure the link belongs to the user
-            const { data: existingLink } = await supabase
-                .from('links')
-                .select('user_id')
-                .eq('id', id)
-                .single();
-
-            if (!existingLink) {
-                return res.status(404).json({ error: 'Link not found' });
-            }
-
-            if (existingLink.user_id !== req.profileId) {
-                console.warn(`🚨 [SECURITY] User ${req.profileId} attempted to delete link ${id} belonging to ${existingLink.user_id}`);
-                return res.status(403).json({ error: 'Forbidden: You do not own this link' });
-            }
 
             const deleted = await linkService.deleteLink(id);
             res.status(204).send();
@@ -195,6 +165,22 @@ export const linkController = {
             const file = req.file;
             if (!file) {
                 return res.status(400).json({ error: 'No file uploaded' });
+            }
+
+            // 🕵️ VALIDATE MAGIC BYTES (MIME Type Sniffing)
+            // Inspect the real file content, not just the extension or browser header
+            const realType = await fileTypeFromBuffer(file.buffer);
+            if (!realType || !realType.mime.startsWith('image/')) {
+                console.warn(`🚨 [SECURITY] Blocked suspicious file upload from user ${req.profileId}: ${file.originalname} (Detected: ${realType?.mime || 'unknown'})`);
+                return res.status(400).json({ 
+                    error: 'Upload de arquivo inválido. O conteúdo do arquivo deve ser uma imagem válida.' 
+                });
+            }
+
+            // Also check for executable-like mime types explicitly
+            const dangerousMimes = ['application/x-executable', 'application/x-msdownload', 'text/html', 'application/javascript'];
+            if (dangerousMimes.includes(realType.mime)) {
+                 return res.status(400).json({ error: 'Formato de arquivo perigoso bloqueado.' });
             }
 
             const userId = req.userId;

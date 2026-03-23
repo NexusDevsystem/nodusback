@@ -20,6 +20,8 @@ import eventRoutes from './routes/eventRoutes.js';
 import blogRoutes from './routes/blogRoutes.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { xssMiddleware } from './middleware/xssMiddleware.js';
+import { inputLimitMiddleware } from './middleware/inputLimitMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -110,6 +112,10 @@ app.use(express.json({
         }
     }
 }));
+
+// 🛡️ Global Security Layer
+app.use(xssMiddleware);      // Sanitize scripts
+app.use(inputLimitMiddleware); // Enforce text limits
 
 // Serve Uploads Static Directory
 const UPLOADS_DIR = path.join(__dirname, '../uploads');
