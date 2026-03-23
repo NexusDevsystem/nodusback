@@ -161,11 +161,10 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
             if (state) {
                 const base64State = state.replace(/ /g, '+');
                 const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-                origin = stateData.origin;
+                origin = stateData?.origin;
             }
         } catch (e) { }
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
         res.redirect(`${redirectUrl}/admin?error=twitch`);
     }
 };
@@ -199,8 +198,7 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
 
         await youtubeService.handleCallback(code as string, userId, backendBaseUrl);
 
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
         res.redirect(`${redirectUrl}/admin?success=youtube`);
     } catch (error: any) {
         console.error('YouTube Callback error:', error);
@@ -208,12 +206,12 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
         let origin = '';
         try {
             if (state) {
-                const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
-                origin = stateData.origin;
+                const safeState = state.replace(/ /g, '+');
+                const stateData = JSON.parse(Buffer.from(safeState, 'base64').toString());
+                origin = stateData?.origin;
             }
         } catch (e) { }
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
         res.redirect(`${redirectUrl}/admin?error=youtube`);
     }
 };
@@ -270,11 +268,10 @@ export const handleKickCallback = async (req: Request, res: Response) => {
             if (state) {
                 const base64State = state.replace(/ /g, '+');
                 const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-                origin = stateData.origin;
+                origin = stateData?.origin;
             }
         } catch (e) { }
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
+        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
         res.redirect(`${redirectUrl}/admin?error=kick`);
     }
 };

@@ -94,10 +94,13 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
             expires_at: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
             updated_at: new Date().toISOString()
         }, {
-            onConflict: 'user_id,provider,provider_account_id'
+            onConflict: 'user_id,provider'
         });
 
-    if (error) throw error;
+    if (error) {
+        console.error('❌ [YouTubeService] Supabase Upsert Error:', error);
+        throw error;
+    }
 
     // Update the main 'users' table integrations array for frontend consistency
     const { data: allIntegrations } = await supabase
