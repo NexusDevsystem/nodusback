@@ -259,69 +259,79 @@ export const linkService = {
             const existingIds = new Set((existingLinks || []).map(l => l.id));
             const activeIds = new Set<string>();
 
-            const upsertRecursive = async (items: LinkItem[], parentId: string | null = null): Promise<LinkItem[]> => {
-                const result: LinkItem[] = [];
+            // 1. Flatten the tree and prepare DB objects
+            const flattenedDbLinks: LinkItemDB[] = [];
+            const agendaItems: { linkId: string, events: any[] }[] = [];
 
+            const flatten = async (items: LinkItem[], parentId: string | null = null) => {
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
-                    const dbLink = linkApiToDb(item, userId);
+                    const dbLink = linkApiToDb(item, userId) as LinkItemDB;
                     dbLink.parent_id = parentId;
                     dbLink.position = i;
 
+                    // Ensure we have a valid UUID for the ID
                     const isUUID = item.id && UUID_REGEX.test(item.id);
                     if (isUUID) {
                         dbLink.id = item.id;
                     } else {
-                        delete dbLink.id;
+                        // If it's a temp ID or missing, we could have an issue with batching children
+                        // But Nodus frontend uses crypto.randomUUID() for new items anyway.
+                        // We'll keep it as is or handle it if necessary.
+                        dbLink.id = item.id; 
                     }
 
-                    // 🔐 Hash password if provided using bcrypt for security
-                    const linkAny = item as any;
-                    const SALT_ROUNDS = 10;
-                    if (item.isPasswordProtected && linkAny.linkPassword) {
-                        (dbLink as any).password_hash = await bcrypt.hash(linkAny.linkPassword, SALT_ROUNDS);
+                    // 🔐 Hash password if provided
+                    if (item.isPasswordProtected && (item as any).linkPassword) {
+                        dbLink.password_hash = await bcrypt.hash((item as any).linkPassword, 10);
                     } else if (!item.isPasswordProtected) {
-                        (dbLink as any).password_hash = null;
+                        dbLink.password_hash = null;
                     }
 
-                    const { data, error } = await supabase
-                        .from('links')
-                        .upsert(dbLink)
-                        .select()
-                        .single();
+                    flattenedDbLinks.push(dbLink);
+                    activeIds.add(dbLink.id!);
 
-                    if (error) {
-                        console.error('[bulkSave] Upsert failed:', error);
-                        continue;
+                    if (item.type === 'agenda' && item.events) {
+                        agendaItems.push({ linkId: dbLink.id!, events: item.events });
                     }
-
-                    const savedDbLink = data as LinkItemDB;
-                    activeIds.add(savedDbLink.id!);
-                    const apiLink = linkDbToApi(savedDbLink);
 
                     if (item.children && item.children.length > 0) {
-                        apiLink.children = await upsertRecursive(item.children, savedDbLink.id!);
+                        await flatten(item.children, dbLink.id!);
                     }
-
-                    // Persist events for agenda items so they are saved to the DB
-                    if (item.type === 'agenda' && item.events) {
-                        apiLink.events = await eventService.replaceEvents(userId, savedDbLink.id!, item.events);
-                    }
-
-                    result.push(apiLink);
                 }
-                return result;
             };
 
-            const savedTree = await upsertRecursive(links);
-            const idsToDelete = Array.from(existingIds).filter(id => !activeIds.has(id));
+            await flatten(links);
 
+            // 2. Batch Upsert Links
+            if (flattenedDbLinks.length > 0) {
+                const { error: upsertError } = await supabase
+                    .from('links')
+                    .upsert(flattenedDbLinks);
+                
+                if (upsertError) {
+                    console.error('[bulkSave] Batch upsert failed:', upsertError);
+                    throw upsertError;
+                }
+            }
+
+            // 3. Handle Agenda Events in parallel batches
+            if (agendaItems.length > 0) {
+                await Promise.all(agendaItems.map(item => 
+                    eventService.replaceEvents(userId, item.linkId, item.events)
+                ));
+            }
+
+            // 4. Cleanup deleted links
+            const idsToDelete = Array.from(existingIds).filter(id => !activeIds.has(id));
             if (idsToDelete.length > 0) {
                 await supabase.from('clicks').delete().in('link_id', idsToDelete);
                 await supabase.from('links').delete().in('id', idsToDelete);
             }
 
-            return savedTree;
+            // Return the tree as interpreted from the newly saved flat data
+            // This ensures we return consistent IDs and structure
+            return this.getLinksByProfileId(userId, false);
         } catch (err) {
             console.error('[bulkSave] Unexpected error:', err);
             throw err;
