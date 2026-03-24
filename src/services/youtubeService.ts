@@ -284,11 +284,14 @@ export const syncData = async (userId: string) => {
 
         const updatedProfileData = {
             ...integration.profile_data,
+            title: channel.snippet?.title || integration.profile_data?.title,
+            avatar_url: channel.snippet?.thumbnails?.high?.url || channel.snippet?.thumbnails?.medium?.url || integration.profile_data?.avatar_url,
             subscriber_count: parseInt(channel.statistics?.subscriberCount || '0'),
             is_live: isLive,
             channelId: channel.id,
             last_synced: new Date().toISOString()
         };
+
 
         // Update database
         await supabase

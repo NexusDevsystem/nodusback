@@ -2,8 +2,11 @@ import { supabase } from '../config/supabaseClient.js';
 import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.js';
 import { eventService } from './eventService.js';
 import bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+
 
 export const linkService = {
     // Get all links for a profile (by user_id)
@@ -259,27 +262,30 @@ export const linkService = {
             const existingIds = new Set((existingLinks || []).map(l => l.id));
             const activeIds = new Set<string>();
 
-            // 1. Flatten the tree and prepare DB objects
+            const idMap = new Map<string, string>();
             const flattenedDbLinks: LinkItemDB[] = [];
             const agendaItems: { linkId: string, events: any[] }[] = [];
+
+            const getValidId = (oldId?: string) => {
+
+                if (!oldId) return uuidv4();
+                if (UUID_REGEX.test(oldId)) return oldId;
+                if (idMap.has(oldId)) return idMap.get(oldId)!;
+                const newId = uuidv4();
+                idMap.set(oldId, newId);
+                return newId;
+            };
 
             const flatten = async (items: LinkItem[], parentId: string | null = null) => {
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     const dbLink = linkApiToDb(item, userId) as LinkItemDB;
+                    
+                    const validId = getValidId(item.id);
+                    dbLink.id = validId;
                     dbLink.parent_id = parentId;
                     dbLink.position = i;
 
-                    // Ensure we have a valid UUID for the ID
-                    const isUUID = item.id && UUID_REGEX.test(item.id);
-                    if (isUUID) {
-                        dbLink.id = item.id;
-                    } else {
-                        // If it's a temp ID or missing, we could have an issue with batching children
-                        // But Nodus frontend uses crypto.randomUUID() for new items anyway.
-                        // We'll keep it as is or handle it if necessary.
-                        dbLink.id = item.id; 
-                    }
 
                     // 🔐 Hash password if provided
                     if (item.isPasswordProtected && (item as any).linkPassword) {
@@ -296,8 +302,9 @@ export const linkService = {
                     }
 
                     if (item.children && item.children.length > 0) {
-                        await flatten(item.children, dbLink.id!);
+                        await flatten(item.children, validId);
                     }
+
                 }
             };
 
