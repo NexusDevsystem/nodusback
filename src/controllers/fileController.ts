@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { supabase } from '../config/supabaseClient.js';
 import { fileTypeFromBuffer } from 'file-type';
+import sharp from 'sharp';
+
 
 // Extend Express Request interface to include user and file
 interface MulterRequest extends Request {
@@ -69,11 +71,29 @@ const fileController = {
 
             const userId = (req as any).userId;
             
+            // 🖼️ IMAGE CONVERSION: PNG/WebP/etc -> Optimized JPEG
+            let buffer = multerReq.file.buffer;
+            let mimetype = multerReq.file.mimetype;
+            let originalExt = path.extname(multerReq.file.originalname).toLowerCase();
+            let finalExt = originalExt;
+
+            if (mimetype.startsWith('image/') && !mimetype.includes('svg')) {
+                try {
+                    buffer = await sharp(buffer)
+                        .jpeg({ quality: 85, mozjpeg: true })
+                        .toBuffer();
+                    mimetype = 'image/jpeg';
+                    finalExt = '.jpg';
+                } catch (err) {
+                    console.error('Sharp processing error:', err);
+                    // Fallback to original if processing fails
+                }
+            }
+            
             // Generate a unique filename to avoid collisions
             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const ext = path.extname(multerReq.file.originalname);
-            const name = path.basename(multerReq.file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
-            const fileName = `${name}-${uniqueSuffix}${ext}`;
+            const name = path.basename(multerReq.file.originalname, originalExt).replace(/[^a-zA-Z0-9]/g, '_');
+            const fileName = `${name}-${uniqueSuffix}${finalExt}`;
             const folder = (req.query.folder as string) || '';
             const type = (req.query.type as string) || 'user_upload';
             const storageFolder = folder ? `${folder}/` : '';
@@ -82,11 +102,12 @@ const fileController = {
             // Upload to Supabase Storage
             const { data, error } = await supabase.storage
                 .from('uploads')
-                .upload(filePath, multerReq.file.buffer, {
-                    contentType: multerReq.file.mimetype,
+                .upload(filePath, buffer, {
+                    contentType: mimetype,
                     cacheControl: '31536000',
                     upsert: false
                 });
+
 
             if (error) {
                 console.error('Supabase storage upload error:', error);
@@ -105,8 +126,8 @@ const fileController = {
                     user_id: (req as any).profileId, // Using profileId for consistency with other parts of system
                     filename: fileName,
                     url: publicUrl,
-                    mimetype: multerReq.file.mimetype,
-                    size: multerReq.file.size,
+                    mimetype: mimetype,
+                    size: buffer.length,
                     asset_type: type
                 });
 
@@ -116,12 +137,13 @@ const fileController = {
                 file: {
                     name: multerReq.file.originalname,
                     filename: fileName,
-                    size: multerReq.file.size,
+                    size: buffer.length,
                     url: publicUrl,
-                    mimetype: multerReq.file.mimetype,
+                    mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
             });
+
         } catch (error: any) {
             console.error('Upload error:', error);
             const status = error.message?.includes('Invalid file type') ? 400 : 500;
@@ -219,15 +241,19 @@ const fileController = {
             }
 
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-            const buffer = Buffer.from(base64Data, 'base64');
-            const fileName = `blog-cards/${slug}.png`;
+            const rawBuffer = Buffer.from(base64Data, 'base64');
+            
+            // Convert card to optimized JPEG
+            const buffer = await sharp(rawBuffer).jpeg({ quality: 90 }).toBuffer();
+            const fileName = `blog-cards/${slug}.jpg`;
 
             const { error: uploadError } = await supabase.storage
                 .from('uploads')
                 .upload(fileName, buffer, {
-                    contentType: 'image/png',
+                    contentType: 'image/jpeg',
                     upsert: true
                 });
+
 
             if (uploadError) throw uploadError;
 
@@ -256,15 +282,19 @@ const fileController = {
             }
 
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-            const buffer = Buffer.from(base64Data, 'base64');
-            const fileName = `profile-cards/${username}.png`;
+            const rawBuffer = Buffer.from(base64Data, 'base64');
+            
+            // Convert profile card to optimized JPEG
+            const buffer = await sharp(rawBuffer).jpeg({ quality: 90 }).toBuffer();
+            const fileName = `profile-cards/${username}.jpg`;
 
             const { error: uploadError } = await supabase.storage
                 .from('uploads')
                 .upload(fileName, buffer, {
-                    contentType: 'image/png',
+                    contentType: 'image/jpeg',
                     upsert: true
                 });
+
 
             if (uploadError) throw uploadError;
 
