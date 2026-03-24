@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import bcrypt from 'bcrypt';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
 
@@ -208,5 +209,68 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
     } catch (error: any) {
         console.error('❌ Error fetching individual user stats:', error);
         res.status(500).json({ error: 'Erro ao carregar detalhes do usuário.' });
+    }
+};
+
+export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const isAdmin = req.role === 'superadmin';
+        const userId = req.userId;
+
+        if (!userId || !isAdmin) {
+            res.status(403).json({ error: 'Acesso negado.' });
+            return;
+        }
+
+        const { email, password, name, username, plan_type } = req.body;
+
+        if (!email || !password || !username) {
+            res.status(400).json({ error: 'Email, senha e username são obrigatórios.' });
+            return;
+        }
+
+        const sanitizedEmail = email.toLowerCase().trim();
+        const sanitizedUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+
+        // Check if user already exists
+        const { data: existingUser } = await supabase
+            .from('users')
+            .select('id')
+            .or(`email.eq.${sanitizedEmail},username.eq.${sanitizedUsername}`)
+            .maybeSingle();
+
+        if (existingUser) {
+            res.status(409).json({ error: 'Email ou username já estão em uso.' });
+            return;
+        }
+
+        // Hash the password
+        const passwordHash = await bcrypt.hash(password, 12);
+
+        // Create the user
+        const { data: newUser, error: createError } = await supabase
+            .from('users')
+            .insert({
+                email: sanitizedEmail,
+                username: sanitizedUsername,
+                name: name || sanitizedUsername,
+                password_hash: passwordHash,
+                auth_provider: 'email',
+                plan_type: plan_type || 'free',
+                theme_id: 'default',
+                font_family: 'Inter',
+                is_verified: false
+            })
+            .select('*')
+            .single();
+
+        if (createError) throw createError;
+
+        console.log(`👤 [Admin] Novo usuário criado: ${sanitizedEmail} por ${req.email}`);
+        res.status(201).json(newUser);
+
+    } catch (error: any) {
+        console.error('❌ Error creating user from admin:', error);
+        res.status(500).json({ error: 'Erro ao criar novo usuário.' });
     }
 };

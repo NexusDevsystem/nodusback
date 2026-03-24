@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPlatformStats, updateUserProfile, deleteUser, getUserStats } from '../controllers/adminController.js';
+import { getPlatformStats, updateUserProfile, deleteUser, getUserStats, createUser } from '../controllers/adminController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -9,6 +9,9 @@ router.get('/stats', authMiddleware, getPlatformStats);
 
 // Update user profile (verified, category, etc)
 router.patch('/users/:targetUserId', authMiddleware, updateUserProfile);
+
+// Create new user manually
+router.post('/users', authMiddleware, createUser);
 
 // Delete user
 router.delete('/users/:targetUserId', authMiddleware, deleteUser);
