@@ -80,7 +80,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
                 channelId: channel.id,
                 username: (channel.snippet as any)?.customUrl?.replace('@', '') || channel.snippet?.title,
                 title: channel.snippet?.title,
-                avatar_url: channel.snippet?.thumbnails?.high?.url || channel.snippet?.thumbnails?.default?.url,
+                avatar_url: channel.snippet?.thumbnails?.high?.url || channel.snippet?.thumbnails?.standard?.url || channel.snippet?.thumbnails?.medium?.url || channel.snippet?.thumbnails?.default?.url,
                 subscriber_count: parseInt(channel.statistics?.subscriberCount || '0'),
                 view_count: parseInt(channel.statistics?.viewCount || '0'),
                 video_count: parseInt(channel.statistics?.videoCount || '0'),
