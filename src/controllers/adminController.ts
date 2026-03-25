@@ -38,7 +38,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             supabase.from('users').select('*', { count: 'exact', head: true }).neq('plan_type', 'free'),
             supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
             supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', lastWeek.toISOString()),
-            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id').order('created_at', { ascending: false }).limit(50),
+            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source').order('created_at', { ascending: false }).limit(50),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'view'),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'click'),
             supabase.from('clicks').select('fingerprint').eq('type', 'view').not('fingerprint', 'is', null)
@@ -62,7 +62,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         if (!hasNodus) {
             const { data: nodusUser } = await supabase
                 .from('users')
-                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id')
+                .select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source')
                 .eq('username', 'nodus')
                 .single();
 
@@ -180,7 +180,7 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
 
         // Fetch everything in parallel
         const [userRes, viewsRes, clicksRes, linksRes, productsRes] = await Promise.all([
-            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id').eq('id', targetUserId).single(),
+            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source').eq('id', targetUserId).single(),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'view'),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'click'),
             supabase.from('links').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId),
