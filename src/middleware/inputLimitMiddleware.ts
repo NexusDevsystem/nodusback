@@ -15,6 +15,10 @@ const FIELD_LIMITS: Record<string, number> = {
     'password': 128,       // Max password length
     'slug': 100,           // Blog slugs
     'customCSS': 5000,     // Allow a bit more for CSS but not infinite
+    'avatarUrl': 200000,   // Support Base64 avatars
+    'image': 200000,       // Support Base64 link images
+    'imageUrl': 200000,    // Support Base64 post images
+    'customBackground': 500000, // Backgrounds can be larger
 };
 
 const validateLimits = (data: any): string | null => {

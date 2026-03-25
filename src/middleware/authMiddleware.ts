@@ -132,6 +132,7 @@ export const authMiddleware = async (
                 .from('users')
                 .insert({
                     email: sanitizedEmail,
+                    username: `${sanitizedEmail.split('@')[0]}_${Math.random().toString(36).substring(2, 7)}`,
                     name: email.split('@')[0], // Default name from email
                     onboarding_completed: false,
                     auth_provider: 'google',

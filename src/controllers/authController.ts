@@ -19,15 +19,15 @@ const SALT_ROUNDS = 12;
 
 export const register = async (req: Request, res: Response) => {
     try {
-        const { email, password, name } = req.body;
+        const { email, password, name, username } = req.body;
 
         // 🛡️ Type guard: reject non-string inputs (NoSQL injection prevention)
-        if (typeof email !== 'string' || typeof password !== 'string') {
+        if (typeof email !== 'string' || typeof password !== 'string' || (username && typeof username !== 'string')) {
             return res.status(400).json({ error: 'Formato de credenciais inválido.' });
         }
 
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+        if (!email || !password || !username) {
+            return res.status(400).json({ error: 'Email, senha e username são obrigatórios.' });
         }
 
         if (password.length < 6) {
@@ -35,19 +35,29 @@ export const register = async (req: Request, res: Response) => {
         }
 
         const sanitizedEmail = email.toLowerCase().trim();
+        const sanitizedUsername = username.toLowerCase().trim().replace(/[^a-z0-9._-]/g, '');
 
-        // Check if user already exists
+        if (sanitizedUsername.length < 3) {
+            return res.status(400).json({ error: 'O username deve ter pelo menos 3 caracteres.' });
+        }
+
+        // Check if user or username already exists
         const { data: existingUser } = await supabase
             .from('users')
-            .select('id, auth_provider')
-            .eq('email', sanitizedEmail)
+            .select('id, email, username, auth_provider')
+            .or(`email.eq.${sanitizedEmail},username.eq.${sanitizedUsername}`)
             .maybeSingle();
 
         if (existingUser) {
-            if (existingUser.auth_provider === 'google') {
-                return res.status(409).json({ error: 'Este email já está vinculado a uma conta Google. Faça login com o Google.' });
+            if (existingUser.email === sanitizedEmail) {
+                if (existingUser.auth_provider === 'google') {
+                    return res.status(409).json({ error: 'Este email já está vinculado a uma conta Google. Faça login com o Google.' });
+                }
+                return res.status(409).json({ error: 'Este email já está cadastrado. Faça login.' });
             }
-            return res.status(409).json({ error: 'Este email já está cadastrado. Faça login.' });
+            if (existingUser.username === sanitizedUsername) {
+                return res.status(409).json({ error: 'Este username já está em uso. Escolha outro.' });
+            }
         }
 
         // Hash the password
@@ -58,11 +68,13 @@ export const register = async (req: Request, res: Response) => {
             .from('users')
             .insert({
                 email: sanitizedEmail,
-                name: name?.trim() || sanitizedEmail.split('@')[0],
+                username: sanitizedUsername,
+                name: name?.trim() || sanitizedUsername,
                 password_hash: passwordHash,
                 auth_provider: 'email',
                 theme_id: 'default',
-                font_family: 'Inter'
+                font_family: 'Inter',
+                onboarding_completed: false
             })
             .select('id, email, name, username')
             .single();
@@ -74,7 +86,7 @@ export const register = async (req: Request, res: Response) => {
 
         // Generate JWT
         const token = jwt.sign(
-            { userId: newUser.id, email: sanitizedEmail, provider: 'email' },
+            { userId: newUser.id, email: sanitizedEmail, username: sanitizedUsername, provider: 'email' },
             FINAL_JWT_SECRET,
             { expiresIn: '30d' }
         );
@@ -87,6 +99,7 @@ export const register = async (req: Request, res: Response) => {
                 id: newUser.id,
                 email: newUser.email,
                 name: newUser.name,
+                username: newUser.username,
                 picture: null
             }
         });
@@ -140,7 +153,7 @@ export const login = async (req: Request, res: Response) => {
 
         // Generate JWT
         const token = jwt.sign(
-            { userId: user.id, email: sanitizedEmail, provider: 'email' },
+            { userId: user.id, email: sanitizedEmail, username: user.username, provider: 'email' },
             FINAL_JWT_SECRET,
             { expiresIn: '30d' }
         );
@@ -153,6 +166,7 @@ export const login = async (req: Request, res: Response) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
+                username: user.username,
                 picture: null
             }
         });
