@@ -131,7 +131,7 @@ export const billingController = {
                     }
 
                     // Robust fallback for manual links: Identify profile by customer email
-                    let profileToUpdate = null;
+                    let profileToUpdate: any = null;
                     if (profileId) {
                         profileToUpdate = await profileService.getProfileByUserId(profileId as string);
                     }
@@ -158,7 +158,7 @@ export const billingController = {
                         if (planId === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
                         else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
 
-                        await profileService.updateProfile(profileToUpdate.id, {
+                        await profileService.updateProfile(profileToUpdate.id as string, {
                             planType: planId,
                             subscriptionStatus: 'active',
                             subscriptionExpiryDate: expiryDate.toISOString()
@@ -226,7 +226,7 @@ export const billingController = {
                 if (planId === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
                 else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
 
-                await profileService.updateProfile(profile.id, {
+                await profileService.updateProfile(profile.id as string, {
                     planType: planId,
                     subscriptionStatus: 'active',
                     subscriptionExpiryDate: expiryDate.toISOString()
