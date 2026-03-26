@@ -35,9 +35,9 @@ export class AbacateService {
                 products: [
                     {
                         externalId: options.externalId,
-                        name: options.externalId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
+                        name: options.externalId === process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL ? 'Nodus Pro - Anual' : 'Nodus Pro - Mensal',
                         quantity: 1,
-                        priceUnit: options.amount
+                        priceUnit: Number(options.amount)
                     }
                 ],
                 returnUrl: `${process.env.FRONTEND_URL}/payment/success`,
