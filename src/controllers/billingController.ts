@@ -48,10 +48,10 @@ export const billingController = {
             if (profile.email) {
                 billingData.customer = {
                     name: profile.name || 'User',
-                    email: profile.email
+                    email: profile.email,
+                    taxId: finalTaxId || '',
+                    cellphone: finalCellphone || ''
                 };
-                if (finalTaxId) billingData.customer.taxId = finalTaxId;
-                if (finalCellphone) billingData.customer.cellphone = finalCellphone;
             }
 
             const session = await abacateService.createBilling(billingData);
