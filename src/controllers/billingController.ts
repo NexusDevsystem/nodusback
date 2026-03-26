@@ -35,46 +35,57 @@ export class BillingController {
                 return res.status(400).json({ error: 'Plano inválido' });
             }
 
-            // Sync user data to DB if missing (taxId/cellphone)
-            const { error: updateError } = await supabase
-                .from('users')
-                .update({ 
-                    tax_id: taxId || user.tax_id, 
-                    cellphone: cellphone || user.cellphone 
-                })
-                .eq('id', user.id);
+            // 2. Save taxId and cellphone to user profile if possible. 
+            // NOTE: If columns 'tax_id' or 'cellphone' are missing in Supabase, 
+            // we ignore the error but still proceed with the billing creation.
+            if (taxId || cellphone) {
+                try {
+                    const updateData: any = {};
+                    if (taxId) updateData.tax_id = taxId;
+                    if (cellphone) updateData.cellphone = cellphone;
 
-            if (updateError) {
-                console.warn('⚠️ Erro ao atualizar info do usuário:', updateError.message);
+                    const { error: updateError } = await supabase
+                        .from('users')
+                        .update(updateData)
+                        .eq('id', userId);
+
+                    if (updateError) {
+                        console.warn('⚠️ Nota: Colunas de faturamento podem estar faltando no Supabase:', updateError.message);
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Erro ao tentar atualizar perfil do usuário (não crítico):', e);
+                }
             }
 
             const amount = planId === 'monthly' ? 1990 : 19900; // Example: R$ 19,90 or R$ 199,00
 
             const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'monthly';
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'annual';
-            const abacateProductId = planId === 'annual' ? annualId : monthlyId;
+            const externalId = planId === 'annual' ? annualId : monthlyId;
 
-            // Create Billing on AbacatePay
-            const billingRes = await AbacateService.createBilling({
-                userId: user.id,
+            // 3. Request Checkout Session from AbacatePay
+            const abacateResponse = await AbacateService.createBilling({
+                customerId: user.abacate_customer_id || undefined,
                 email: user.email,
                 name: user.name,
                 taxId: taxId || user.tax_id,
                 cellphone: cellphone || user.cellphone,
                 amount,
-                externalId: abacateProductId,
-                customerId: user.abacate_customer_id || undefined
+                externalId: externalId,
+                userId: userId
             });
 
+            console.log('✅ Checkout Criado com Sucesso!');
+
             // Update user's Abacate customer ID if it's the first time
-            if (!user.abacate_customer_id && billingRes.customer?.id) {
+            if (!user.abacate_customer_id && abacateResponse.customer?.id) {
                 await supabase
                     .from('users')
-                    .update({ abacate_customer_id: billingRes.customer.id })
-                    .eq('id', user.id);
+                    .update({ abacate_customer_id: abacateResponse.customer.id })
+                    .eq('id', userId);
             }
 
-            res.json({ url: billingRes.url });
+            res.json({ url: abacateResponse.url });
         } catch (error: any) {
             console.error('❌ Error in checkout:', error.message);
             res.status(500).json({ error: error.message });
