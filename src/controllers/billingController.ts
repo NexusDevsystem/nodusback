@@ -80,15 +80,15 @@ export class BillingController {
         const { event, data } = req.body;
 
         if (event === 'billing.paid') {
-            const billing = data.billing || data;
-            const amount = billing.amount;
-            const customer = billing.customer;
-            const customerId = customer?.id || billing.customerId;
-            const customerEmail = customer?.email?.toLowerCase()?.trim();
+            const billing = data?.billing || data;
+            const amount = billing?.amount || 0;
+            const customer = billing?.customer || data?.customer;
+            const customerId = customer?.id || billing?.customerId || data?.customerId;
+            const customerEmail = (customer?.email || billing?.customerEmail || data?.customerEmail || "")?.toString()?.toLowerCase()?.trim();
             
             let planType: 'monthly' | 'annual' = amount >= 19000 ? 'annual' : 'monthly';
 
-            console.log(`[WEBHOOK] Detalhes: Amount=${amount}, Plan=${planType}, Email=${customerEmail}`);
+            console.log(`[WEBHOOK] Detalhes: Amount=${amount}, Plan=${planType}, Email=${customerEmail || 'no-email'}, CustomerID=${customerId || 'no-id'}`);
 
             let userData: any = null;
             if (customerId) {
@@ -137,7 +137,11 @@ export class BillingController {
      */
     static async autoReconcile(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = (req as any).userId;
+
+            if (!userId) {
+                return res.status(401).json({ error: 'Nao autorizado' });
+            }
 
             const { data: user, error: userError } = await supabase
                 .from('users')
@@ -146,23 +150,18 @@ export class BillingController {
                 .single();
 
             if (userError || !user) {
+                console.error(`[RECONCILE] Usuario ${userId} nao encontrado ou erro:`, userError?.message);
                 return res.status(404).json({ error: 'Usuario nao encontrado' });
             }
 
-            // Map snake_case to camelCase for frontend compatibility
-            const profile = {
-                ...user,
-                planType: user.plan_type,
-                subscriptionStatus: user.subscription_status,
-                subscriptionExpiryDate: user.subscription_expiry_date,
-                abacateCustomerId: user.abacate_customer_id,
-                taxId: user.tax_id,
-                cellphone: user.cellphone
-            };
+            console.log(`[RECONCILE] DB plan_type: ${user.plan_type}`);
 
-            res.json(profile);
+            res.json({
+                ...user,
+                planType: user.plan_type
+            });
         } catch (error: any) {
-            console.error('[RECONCILE] Erro:', error.message);
+            console.error('[RECONCILE] Erro critico:', error.message);
             res.status(500).json({ error: error.message });
         }
     }
