@@ -16,4 +16,7 @@ router.post('/auto-reconcile', authMiddleware, billingController.handleAutoRecon
 // Get Public Config (Public)
 router.get('/config', billingController.getConfig);
 
+// Test Ping (Public)
+router.get('/ping', (req, res) => res.json({ message: 'billing router is alive' }));
+
 export default router;

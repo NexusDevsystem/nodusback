@@ -12,14 +12,20 @@ const getCleanedKey = (key: string) => {
     return cleaned;
 };
 
-const apiToken = getCleanedKey(process.env.ABACATE_PAY_TOKEN || '');
+const apiToken = (process.env.ABACATE_PAY_TOKEN || '')
+    .trim()
+    .replace(/^=/, '') // Remove leading equals if any
+    .replace(/[\r\n]/gm, '') // Remove any carriage returns or newlines
+    .trim();
 
 const abacateApi = axios.create({
     baseURL: ABACATE_API_URL,
+    timeout: 15000, // 15s timeout
     headers: {
         'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json',
-        'accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'Nodus-Backend/1.0.0'
     }
 });
 

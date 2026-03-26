@@ -41,23 +41,15 @@ export const billingController = {
                 completionUrl: successUrl || 'https://nodus.my',
             };
 
-            // Optional customer data
+            // Optional customer data (Temporarily simplified for debugging)
             if (profile.email) {
-                const customer: any = {
-                    email: profile.email,
-                    name: (profile.name || 'User').trim()
-                };
-
-                const cleanTaxId = (taxId || profile.taxId || '').toString().trim();
-                const cleanCellphone = (cellphone || profile.cellphone || '').toString().trim();
-
-                if (cleanTaxId) customer.taxId = cleanTaxId;
-                if (cleanCellphone) customer.cellphone = cleanCellphone;
-
-                billingData.customer = customer;
+                 billingData.customer = {
+                     email: profile.email,
+                     name: (profile.name || 'User').trim()
+                 };
             }
 
-            console.log('Sending to AbacatePay...');
+            console.log('Sending minimal payload to AbacatePay...');
             const session = await abacateService.createBilling(billingData);
 
             if (session && session.data && session.data.url) {
