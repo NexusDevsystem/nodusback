@@ -17,17 +17,8 @@ export const billingController = {
             const profile = await profileService.getProfileByUserId(userId);
             if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
 
-            // AbacatePay V1 requires TaxID and Cellphone for PIX/Card in most cases.
-            // We use what came in the request, or fallback to the profile.
             const finalTaxId = taxId || profile.taxId;
             const finalCellphone = cellphone || profile.cellphone;
-
-            if (!finalTaxId || !finalCellphone) {
-                return res.status(400).json({ 
-                    error: 'CPF e Celular são obrigatórios para processar o pagamento do PIX/Cartão.',
-                    missingFields: true 
-                });
-            }
 
             // Prices in cents (R$ 29,90 and R$ 299,00)
             const price = planId === 'monthly' ? 2990 : 29900;
@@ -38,7 +29,7 @@ export const billingController = {
                 ? (process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr') 
                 : (process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC');
 
-            const session = await abacateService.createBilling({
+            const billingData: any = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
                 products: [{
@@ -50,13 +41,20 @@ export const billingController = {
                 externalId: profile.id, // Store Profile ID here for webhook identification
                 returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/billing?canceled=true`,
                 completionUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success`,
-                customer: {
+            };
+
+            // Only send customer if we have at least the email.
+            // If taxId/cellphone are missing, AbacatePay checkout will ask for them on its own page.
+            if (profile.email) {
+                billingData.customer = {
                     name: profile.name || 'User',
-                    email: profile.email,
-                    cellphone: finalCellphone,
-                    taxId: finalTaxId
-                }
-            });
+                    email: profile.email
+                };
+                if (finalTaxId) billingData.customer.taxId = finalTaxId;
+                if (finalCellphone) billingData.customer.cellphone = finalCellphone;
+            }
+
+            const session = await abacateService.createBilling(billingData);
 
             res.json({ url: session.data.url });
         } catch (error: any) {
