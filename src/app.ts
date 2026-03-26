@@ -139,6 +139,11 @@ app.use(inputLimitMiddleware); // Enforce text length limits
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 app.use('/uploads', express.static(UPLOADS_DIR));
 
+// 🏥 Health Check Route (Required for Railway)
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 // Routes removed for clean restart
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
