@@ -150,15 +150,10 @@ export const billingController = {
             const profileId = req.profileId;
             if (!profileId) return res.status(401).json({ error: 'Sessão inválida' });
 
-            // Fetch current fresh profile status from database
             const profile = await profileService.getProfileByUserId(profileId as string);
-            
-            // Retornando sempre PENDING para evitar o "zap" (fechamento automático)
-            // O usuário agora decide quando fechar a aba
             return res.json({ status: 'PENDING', profile });
 
         } catch (error: any) {
-            console.error('AutoReconcile Error:', error.message);
             return res.status(200).json({ status: 'PENDING' });
         }
     },
