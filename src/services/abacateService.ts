@@ -18,16 +18,17 @@ const apiToken = (process.env.ABACATE_PAY_TOKEN || '')
     .replace(/[\r\n]/gm, '') // Remove any carriage returns or newlines
     .trim();
 
-const abacateApi = axios.create({
+const getHeaders = () => ({
+    'Authorization': `Bearer ${apiToken}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': 'Nodus-Backend/1.0.0'
+});
+
+const axiosConfig = {
     baseURL: ABACATE_API_URL,
     timeout: 15000, // 15s timeout
-    headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'Nodus-Backend/1.0.0'
-    }
-});
+};
 
 export interface AbacateCustomer {
     name: string;
@@ -72,7 +73,13 @@ export const abacateService = {
      */
     async createCustomer(data: AbacateCustomer) {
         try {
-            const response = await abacateApi.post('/customer/create', data);
+            const response = await axios({
+                method: 'post',
+                url: `${ABACATE_API_URL}/customer/create`,
+                data,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error creating AbacatePay customer:', error.response?.data || error.message);
@@ -85,7 +92,12 @@ export const abacateService = {
      */
     async listCustomers() {
         try {
-            const response = await abacateApi.get('/customer/list');
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/customer/list`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error listing AbacatePay customers:', error.response?.data || error.message);
@@ -100,10 +112,16 @@ export const abacateService = {
      */
     async createCoupon(data: AbacateCoupon) {
         try {
-            const response = await abacateApi.post('/coupon/create', { data });
+            const response = await axios({
+                method: 'post',
+                url: `${ABACATE_API_URL}/coupon/create`,
+                data: { data },
+                headers: getHeaders(),
+                timeout: axiosConfig.timeout
+            });
             return response.data;
         } catch (error: any) {
-            console.error('Error creating AbacatePay coupon:', error.response?.data || error.message);
+            console.error('Error creating AbacatePay coupon:', JSON.stringify(error.response?.data || error.message));
             throw error;
         }
     },
@@ -113,7 +131,12 @@ export const abacateService = {
      */
     async listCoupons() {
         try {
-            const response = await abacateApi.get('/coupon/list');
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/coupon/list`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error listing AbacatePay coupons:', error.response?.data || error.message);
@@ -137,7 +160,13 @@ export const abacateService = {
         externalId?: string; // used for internal tracking in webhooks
     }) {
         try {
-            const response = await abacateApi.post('/billing/create', params);
+            const response = await axios({
+                method: 'post',
+                url: `${ABACATE_API_URL}/billing/create`,
+                data: params,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data; // contains { data: { url, id, ... } }
         } catch (error: any) {
             console.error('Error creating AbacatePay billing:', error.response?.data || error.message);
@@ -150,7 +179,12 @@ export const abacateService = {
      */
     async getBilling(id: string) {
         try {
-            const response = await abacateApi.get(`/billing/get?id=${id}`);
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/billing/get?id=${id}`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error getting AbacatePay billing:', error.response?.data || error.message);
@@ -163,7 +197,12 @@ export const abacateService = {
      */
     async listBillings() {
         try {
-            const response = await abacateApi.get('/billing/list');
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/billing/list`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error listing AbacatePay billings:', error.response?.data || error.message);
@@ -184,9 +223,15 @@ export const abacateService = {
         metadata?: any;
     }) {
         try {
-            const response = await abacateApi.post('/pixQrCode/create', {
-                ...params,
-                expiresIn: params.expiresIn || 3600 // 1 hour default
+            const response = await axios({
+                method: 'post',
+                url: `${ABACATE_API_URL}/pixQrCode/create`,
+                data: {
+                    ...params,
+                    expiresIn: params.expiresIn || 3600 // 1 hour default
+                },
+                headers: getHeaders(),
+                timeout: 15000
             });
             return response.data;
         } catch (error: any) {
@@ -200,7 +245,12 @@ export const abacateService = {
      */
     async checkPixStatus(id: string) {
         try {
-            const response = await abacateApi.get(`/pixQrCode/check?id=${id}`);
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/pixQrCode/check?id=${id}`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error checking AbacatePay Pix status:', error.response?.data || error.message);
@@ -213,7 +263,13 @@ export const abacateService = {
      */
     async simulatePixPayment(id: string, metadata: any = {}) {
         try {
-            const response = await abacateApi.post(`/pixQrCode/simulate-payment?id=${id}`, { metadata });
+            const response = await axios({
+                method: 'post',
+                url: `${ABACATE_API_URL}/pixQrCode/simulate-payment?id=${id}`,
+                data: { metadata },
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error simulating AbacatePay Pix payment:', error.response?.data || error.message);
@@ -228,48 +284,55 @@ export const abacateService = {
      */
     async createWithdraw(data: AbacateWithdraw) {
         try {
-            const response = await abacateApi.post('/withdraw/create', data);
+            const response = await axios({
+                method: 'post',
+                url: `${ABACATE_API_URL}/withdraw/create`,
+                data,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error creating AbacatePay withdrawal:', error.response?.data || error.message);
             throw error;
         }
     },
-
-    /**
-     * Get details of a withdrawal
-     */
     async getWithdraw(id: string) {
         try {
-            const response = await abacateApi.get(`/withdraw/get?id=${id}`);
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/withdraw/get?id=${id}`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error getting AbacatePay withdrawal:', error.response?.data || error.message);
             throw error;
         }
     },
-
-    /**
-     * List all withdrawal requests
-     */
     async listWithdraws() {
         try {
-            const response = await abacateApi.get('/withdraw/list');
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/withdraw/list`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error listing AbacatePay withdrawals:', error.response?.data || error.message);
             throw error;
         }
     },
-
-    // --- STORE ---
-
-    /**
-     * Get store details
-     */
     async getStore() {
         try {
-            const response = await abacateApi.get('/store/get');
+            const response = await axios({
+                method: 'get',
+                url: `${ABACATE_API_URL}/store/get`,
+                headers: getHeaders(),
+                timeout: 15000
+            });
             return response.data;
         } catch (error: any) {
             console.error('Error getting AbacatePay store details:', error.response?.data || error.message);
