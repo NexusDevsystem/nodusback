@@ -188,63 +188,55 @@ export const billingController = {
         }
     },
 
-    async handleAutoReconcile(req: AuthRequest, res: Response) {
+    async handleAutoReconcile(req: Request, res: Response) {
         try {
-            const userId = req.userId;
-            if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+            const profile = (req as any).profile;
+            if (!profile) return res.status(401).json({ error: 'Perfil não encontrado' });
 
-            console.log(`[AutoReconcile] Checking status for user ${userId}...`);
+            console.log(`[AutoReconcile] Checking status for user ${profile.id}...`);
 
-            // 1. Fetch recent billings from AbacatePay
-            const billingsResponse = await abacateService.listBillings();
-            const billings = billingsResponse.data || [];
+            // Fetch recent billings from AbacatePay
+            const response = await abacateService.listBillings();
+            
+            if (!response || !response.data) {
+                return res.status(200).json({ status: 'PENDING', message: 'Nenhuma cobrança ativa' });
+            }
 
-            // 2. Find the most recent PAID billing that belongs to this user
-            const currentProfile = await profileService.getProfileByUserId(userId);
-
-            const paidBilling = billings.find((b: any) =>
-                (b.externalId === userId ||
-                    (currentProfile?.email && (b.customer?.metadata?.email === currentProfile.email || b.customer?.email === currentProfile.email))) &&
-                b.status === 'PAID'
+            // Look for PAID billings linked to this profile
+            const paidBilling = response.data.find((b: any) => 
+                b.externalId === profile.id && b.status === 'PAID'
             );
 
-            if (!paidBilling) {
-                // Return current profile if no payment found
-                return res.json(currentProfile);
+            if (paidBilling) {
+                console.log(`[AutoReconcile] Found PAID billing for user ${profile.id}. Upgrading...`);
+                
+                // Identify the plan from the product in billing
+                const product = paidBilling.products?.[0];
+                const abacateProdId = product?.externalId;
+                const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
+                const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
+                
+                let planId: 'monthly' | 'annual' = abacateProdId === annualId ? 'annual' : 'monthly';
+
+                const expiryDate = new Date();
+                if (planId === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
+                else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+                await profileService.updateProfile(profile.id, {
+                    planType: planId,
+                    subscriptionStatus: 'active',
+                    subscriptionExpiryDate: expiryDate.toISOString()
+                });
+
+                const updated = await profileService.getProfileByUserId(profile.userId);
+                return res.json({ status: 'PAID', profile: updated });
             }
 
-            // 3. If found, ensure profile is upgraded (Logic identical to webhook)
-            const product = paidBilling.products?.[0];
-            const abacateProdId = product?.externalId;
+            return res.json({ status: 'PENDING' });
 
-            let planId: 'monthly' | 'annual' | null = null;
-            const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
-            const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
-
-            if (abacateProdId === monthlyId) planId = 'monthly';
-            else if (abacateProdId === annualId) planId = 'annual';
-
-            if (currentProfile && currentProfile.id && planId) {
-                // Only update if not already active or if status is not 'active'
-                if (currentProfile.planType !== planId || currentProfile.subscriptionStatus !== 'active') {
-                    const expiryDate = new Date();
-                    if (planId === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
-                    else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-
-                    const updated = await profileService.updateProfile(currentProfile.id, {
-                        planType: planId,
-                        subscriptionStatus: 'active',
-                        subscriptionExpiryDate: expiryDate.toISOString()
-                    });
-                    console.log(`✅ [AutoReconcile] Successfully upgraded user ${userId} to ${planId}`);
-                    return res.json(updated);
-                }
-            }
-
-            return res.json(currentProfile);
         } catch (error: any) {
-            console.error('AutoReconcile Error:', error);
-            res.status(500).json({ error: 'Falha na conciliação automática' });
+            console.error('AutoReconcile Error:', error.message);
+            return res.status(200).json({ status: 'PENDING', error: error.message });
         }
     },
 
