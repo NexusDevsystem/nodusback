@@ -45,7 +45,7 @@ export class AbacateService {
                     }
                 ],
                 returnUrl: `${process.env.FRONTEND_URL}/payment/success`,
-                completionUrl: `${process.env.FRONTEND_URL}/admin`,
+                completionUrl: `${process.env.FRONTEND_URL}/payment/success`,
                 customerId: options.customerId || undefined,
                 customer: !options.customerId ? {
                     name: options.name,
