@@ -30,7 +30,7 @@ export const billingController = {
             const billingData: any = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
-                products: [{
+                items: [{
                     externalId: planId === 'monthly' ? monthlyId : annualId,
                     name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
                     quantity: 1,
@@ -60,22 +60,29 @@ export const billingController = {
                 console.log('[Checkout] Omitting customer data (missing required fields), user will fill on checkout page');
             }
 
-            console.log('Sending to AbacatePay...');
+            console.log('Sending to AbacatePay v2 API...');
             const session = await abacateService.createBilling(billingData);
+            
+            console.log('--- ABACATEPAY RESPONSE DEBUG ---');
+            console.log(JSON.stringify(session, null, 2));
+            console.log('---------------------------------');
 
             if (session && session.data && session.data.url) {
-                console.log('Success! URL generated.');
+                console.log('Success! Checkout URL generated:', session.data.url);
                 return res.json({ url: session.data.url });
-            }
-
+            } 
+            
             console.error('AbacatePay invalid response:', session);
-            return res.status(500).json({ error: 'AbacatePay retornou resposta inválida' });
+            return res.status(500).json({ error: 'AbacatePay v2 retornou resposta inválida' });
 
         } catch (error: any) {
             console.error('CRITICAL ERROR in createCheckout:', error.message);
-            return res.status(500).json({
-                error: 'Erro interno ao processar checkout',
-                details: error.message
+            if (error.response) {
+                console.error('AbacatePay Error Response:', JSON.stringify(error.response.data, null, 2));
+            }
+            return res.status(500).json({ 
+                error: 'Erro interno ao processar checkout v2',
+                details: error.message 
             });
         }
     },
@@ -94,24 +101,27 @@ export const billingController = {
             }
 
             // Security: Case 2 - HMAC signature (Optional fallback/defense in depth)
-            const signature = req.headers['abacatepay-signature'];
+            const signature = req.headers['x-webhook-signature'] || req.headers['abacatepay-signature'];
             if (!abacateService.verifyWebhook(req.body, signature as string)) {
                 // Note: If no HMAC secret is set in the service, this currently just logs a warning but continues.
             }
 
             const { event, data } = req.body;
+            console.log(`[AbacatePay Webhook] Event received: ${event}`);
 
             // Logical routing based on event
             switch (event) {
+                case 'checkout.completed':
                 case 'billing.paid':
                 case 'pix.paid': // Some v1 integrations use pix.paid for direct QR Codes
-                    const billing = data.billing || data;
+                    const billing = data.billing || data.checkout || data;
                     console.log('[AbacatePay Webhook Payload]:', JSON.stringify(billing, null, 2));
 
                     let profileId = billing?.externalId; // Nodus uses externalId to link billing to profile.id
 
                     // Identify the product/plan
-                    const product = billing?.products?.[0];
+                    const products = billing?.products || billing?.items || [];
+                    const product = products[0];
                     const abacateProdId = product?.externalId;
                     const amount = billing?.amount || 0;
 

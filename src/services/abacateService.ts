@@ -2,32 +2,26 @@ import axios from 'axios';
 import crypto from 'crypto';
 import 'dotenv/config';
 
-const ABACATE_API_URL = 'https://api.abacatepay.com/v1';
+const ABACATE_API_URL = 'https://api.abacatepay.com/v2';
+const ABACATE_API_URL_V1 = 'https://api.abacatepay.com/v1';
 
-const getCleanedKey = (key: string) => {
-    let cleaned = (key || '').trim();
-    if (cleaned.startsWith('=')) {
-        cleaned = cleaned.substring(1).trim();
-    }
-    return cleaned;
-};
-
-const apiToken = (process.env.ABACATE_PAY_TOKEN || '')
+const cleanToken = (token: string) => (token || '')
     .trim()
-    .replace(/^=/, '') // Remove leading equals if any
-    .replace(/[\r\n]/gm, '') // Remove any carriage returns or newlines
+    .replace(/^=/, '')
+    .replace(/[\r\n]/gm, '')
     .trim();
+
+const apiToken = cleanToken(process.env.ABACATE_PAY_TOKEN || '');
 
 const getHeaders = () => ({
     'Authorization': `Bearer ${apiToken}`,
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'User-Agent': 'Nodus-Backend/1.0.0'
+    'User-Agent': 'Nodus-Backend/2.0.0'
 });
 
 const axiosConfig = {
-    baseURL: ABACATE_API_URL,
-    timeout: 15000, // 15s timeout
+    timeout: 15000, 
 };
 
 export interface AbacateCustomer {
@@ -152,24 +146,25 @@ export const abacateService = {
     async createBilling(params: {
         frequency: 'ONE_TIME' | 'MULTIPLE_PAYMENTS';
         methods: ('PIX' | 'CARD')[];
-        products: AbacateProduct[];
+        items: AbacateProduct[];
         returnUrl: string;
         completionUrl: string;
         customerId?: string;
         customer?: AbacateCustomer;
-        externalId?: string; // used for internal tracking in webhooks
+        externalId?: string; // Metadata linking to your CRM/Auth system
     }) {
         try {
             const response = await axios({
                 method: 'post',
-                url: `${ABACATE_API_URL}/billing/create`,
+                url: `${ABACATE_API_URL}/checkouts/create`,
                 data: params,
                 headers: getHeaders(),
                 timeout: 15000
             });
-            return response.data; // contains { data: { url, id, ... } }
+            // AbacatePay v2 returns { data: { url: '...', ... } }
+            return response.data;
         } catch (error: any) {
-            console.error('Error creating AbacatePay billing:', error.response?.data || error.message);
+            console.error('Error creating AbacatePay v2 checkout:', JSON.stringify(error.response?.data || error.message));
             throw error;
         }
     },
