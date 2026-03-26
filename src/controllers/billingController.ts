@@ -56,18 +56,37 @@ export class BillingController {
             const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'monthly';
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'annual';
             const abacateProductId = planId === 'annual' ? annualId : monthlyId;
-
-            // 3. Request Checkout Session from AbacatePay v2
-            const billingRes = await AbacateService.createBilling({
-                customerId: user.abacate_customer_id || undefined,
-                email: user.email,
-                name: user.name,
-                taxId: taxId || user.tax_id,
-                cellphone: cellphone || user.cellphone,
-                amount,
-                externalId: abacateProductId,
-                userId: userId
-            });
+            // 3. Request Checkout Session from AbacatePay v1
+            let billingRes: any;
+            try {
+                billingRes = await AbacateService.createBilling({
+                    customerId: user.abacate_customer_id || undefined,
+                    email: user.email,
+                    name: user.name,
+                    taxId: taxId || user.tax_id,
+                    cellphone: cellphone || user.cellphone,
+                    amount,
+                    externalId: abacateProductId,
+                    userId: user.id
+                });
+            } catch (error: any) {
+                // FALLBACK: If customerId fails, try without it
+                if (user.abacate_customer_id && (error.message.includes('customer') || error.message.includes('customerId') || error.message.includes('404'))) {
+                    console.warn('[CHECKOUT] ID de cliente invalido. Tentando sem ID...');
+                    billingRes = await AbacateService.createBilling({
+                        customerId: undefined,
+                        email: user.email,
+                        name: user.name,
+                        taxId: taxId || user.tax_id,
+                        cellphone: cellphone || user.cellphone,
+                        amount,
+                        externalId: abacateProductId,
+                        userId: user.id
+                    });
+                } else {
+                    throw error;
+                }
+            }
 
             console.log(`[CHECKOUT] Sucesso! URL: ${billingRes.url}`);
             
@@ -77,12 +96,12 @@ export class BillingController {
                 await supabase
                     .from('users')
                     .update({ abacate_customer_id: billingRes.customer.id })
-                    .eq('id', userId);
+                    .eq('id', user.id);
             }
 
             res.json({ url: billingRes.url });
         } catch (error: any) {
-            console.error('[CHECKOUT] Error:', error.message);
+            console.error('[CHECKOUT] Erro:', error.message);
             res.status(500).json({ error: error.message });
         }
     }
@@ -98,25 +117,23 @@ export class BillingController {
 
         // Allow traditional secret check via query string as a backup
         if (expectedSecret && webhookSecret !== expectedSecret) {
-            console.warn('[WEBHOOK] Secret invalido na URL');
+            console.warn('[WEBHOOK] Secret invalido');
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        console.log('[WEBHOOK] Payload v2:', JSON.stringify(req.body, null, 2));
+        console.log('[WEBHOOK] Payload v1:', JSON.stringify(req.body, null, 2));
 
         const { event, data } = req.body;
 
-        // v2 uses events like 'billing.paid' or 'checkout.completed'
-        if (event === 'billing.paid' || event === 'checkout.completed') {
+        if (event === 'billing.paid') {
             const billingData = data;
             
-            const customerId = billingData.customerId || billingData.customer?.id;
+            const customerId = billingData.customer?.id || billingData.customerId;
             
             // In v2 checkouts, products might be in 'items' array.
             // We find the internal plan ID (externalId) from the product associated.
             const abacateProductId = 
                 billingData.products?.[0]?.externalId || 
-                billingData.items?.[0]?.externalId ||
                 billingData.externalId;
             
             console.log(`[WEBHOOK] Extração: customerId=${customerId}, planId=${abacateProductId}`);
@@ -162,7 +179,7 @@ export class BillingController {
                 .eq('id', userData.id);
 
             if (updateError) {
-                console.error('[WEBHOOK] Falha ao atualizar usuario:', updateError.message);
+                console.error('[WEBHOOK] Erro ao atualizar usuario:', updateError.message);
             } else {
                 console.log(`[WEBHOOK] Sucesso: ${userData.name} -> ${planType}`);
             }
