@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { profileService } from '../services/profileService.js';
 import { abacateService } from '../services/abacateService.js';
@@ -188,7 +188,7 @@ export const billingController = {
         }
     },
 
-    async handleAutoReconcile(req: Request, res: Response) {
+    async handleAutoReconcile(req: AuthRequest, res: Response) {
         try {
             const profile = (req as any).profile;
             if (!profile) return res.status(401).json({ error: 'Perfil não encontrado' });
