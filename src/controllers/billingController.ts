@@ -58,8 +58,8 @@ export class BillingController {
             const abacateProductId = planId === 'annual' ? annualId : monthlyId;
             // 3. Request Checkout Session from AbacatePay v1
             // 3. Use Fixed Billing Links
-            const annualLink = "https://app.abacatepay.com/pay/bill_Q2txZXXGbjm45xdcQRtH1AET";
-            const monthlyLink = "https://app.abacatepay.com/pay/bill_K6SJkLeCN2kZmBjYG6qpG55E";
+            const annualLink = "https://app.abacatepay.com/pay/bill_k0J6rzHHKHRMbb4gqX64AQNJ";
+            const monthlyLink = "https://app.abacatepay.com/pay/bill_6WwrTTTeETXXxxhSMfe3Ss3x";
             
             const checkoutUrl = planId === "annual" ? annualLink : monthlyLink;
 
@@ -100,7 +100,7 @@ export class BillingController {
             
             // Map fixed link IDs to plan types
             let planType: 'monthly' | 'annual' = 'monthly';
-            if (billingId === 'bill_Q2txZXXGbjm45xdcQRtH1AET') {
+            if (billingId === 'bill_k0J6rzHHKHRMbb4gqX64AQNJ') {
                 planType = 'annual';
             }
 
