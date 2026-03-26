@@ -20,15 +20,12 @@ export interface CreateBillingOptions {
     name: string;
     taxId?: string;
     cellphone?: string;
-    amount: number; // in cents
-    externalId: string; // Internal plan ID (monthly/annual)
+    amount: number;
+    externalId: string;
     userId: string;
 }
 
 export class AbacateService {
-    /**
-     * Creates a new billing (checkout session) on AbacatePay v1
-     */
     static async createBilling(options: CreateBillingOptions) {
         try {
             const payload = {
@@ -40,7 +37,7 @@ export class AbacateService {
                     {
                         externalId: options.externalId,
                         name: options.externalId === process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL ? 'Nodus Pro - Anual' : 'Nodus Pro - Mensal',
-                        quantity: 1, // MANDATORY for v1 checkout links to work
+                        quantity: 1,
                         price: Math.round(Number(options.amount))
                     }
                 ],
@@ -51,7 +48,7 @@ export class AbacateService {
                     name: options.name,
                     email: options.email,
                     taxId: options.taxId?.replace(/\D/g, ''),
-                    cellphone: options.cellphone || '00000000000'
+                    cellphone: options.cellphone?.replace(/\D/g, '') || '00000000000'
                 } : undefined
             };
 
@@ -63,7 +60,7 @@ export class AbacateService {
             return response.data.data;
         } catch (error: any) {
             console.error('[ABACATE] createBilling error:', error.response?.data || error.message);
-            throw new Error(error.response?.data?.error || 'Erro ao criar cobrança no AbacatePay v1');
+            throw new Error(error.response?.data?.error || 'Erro ao criar cobranca no AbacatePay v1');
         }
     }
 
@@ -73,7 +70,7 @@ export class AbacateService {
             return response.data.data;
         } catch (error: any) {
             console.error('[ABACATE] listBillings error:', error.response?.data || error.message);
-            throw new Error('Erro ao listar cobranças');
+            throw new Error('Erro ao listar cobrancas');
         }
     }
 }

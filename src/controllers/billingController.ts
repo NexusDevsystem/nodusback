@@ -60,7 +60,7 @@ export class BillingController {
             let billingRes: any;
             try {
                 billingRes = await AbacateService.createBilling({
-                    customerId: user.abacate_customer_id || undefined,
+                    customerId: undefined, // Force fresh link creation
                     email: user.email,
                     name: user.name,
                     taxId: taxId || user.tax_id,
@@ -70,29 +70,15 @@ export class BillingController {
                     userId: user.id
                 });
             } catch (error: any) {
-                // FALLBACK: If customerId fails, try without it
-                if (user.abacate_customer_id && (error.message.includes('customer') || error.message.includes('customerId') || error.message.includes('404'))) {
-                    console.warn('[CHECKOUT] ID de cliente invalido. Tentando sem ID...');
-                    billingRes = await AbacateService.createBilling({
-                        customerId: undefined,
-                        email: user.email,
-                        name: user.name,
-                        taxId: taxId || user.tax_id,
-                        cellphone: cellphone || user.cellphone,
-                        amount,
-                        externalId: abacateProductId,
-                        userId: user.id
-                    });
-                } else {
-                    throw error;
-                }
+                console.error('[CHECKOUT] Erro ao criar checkout:', error.message);
+                throw error;
             }
 
             console.log(`[CHECKOUT] Sucesso! URL: ${billingRes.url}`);
             
             // Sync customer ID to user profile if we created a new one
-            if (!user.abacate_customer_id && billingRes.customer?.id) {
-                console.log(`[CHECKOUT] Salvando abacate_customer_id: ${billingRes.customer.id}`);
+            if (billingRes.customer?.id) {
+                console.log(`[CHECKOUT] Sincronizando customer_id: ${billingRes.customer.id}`);
                 await supabase
                     .from('users')
                     .update({ abacate_customer_id: billingRes.customer.id })
@@ -101,7 +87,7 @@ export class BillingController {
 
             res.json({ url: billingRes.url });
         } catch (error: any) {
-            console.error('[CHECKOUT] Erro:', error.message);
+            console.error('[CHECKOUT] Erro fatal:', error.message);
             res.status(500).json({ error: error.message });
         }
     }
@@ -121,7 +107,7 @@ export class BillingController {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        console.log('[WEBHOOK] Payload v1:', JSON.stringify(req.body, null, 2));
+        console.log('[WEBHOOK] Payload:', JSON.stringify(req.body, null, 2));
 
         const { event, data } = req.body;
 
@@ -136,7 +122,7 @@ export class BillingController {
                 billingData.products?.[0]?.externalId || 
                 billingData.externalId;
             
-            console.log(`[WEBHOOK] Extração: customerId=${customerId}, planId=${abacateProductId}`);
+            console.log(`[WEBHOOK] Extracao: customerId=${customerId}, planId=${abacateProductId}`);
 
             if (!customerId) {
                 console.error('[WEBHOOK] customerId nao encontrado');
