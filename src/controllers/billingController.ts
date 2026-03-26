@@ -43,11 +43,14 @@ export const billingController = {
             if (profile.email) {
                 const customer: any = {
                     email: profile.email,
-                    name: profile.name || 'User'
+                    name: (profile.name || 'User').trim()
                 };
 
-                if (finalTaxId && finalTaxId.trim() !== '') customer.taxId = finalTaxId.trim();
-                if (finalCellphone && finalCellphone.trim() !== '') customer.cellphone = finalCellphone.trim();
+                const cleanTaxId = (finalTaxId || '').toString().trim();
+                const cleanCellphone = (finalCellphone || '').toString().trim();
+
+                if (cleanTaxId) customer.taxId = cleanTaxId;
+                if (cleanCellphone) customer.cellphone = cleanCellphone;
 
                 billingData.customer = customer;
             }
