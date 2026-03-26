@@ -73,10 +73,11 @@ export const profileController = {
         }
     },
 
-    // Update authenticated user's profile
     async updateProfile(req: AuthRequest, res: Response) {
         try {
+            console.log(`[PROFILE] Initing update: userId=${req.userId}`);
             if (!req.userId) {
+                console.warn('[PROFILE] updateProfile called without req.userId');
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
@@ -86,12 +87,14 @@ export const profileController = {
             const profile = await profileService.updateProfile(req.userId, updates);
 
             if (!profile) {
+                console.error(`[PROFILE] Profile not found or failed to update for userId: ${req.userId}`);
                 return res.status(404).json({ error: 'Profile not found' });
             }
 
+            console.log(`[PROFILE] Updated success: userId=${req.userId}`);
             res.json(profile);
         } catch (error: any) {
-            console.error('Error updating profile:', error);
+            console.error('[PROFILE] Error updating profile:', error.message);
             const status = error.message?.includes('7 dias') ? 400 : 500;
             res.status(status).json({ error: error.message || 'Failed to update profile' });
         }

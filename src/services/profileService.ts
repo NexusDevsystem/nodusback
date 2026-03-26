@@ -141,7 +141,7 @@ export const profileService = {
         }
 
         const dbUpdates = apiToDb(updates);
-        console.log(`[ProfileService] Converted DB updates:`, JSON.stringify(dbUpdates));
+        console.log(`[ProfileService] Converted DB updates for ${userId}:`, JSON.stringify(dbUpdates));
 
         const { data, error } = await supabase
             .from('users')
@@ -151,7 +151,12 @@ export const profileService = {
             .single();
 
         if (error) {
-            console.error('Error updating profile:', error);
+            console.error(`[ProfileService] Error updating user ${userId}:`, error.message);
+            return null;
+        }
+
+        if (!data) {
+            console.error(`[ProfileService] No data returned after update for user ${userId}`);
             return null;
         }
 

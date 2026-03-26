@@ -198,6 +198,7 @@ export interface UserProfile {
     usernameUpdatedAt?: string | null;
     bannerBlurColor?: string | null;
     hideBranding?: boolean;
+    plan_type?: 'free' | 'monthly' | 'annual';
 }
 
 export interface LinkItem {
@@ -329,7 +330,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         integrations: dbProfile.integrations || [],
         usernameUpdatedAt: dbProfile.username_updated_at,
         bannerBlurColor: dbProfile.banner_blur_color || null,
-        hideBranding: !!dbProfile.hide_branding
+        hideBranding: !!dbProfile.hide_branding,
+        plan_type: dbProfile.plan_type
     };
 }
 
@@ -379,6 +381,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.usernameUpdatedAt !== undefined) dbProfile.username_updated_at = apiProfile.usernameUpdatedAt;
     if (apiProfile.bannerBlurColor !== undefined) dbProfile.banner_blur_color = apiProfile.bannerBlurColor;
     if (apiProfile.hideBranding !== undefined) dbProfile.hide_branding = apiProfile.hideBranding;
+    if (apiProfile.plan_type !== undefined) dbProfile.plan_type = apiProfile.plan_type;
 
     return dbProfile;
 }
