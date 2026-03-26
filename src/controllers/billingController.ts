@@ -33,10 +33,10 @@ export const billingController = {
             const price = planId === 'monthly' ? 2990 : 29900;
             const planName = planId === 'monthly' ? 'Nodus Pro Mensal' : 'Nodus Pro Anual';
 
-            // Specific Product IDs provided by the user
+            // AbacatePay Product IDs (Configurable via Environment Variables)
             const abacateProductId = planId === 'monthly' 
-                ? 'prod_HfZuk60kqgMcYtg1wceKgZTr' 
-                : 'prod_PamM5q2LRFN6gHHESs4jrGqC';
+                ? (process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr') 
+                : (process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC');
 
             const session = await abacateService.createBilling({
                 frequency: 'ONE_TIME',
@@ -99,8 +99,11 @@ export const billingController = {
                     
                     // Map Abacate Product ID back to Nodus planId
                     let planId: 'monthly' | 'annual' | null = null;
-                    if (abacateProdId === 'prod_HfZuk60kqgMcYtg1wceKgZTr') planId = 'monthly';
-                    if (abacateProdId === 'prod_PamM5q2LRFN6gHHESs4jrGqC') planId = 'annual';
+                    const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
+                    const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
+
+                    if (abacateProdId === monthlyId) planId = 'monthly';
+                    else if (abacateProdId === annualId) planId = 'annual';
 
                     if (!profileId || !planId) {
                         console.error('Webhook Error: Missing identification data', { profileId, planId });
@@ -174,8 +177,11 @@ export const billingController = {
             const abacateProdId = product?.externalId;
             
             let planId: 'monthly' | 'annual' | null = null;
-            if (abacateProdId === 'prod_HfZuk60kqgMcYtg1wceKgZTr') planId = 'monthly';
-            if (abacateProdId === 'prod_PamM5q2LRFN6gHHESs4jrGqC') planId = 'annual';
+            const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
+            const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
+
+            if (abacateProdId === monthlyId) planId = 'monthly';
+            else if (abacateProdId === annualId) planId = 'annual';
 
             if (currentProfile && currentProfile.id && planId) {
                 // Only update if not already active or if status is not 'active'
