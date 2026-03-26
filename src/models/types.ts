@@ -34,7 +34,6 @@ export interface UserProfileDB {
     custom_collection_text_color?: string | null;
     header_layout?: 'classic' | 'compact' | 'hero' | 'banner' | null;
     header_style?: 'text' | 'logo' | null;
-    logo_url?: string | null;
     avatar_size?: 'sm' | 'md' | 'lg' | null;
     custom_css?: string | null;
     seo_title?: string | null;
@@ -187,7 +186,6 @@ export interface UserProfile {
     customCollectionTextColor?: string | null;
     headerLayout?: 'classic' | 'compact' | 'hero' | 'banner' | null;
     headerStyle?: 'text' | 'logo' | null;
-    logoUrl?: string | null;
     avatarSize?: 'sm' | 'md' | 'lg' | null;
     customCSS?: string | null;
     seoTitle?: string | null;
@@ -320,7 +318,6 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         customCollectionTextColor: dbProfile.custom_collection_text_color || null,
         headerLayout: dbProfile.header_layout || 'classic',
         headerStyle: dbProfile.header_style || 'text',
-        logoUrl: dbProfile.logo_url || null,
         avatarSize: dbProfile.avatar_size || 'md',
         customCSS: dbProfile.custom_css || null,
         seoTitle: dbProfile.seo_title || null,
@@ -371,7 +368,6 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.customCollectionTextColor !== undefined) dbProfile.custom_collection_text_color = apiProfile.customCollectionTextColor;
     if (apiProfile.headerLayout !== undefined) dbProfile.header_layout = apiProfile.headerLayout;
     if (apiProfile.headerStyle !== undefined) dbProfile.header_style = apiProfile.headerStyle;
-    if (apiProfile.logoUrl !== undefined) dbProfile.logo_url = apiProfile.logoUrl;
     if (apiProfile.avatarSize !== undefined) dbProfile.avatar_size = apiProfile.avatarSize;
     if (apiProfile.customCSS !== undefined) dbProfile.custom_css = apiProfile.customCSS;
     if (apiProfile.seoTitle !== undefined) dbProfile.seo_title = apiProfile.seoTitle;
