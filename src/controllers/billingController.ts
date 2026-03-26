@@ -10,26 +10,27 @@ export const billingController = {
             const userId = req.userId;
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-            const monthlyLink = process.env.ABACATE_PAY_MONTHLY_LINK;
-            const annualLink = process.env.ABACATE_PAY_ANNUAL_LINK;
+            // IDs passados pelo usuário
+            const monthlyId = "bill_Q2txZXXGbjm45xdcQRtH1AET";
+            const annualId = "bill_K6SJkLeCN2kZmBjYG6qpG55E";
 
             console.log(`[Checkout] User ${userId} requested manual link for plan: ${planId}`);
 
+            let targetUrl = "";
             if (planId === 'monthly') {
-                if (!monthlyLink) return res.status(500).json({ error: 'Link mensal não configurado' });
-                return res.json({ url: monthlyLink });
+                targetUrl = `https://app.abacatepay.com/pay/${monthlyId}`;
             } else if (planId === 'annual') {
-                if (!annualLink) return res.status(500).json({ error: 'Link anual não configurado' });
-                return res.json({ url: annualLink });
+                targetUrl = `https://app.abacatepay.com/pay/${annualId}`;
+            } else {
+                return res.status(400).json({ error: 'Plano inválido' });
             }
 
-            return res.status(400).json({ error: 'Plano inválido' });
+            return res.json({ url: targetUrl });
 
         } catch (error: any) {
             console.error('CRITICAL ERROR in createCheckout:', error.message);
             return res.status(500).json({ 
-                error: 'Erro interno ao processar checkout',
-                details: error.message 
+                error: 'Erro interno ao processar checkout'
             });
         }
     },
