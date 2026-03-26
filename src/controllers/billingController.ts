@@ -80,28 +80,29 @@ export class BillingController {
         const { event, data } = req.body;
 
         if (event === 'billing.paid') {
-            const billingData = data;
-            const amount = billingData.amount;
-            const customerId = billingData.customer?.id || billingData.customerId;
-            const customerEmail = billingData.customer?.email?.toLowerCase()?.trim();
+            const billing = data.billing || data;
+            const amount = billing.amount;
+            const customer = billing.customer;
+            const customerId = customer?.id || billing.customerId;
+            const customerEmail = customer?.email?.toLowerCase()?.trim();
             
             let planType: 'monthly' | 'annual' = amount >= 19000 ? 'annual' : 'monthly';
 
-            console.log(`[WEBHOOK] Amount: ${amount}, Plan: ${planType}, Email: ${customerEmail}, CustomerId: ${customerId}`);
+            console.log(`[WEBHOOK] Detalhes: Amount=${amount}, Plan=${planType}, Email=${customerEmail}`);
 
             let userData: any = null;
             if (customerId) {
-                const { data } = await supabase.from('users').select('id, name').eq('abacate_customer_id', customerId).maybeSingle();
-                userData = data;
+                const { data: dbUser } = await supabase.from('users').select('id, name').eq('abacate_customer_id', customerId).maybeSingle();
+                userData = dbUser;
             }
 
             if (!userData && customerEmail) {
-                const { data } = await supabase.from('users').select('id, name').ilike('email', customerEmail).maybeSingle();
-                userData = data;
+                const { data: dbUserEmail } = await supabase.from('users').select('id, name').ilike('email', customerEmail).maybeSingle();
+                userData = dbUserEmail;
             }
 
             if (!userData) {
-                console.error('[WEBHOOK] Usuario nao encontrado para os criterios informados');
+                console.error('[WEBHOOK] Usuario nao encontrado para:', customerEmail || customerId);
                 return res.sendStatus(200);
             }
 
@@ -123,9 +124,9 @@ export class BillingController {
                 .eq('id', userData.id);
 
             if (updateError) {
-                console.error('[WEBHOOK] Erro ao atualizar usuario:', updateError.message);
+                console.error('[WEBHOOK] Erro no update do banco:', updateError.message);
             } else {
-                console.log(`[WEBHOOK] Sucesso: ${userData.name} ativado (${planType})`);
+                console.log(`[WEBHOOK] Ativado: ${userData.name} (${planType})`);
             }
         }
         res.sendStatus(200);
