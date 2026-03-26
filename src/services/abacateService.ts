@@ -35,6 +35,7 @@ export class AbacateService {
                 frequency: 'ONE_TIME',
                 methods: ['PIX'],
                 amount: Math.round(Number(options.amount)), // Top level amount in cents
+                externalId: options.externalId, // Pass at top level for v1 webhook support
                 products: [
                     {
                         externalId: options.externalId,

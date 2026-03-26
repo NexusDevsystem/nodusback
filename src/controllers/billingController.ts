@@ -85,30 +85,42 @@ export class BillingController {
      * AbacatePay calls this when payment status changes.
      */
     static async webhook(req: Request, res: Response) {
-        const signature = req.headers['abacatepay-signature'] as string;
-        const secret = process.env.ABACATE_PAY_WEBHOOK_SECRET;
+        // v1 Security: Validate Secret from URL
+        const webhookSecret = req.query.webhookSecret;
+        const expectedSecret = process.env.ABACATE_PAY_WEBHOOK_SECRET;
 
-        // Security Validation (Optional depending on how strict you want to be)
-        // For AbacatePay, we usually check the signature with HMAC SHA256
+        if (expectedSecret && webhookSecret !== expectedSecret) {
+            console.warn('🚨 Webhook: Secret inválido ou faltando na URL');
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const signature = req.headers['abacatepay-signature'] as string;
+        
+        // HMAC signature validation (if enabled)
         /*
-        if (secret && signature) {
-            const hmac = crypto.createHmac('sha256', secret);
+        if (expectedSecret && signature) {
+            const hmac = crypto.createHmac('sha256', expectedSecret);
             const digest = hmac.update(JSON.stringify(req.body)).digest('hex');
             if (digest !== signature) {
-               return res.status(400).json({ error: 'Invalid signature' });
+               console.warn('🚨 Webhook: Assinatura HMAC inválida');
+               return res.status(401).json({ error: 'Invalid signature' });
             }
         }
         */
 
-        const { event, metadata, data } = req.body;
+        const { event, data } = req.body;
 
-        console.log(`🔔 AbacatePay Webhook: ${event}`);
+        console.log(`🔔 AbacatePay Webhook (v1): ${event}`);
 
         if (event === 'billing.paid') {
             const billingData = data;
-            const customerId = billingData.customerId;
-            const product = billingData.products?.[0]; // Get plan info
-            const abacateProductId = product?.externalId;
+            
+            // v1 paths: customer is an object { id, email }
+            const customerId = billingData.customer?.id;
+            
+            // In v1, the product internal ID might be in the products array or externalId
+            const product = billingData.products?.[0];
+            const abacateProductId = product?.externalId || billingData.externalId;
             
             const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY;
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL;
@@ -118,7 +130,10 @@ export class BillingController {
                 planType = 'annual';
             }
 
-            if (!customerId) return res.sendStatus(200);
+            if (!customerId) {
+                console.error('❌ Webhook error: customerId not found in data');
+                return res.sendStatus(200);
+            }
 
             // Find user by abacate_customer_id
             const { data: userData, error: userError } = await supabase
@@ -129,7 +144,7 @@ export class BillingController {
 
             if (userError || !userData) {
                 console.error('❌ User not found for customerId:', customerId);
-                return res.sendStatus(200); // Send 200 to acknowledge anyway
+                return res.sendStatus(200); 
             }
 
             // Calculate Expiry Date
