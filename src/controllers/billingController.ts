@@ -81,21 +81,19 @@ export class BillingController {
 
         if (event === 'billing.paid') {
             const billingData = data;
-            
+            const amount = billingData.amount;
             const customerId = billingData.customer?.id || billingData.customerId;
             const customerEmail = billingData.customer?.email;
-            const billingId = billingData.id; 
             
-            // Map fixed link IDs to plan types
+            // Identify plan by price (cents)
             let planType: 'monthly' | 'annual' = 'monthly';
-            if (billingId === 'bill_k0J6rzHHKHRMbb4gqX64AQNJ') {
+            if (amount >= 19900) {
                 planType = 'annual';
             }
 
-            console.log(`[WEBHOOK] Processando billingId=${billingId}, planType=${planType}, email=${customerEmail}`);
+            console.log(`[WEBHOOK] Amount: ${amount}, Plan: ${planType}, Email: ${customerEmail}`);
 
             let userData: any = null;
-            
             if (customerId) {
                 const { data } = await supabase
                     .from('users')
@@ -115,7 +113,7 @@ export class BillingController {
             }
 
             if (!userData) {
-                console.error('[WEBHOOK] Usuario nao localizado');
+                console.error('[WEBHOOK] Usuario nao encontrado');
                 return res.sendStatus(200);
             }
 
@@ -132,14 +130,14 @@ export class BillingController {
                     plan_type: planType,
                     subscription_status: 'active',
                     subscription_expiry_date: expiryDate.toISOString(),
-                    abacate_customer_id: customerId // Sync ID if we matched by email
+                    abacate_customer_id: customerId
                 })
                 .eq('id', userData.id);
 
             if (updateError) {
-                console.error('[WEBHOOK] Erro ao atualizar usuario:', updateError.message);
+                console.error('[WEBHOOK] Erro no update:', updateError.message);
             } else {
-                console.log(`[WEBHOOK] Sucesso: ${userData.name} ativado (${planType})`);
+                console.log(`[WEBHOOK] Sucesso: ${userData.name} (${planType})`);
             }
         }
 
