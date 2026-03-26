@@ -41,12 +41,15 @@ export const billingController = {
             };
 
             if (profile.email) {
-                billingData.customer = {
-                    name: profile.name || 'User',
+                const customer: any = {
                     email: profile.email,
-                    taxId: finalTaxId || '',
-                    cellphone: finalCellphone || ''
+                    name: profile.name || 'User'
                 };
+
+                if (finalTaxId && finalTaxId.trim() !== '') customer.taxId = finalTaxId.trim();
+                if (finalCellphone && finalCellphone.trim() !== '') customer.cellphone = finalCellphone.trim();
+
+                billingData.customer = customer;
             }
 
             console.log('Creating AbacatePay Session with payload:', JSON.stringify(billingData, null, 2));
