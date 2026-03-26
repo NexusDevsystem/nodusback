@@ -58,11 +58,12 @@ export const billingController = {
                 case 'billing.paid':
                 case 'pix.paid': // Some v1 integrations use pix.paid for direct QR Codes
                     const billing = data.billing || data;
-                    const profileId = billing?.externalId; // Nodus uses externalId to link billing to profile.id
+                    let profileId = billing?.externalId; // Nodus uses externalId to link billing to profile.id
                     
                     // Identify the product/plan
                     const product = billing?.products?.[0];
                     const abacateProdId = product?.externalId;
+                    const amount = billing?.amount || 0;
                     
                     // Map Abacate Product ID back to Nodus planId
                     let planId: 'monthly' | 'annual' | null = null;
@@ -71,26 +72,43 @@ export const billingController = {
 
                     if (abacateProdId === monthlyId) planId = 'monthly';
                     else if (abacateProdId === annualId) planId = 'annual';
+                    
+                    // Robust fallback for manual links: Identify plan by amount
+                    if (!planId) {
+                        if (amount >= 2900 && amount <= 3100) planId = 'monthly';
+                        else if (amount >= 29000 && amount <= 31000) planId = 'annual';
+                    }
+
+                    // Robust fallback for manual links: Identify profile by customer email
+                    let profileToUpdate = null;
+                    if (profileId) {
+                        profileToUpdate = await profileService.getProfileByUserId(profileId as string);
+                    }
+                    
+                    if (!profileToUpdate && billing?.customer?.email) {
+                        console.log(`[Webhook Fallback] Searching user by email: ${billing.customer.email}`);
+                        profileToUpdate = await profileService.getProfileByEmail(billing.customer.email);
+                        if (profileToUpdate) profileId = profileToUpdate.id;
+                    }
 
                     if (!profileId || !planId) {
-                        console.error('Webhook Error: Missing identification data', { profileId, planId });
+                        console.error('Webhook Error: Missing identification data', { profileId, planId, amount });
                         return res.status(400).send('Missing payload identification');
                     }
 
-                    console.log(`✅ AbacatePay Payment Success for Profile ID: ${profileId} - Plan: ${planId}`);
+                    console.log(`✅ AbacatePay Payment Success for Profile: ${profileToUpdate?.username || profileId} - Plan: ${planId}`);
 
-                    const profile = await profileService.getProfileByUserId(profileId as string);
-                    if (profile && profile.id) {
+                    if (profileToUpdate && profileToUpdate.id) {
                         const expiryDate = new Date();
                         if (planId === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
                         else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
 
-                        await profileService.updateProfile(profile.id, {
+                        await profileService.updateProfile(profileToUpdate.id, {
                             planType: planId,
                             subscriptionStatus: 'active',
                             subscriptionExpiryDate: expiryDate.toISOString()
                         });
-                        console.log(`🚀 Profile upgraded: ${profile.username || profile.id} -> ${planId.toUpperCase()}`);
+                        console.log(`🚀 Profile upgraded (Webhook): ${profileToUpdate.username || profileToUpdate.id} -> ${planId.toUpperCase()}`);
                     }
                     break;
 
@@ -127,12 +145,12 @@ export const billingController = {
             const billings = billingsResponse.data || [];
 
             // 2. Find the most recent PAID billing that belongs to this user
+            const currentProfile = await profileService.getProfileByUserId(userId);
+            
             const paidBilling = billings.find((b: any) => 
-                b.externalId === userId && 
+                (b.externalId === userId || (currentProfile?.email && b.customer?.email === currentProfile.email)) && 
                 b.status === 'PAID'
             );
-
-            const currentProfile = await profileService.getProfileByUserId(userId);
 
             if (!paidBilling) {
                 // Return current profile if no payment found
