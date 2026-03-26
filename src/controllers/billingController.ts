@@ -6,7 +6,7 @@ import { abacateService } from '../services/abacateService.js';
 export const billingController = {
     async createCheckout(req: AuthRequest, res: Response) {
         try {
-            const { planId, taxId, cellphone } = req.body;
+            const { planId } = req.body;
             const userId = req.userId;
 
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -14,52 +14,21 @@ export const billingController = {
                 return res.status(400).json({ error: 'Plano inválido' });
             }
 
-            const profile = await profileService.getProfileByUserId(userId);
-            if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
-
-            const finalTaxId = taxId || profile.taxId;
-            const finalCellphone = cellphone || profile.cellphone;
-
-            // Prices in cents (R$ 29,90 and R$ 299,00)
-            const price = planId === 'monthly' ? 2990 : 29900;
-            const planName = planId === 'monthly' ? 'Nodus Pro Mensal' : 'Nodus Pro Anual';
-
-            // AbacatePay Product IDs (Configurable via Environment Variables)
-            const abacateProductId = planId === 'monthly' 
-                ? (process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr') 
-                : (process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC');
-
-            const billingData: any = {
-                frequency: 'ONE_TIME',
-                methods: ['PIX', 'CARD'],
-                products: [{
-                    externalId: abacateProductId,
-                    name: planName,
-                    price,
-                    quantity: 1
-                }],
-                externalId: profile.id, // Store Profile ID here for webhook identification
-                returnUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/billing?canceled=true`,
-                completionUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success`,
-            };
-
-            // Only send customer if we have at least the email.
-            // If taxId/cellphone are missing, AbacatePay checkout will ask for them on its own page.
-            if (profile.email) {
-                billingData.customer = {
-                    name: profile.name || 'User',
-                    email: profile.email,
-                    taxId: finalTaxId || '',
-                    cellphone: finalCellphone || ''
-                };
-            }
-
-            const session = await abacateService.createBilling(billingData);
-
-            res.json({ url: session.data.url });
+            // Links manuais estáticos fornecidos pelo usuário
+            const annualBillingId = 'bill_Q2txZXXGbjm45xdcQRtH1AET';
+            const monthlyBillingId = 'bill_K6SJkLeCN2kZmBjYG6qpG55E';
+            
+            const selectedId = planId === 'annual' ? annualBillingId : monthlyBillingId;
+            
+            // Retorna URL de pagamento direta da AbacatePay. 
+            // Tentamos anexar o userId como metadado na URL para que o webhook possa identificá-lo.
+            const checkoutUrl = `https://app.abacatepay.com/pay/${selectedId}?externalId=${userId}`;
+            
+            console.log(`[ManualCheckout] Returning static link for ${planId}: ${checkoutUrl}`);
+            res.json({ url: checkoutUrl });
         } catch (error: any) {
-            console.error('AbacatePay Checkout Error:', error);
-            res.status(500).json({ error: error.message || 'Falha ao criar sessão de pagamento' });
+            console.error('Manual Checkout Error:', error);
+            res.status(500).json({ error: 'Falha ao processar checkout manual' });
         }
     },
 
