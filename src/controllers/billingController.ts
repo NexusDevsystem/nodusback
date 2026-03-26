@@ -13,7 +13,8 @@ export class BillingController {
             const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
 
-            console.log(`💳 Início do checkout para o usuário ${userId} - Plano: ${planId}`);
+            console.log(`[CHECKOUT] Iniciando checkout: userId=${userId}, planId=${planId}`);
+            const startTime = Date.now();
 
             if (!userId) {
                 console.warn('⚠️ Tentativa de checkout sem userId');
@@ -26,6 +27,8 @@ export class BillingController {
                 .select('*')
                 .eq('id', userId)
                 .single();
+            
+            console.log(`[CHECKOUT] Supabase fetch: ${Date.now() - startTime}ms`);
 
             if (userError || !user) {
                 return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -86,12 +89,12 @@ export class BillingController {
                 }
             }
 
-            console.log('✅ Checkout Criado com Sucesso! Resposta AbacatePay ID:', billingRes?.id);
-            console.log('🔗 URL de Checkout:', billingRes?.url);
+            console.log(`[CHECKOUT] Sucesso! ID: ${billingRes?.id}, URL: ${billingRes?.url}`);
+            console.log(`[CHECKOUT] Tempo total: ${Date.now() - startTime}ms`);
 
             // Update user's Abacate customer ID if it's the first time
             if (!user.abacate_customer_id && billingRes?.customer?.id) {
-                console.log(`👤 Saving new abacate_customer_id for user: ${billingRes.customer.id}`);
+                console.log(`[CHECKOUT] Salvando abacate_customer_id: ${billingRes.customer.id}`);
                 await supabase
                     .from('users')
                     .update({ abacate_customer_id: billingRes.customer.id })

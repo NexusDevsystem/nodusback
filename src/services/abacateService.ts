@@ -6,7 +6,7 @@ const API_TOKEN = process.env.ABACATE_PAY_TOKEN;
 
 const abacateApi = axios.create({
     baseURL: ABACATE_PAY_API_URL,
-    timeout: 15000, // 15 seconds timeout
+    timeout: 30000, // 30 seconds timeout
     headers: {
         'Authorization': `Bearer ${API_TOKEN}`,
         'Content-Type': 'application/json',
@@ -55,12 +55,12 @@ export class AbacateService {
                 } : undefined
             };
 
-            console.log('📦 Sending payload to AbacatePay:', JSON.stringify(payload, null, 2));
+            console.log('[ABACATE] Sending payload:', JSON.stringify(payload, null, 2));
 
             const response = await abacateApi.post('/billing/create', payload);
             return response.data.data;
         } catch (error: any) {
-            console.error('❌ AbacatePay createBilling error:', error.response?.data || error.message);
+            console.error('[ABACATE] createBilling error:', error.response?.data || error.message);
             throw new Error(error.response?.data?.error || 'Erro ao criar cobrança no AbacatePay');
         }
     }
@@ -73,7 +73,7 @@ export class AbacateService {
             const response = await abacateApi.get('/billing/list');
             return response.data.data;
         } catch (error: any) {
-            console.error('❌ AbacatePay listBillings error:', error.response?.data || error.message);
+            console.error('[ABACATE] listBillings error:', error.response?.data || error.message);
             throw new Error('Erro ao listar cobranças');
         }
     }
