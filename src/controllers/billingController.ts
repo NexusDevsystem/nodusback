@@ -13,7 +13,10 @@ export class BillingController {
             const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
 
+            console.log(`💳 Início do checkout para o usuário ${userId} - Plano: ${planId}`);
+
             if (!userId) {
+                console.warn('⚠️ Tentativa de checkout sem userId');
                 return res.status(401).json({ error: 'Não autorizado' });
             }
 

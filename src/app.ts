@@ -28,12 +28,24 @@ const app = express();
 app.set('trust proxy', 1);
 
 // 1. CORS Configuration
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:5173').split(',');
+const allowedOrigins = [
+    ...(process.env.ALLOWED_ORIGINS || '').split(','),
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL,
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173'
+].filter(Boolean) as string[];
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl) or from localhost
-        if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        // Allow requests with no origin (like mobile apps, curl, or same-origin)
+        if (!origin) {
+            return callback(null, true);
+        }
+        
+        // Allow any localhost origin
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
             return callback(null, true);
         }
         

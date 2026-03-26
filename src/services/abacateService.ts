@@ -6,6 +6,7 @@ const API_TOKEN = process.env.ABACATE_PAY_TOKEN;
 
 const abacateApi = axios.create({
     baseURL: ABACATE_PAY_API_URL,
+    timeout: 15000, // 15 seconds timeout
     headers: {
         'Authorization': `Bearer ${API_TOKEN}`,
         'Content-Type': 'application/json',
