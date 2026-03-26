@@ -35,9 +35,9 @@ app.use(cors({
         if (!origin) return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
             origin.includes('localhost') ||
-            origin.endsWith('.vercel.app') ||
-            origin.endsWith('.nodus.app') ||
-            origin.endsWith('.nodus.my');
+            origin.includes('nodus.my') ||
+            origin.includes('nodus.app') ||
+            origin.endsWith('.vercel.app');
         if (isAllowed) {
             callback(null, true);
         } else {

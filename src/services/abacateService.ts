@@ -150,20 +150,31 @@ export const abacateService = {
         completionUrl: string;
         customerId?: string;
         customer?: AbacateCustomer;
-        externalId?: string; // Metadata linking to your CRM/Auth system
+        externalId?: string;
     }) {
         try {
+            const url = `${ABACATE_API_URL}/billing/create`;
+            console.log(`[AbacatePay] Requesting: POST ${url}`);
+            console.log(`[AbacatePay] Payload: ${JSON.stringify(params, null, 2)}`);
+
             const response = await axios({
                 method: 'post',
-                url: `${ABACATE_API_URL}/billing/create`,
+                url: url,
                 data: params,
                 headers: getHeaders(),
-                timeout: 15000
+                timeout: 20000 
             });
-            // AbacatePay v1 returns { data: { url: '...', id: '...' } }
+
+            console.log(`[AbacatePay] Success Response:`, JSON.stringify(response.data, null, 2));
             return response.data;
         } catch (error: any) {
-            console.error('Error creating AbacatePay billing:', JSON.stringify(error.response?.data || error.message));
+            console.error('[AbacatePay] CRITICAL API ERROR:');
+            if (error.response) {
+                console.error('Status:', error.response.status);
+                console.error('Data:', JSON.stringify(error.response.data, null, 2));
+                throw new Error(error.response.data.message || 'Erro na API do AbacatePay');
+            }
+            console.error('Message:', error.message);
             throw error;
         }
     },
