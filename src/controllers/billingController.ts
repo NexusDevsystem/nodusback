@@ -31,7 +31,7 @@ export const billingController = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
                 products: [{
-                    externalId: planId, // Using the simple plan string as ID instead of prod_...
+                    externalId: (planId === 'monthly' ? monthlyId : annualId).toString(),
                     name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
                     quantity: 1,
                     price: planId === 'monthly' ? 2990 : 29900
