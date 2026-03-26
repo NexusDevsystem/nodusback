@@ -50,10 +50,12 @@ export class AbacateService {
                 customer: !options.customerId ? {
                     name: options.name,
                     email: options.email,
-                    taxId: options.taxId?.replace(/\D/g, '') || '00000000000',
-                    cellphone: options.cellphone || '00000000000' // Abacate requires cellphone
+                    taxId: options.taxId?.replace(/\D/g, ''), // Send whatever is provided, or nothing
+                    cellphone: options.cellphone || '00000000000'
                 } : undefined
             };
+
+            console.log('📦 Sending payload to AbacatePay:', JSON.stringify(payload, null, 2));
 
             const response = await abacateApi.post('/billing/create', payload);
             return response.data.data;
