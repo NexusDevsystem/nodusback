@@ -88,7 +88,7 @@ export const billingController = {
             switch (event) {
                 case 'billing.paid':
                 case 'pix.paid': // Some v1 integrations use pix.paid for direct QR Codes
-                    const billing = data;
+                    const billing = data.billing || data;
                     const profileId = billing?.externalId; // Nodus uses externalId to link billing to profile.id
                     
                     // Identify the product/plan
