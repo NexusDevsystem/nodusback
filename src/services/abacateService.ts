@@ -15,7 +15,7 @@ const abacateApi = axios.create({
 });
 
 export interface CreateBillingOptions {
-    customerId: string;
+    customerId?: string;
     email: string;
     name: string;
     taxId?: string;
