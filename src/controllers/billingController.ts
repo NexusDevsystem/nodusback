@@ -57,43 +57,24 @@ export class BillingController {
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'annual';
             const abacateProductId = planId === 'annual' ? annualId : monthlyId;
             // 3. Request Checkout Session from AbacatePay v1
-            let billingRes: any;
-            try {
-                billingRes = await AbacateService.createBilling({
-                    customerId: undefined, // Force fresh link creation
-                    email: user.email,
-                    name: user.name,
-                    taxId: taxId || user.tax_id,
-                    cellphone: cellphone || user.cellphone,
-                    amount,
-                    externalId: abacateProductId,
-                    userId: user.id
-                });
-            } catch (error: any) {
-                console.error('[CHECKOUT] Erro ao criar checkout:', error.message);
-                throw error;
-            }
-
-            console.log(`[CHECKOUT] Sucesso! URL: ${billingRes.url}`);
+            // 3. Use Fixed Billing Links
+            const annualLink = "https://app.abacatepay.com/pay/bill_Q2txZXXGbjm45xdcQRtH1AET";
+            const monthlyLink = "https://app.abacatepay.com/pay/bill_K6SJkLeCN2kZmBjYG6qpG55E";
             
-            // Sync customer ID to user profile if we created a new one
-            if (billingRes.customer?.id) {
-                console.log(`[CHECKOUT] Sincronizando customer_id: ${billingRes.customer.id}`);
-                await supabase
-                    .from('users')
-                    .update({ abacate_customer_id: billingRes.customer.id })
-                    .eq('id', user.id);
-            }
+            const checkoutUrl = planId === "annual" ? annualLink : monthlyLink;
 
-            res.json({ url: billingRes.url });
+            console.log(`[CHECKOUT] Link fixo: ${planId}`);
+
+            res.json({ url: checkoutUrl });
         } catch (error: any) {
-            console.error('[CHECKOUT] Erro fatal:', error.message);
+            console.error('[CHECKOUT] Erro:', error.message);
             res.status(500).json({ error: error.message });
         }
     }
 
     /**
-     * AbacatePay calls this when payment status changes.
+     * Webhook updated for fixed links.
+     * Matches by abacate_customer_id or email.
      */
     static async webhook(req: Request, res: Response) {
         const webhookSecret = req.query.webhookSecret;
@@ -101,7 +82,6 @@ export class BillingController {
 
         console.log('[WEBHOOK] Recebido');
 
-        // Allow traditional secret check via query string as a backup
         if (expectedSecret && webhookSecret !== expectedSecret) {
             console.warn('[WEBHOOK] Secret invalido');
             return res.status(401).json({ error: 'Unauthorized' });
@@ -115,36 +95,39 @@ export class BillingController {
             const billingData = data;
             
             const customerId = billingData.customer?.id || billingData.customerId;
+            const customerEmail = billingData.customer?.email;
+            const billingId = billingData.id; 
             
-            // In v2 checkouts, products might be in 'items' array.
-            // We find the internal plan ID (externalId) from the product associated.
-            const abacateProductId = 
-                billingData.products?.[0]?.externalId || 
-                billingData.externalId;
-            
-            console.log(`[WEBHOOK] Extracao: customerId=${customerId}, planId=${abacateProductId}`);
-
-            if (!customerId) {
-                console.error('[WEBHOOK] customerId nao encontrado');
-                return res.sendStatus(200);
-            }
-
-            const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY;
-            const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL;
-
+            // Map fixed link IDs to plan types
             let planType: 'monthly' | 'annual' = 'monthly';
-            if (abacateProductId === annualId) {
+            if (billingId === 'bill_Q2txZXXGbjm45xdcQRtH1AET') {
                 planType = 'annual';
             }
 
-            const { data: userData, error: userError } = await supabase
-                .from('users')
-                .select('id, name')
-                .eq('abacate_customer_id', customerId)
-                .single();
+            console.log(`[WEBHOOK] Processando billingId=${billingId}, planType=${planType}, email=${customerEmail}`);
 
-            if (userError || !userData) {
-                console.error('[WEBHOOK] Usuario nao encontrado para customerId:', customerId);
+            let userData: any = null;
+            
+            if (customerId) {
+                const { data } = await supabase
+                    .from('users')
+                    .select('id, name')
+                    .eq('abacate_customer_id', customerId)
+                    .maybeSingle();
+                userData = data;
+            }
+
+            if (!userData && customerEmail) {
+                const { data } = await supabase
+                    .from('users')
+                    .select('id, name')
+                    .eq('email', customerEmail)
+                    .maybeSingle();
+                userData = data;
+            }
+
+            if (!userData) {
+                console.error('[WEBHOOK] Usuario nao localizado');
                 return res.sendStatus(200);
             }
 
@@ -161,13 +144,14 @@ export class BillingController {
                     plan_type: planType,
                     subscription_status: 'active',
                     subscription_expiry_date: expiryDate.toISOString(),
+                    abacate_customer_id: customerId // Sync ID if we matched by email
                 })
                 .eq('id', userData.id);
 
             if (updateError) {
                 console.error('[WEBHOOK] Erro ao atualizar usuario:', updateError.message);
             } else {
-                console.log(`[WEBHOOK] Sucesso: ${userData.name} -> ${planType}`);
+                console.log(`[WEBHOOK] Sucesso: ${userData.name} ativado (${planType})`);
             }
         }
 
