@@ -31,7 +31,7 @@ export const billingController = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
                 products: [{
-                    externalId: (planId === 'monthly' ? monthlyId : annualId).toString(),
+                    externalId: planId, // Using the simple plan string as ID instead of prod_...
                     name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
                     quantity: 1,
                     price: planId === 'monthly' ? 2990 : 29900
@@ -41,24 +41,15 @@ export const billingController = {
                 completionUrl: successUrl || 'https://nodus.my',
             };
 
-            // Optional customer data: All 4 fields (name, email, taxId, cellphone) are REQUIRED by AbacatePay if customer object is sent.
-            // If any are missing, we omit the object to avoid 422 error and let the user fill on checkout.
-            const profileTaxId = (taxId || profile.taxId || '').toString().trim();
-            const profileCellphone = (cellphone || profile.cellphone || '').toString().trim();
-            const profileName = (profile.name || '').trim();
-            const profileEmail = (profile.email || '').trim();
+            // Mandatory customer data for AbacatePay v1 (All 4 fields MUST be strings)
+            billingData.customer = {
+                name: (profile.name || 'Cliente').trim(),
+                email: (profile.email || '').trim(),
+                taxId: (taxId || profile.taxId || '').toString().trim(),
+                cellphone: (cellphone || profile.cellphone || '').toString().trim()
+            };
 
-            if (profileEmail && profileName && profileTaxId && profileCellphone) {
-                billingData.customer = {
-                    name: profileName,
-                    email: profileEmail,
-                    taxId: profileTaxId,
-                    cellphone: profileCellphone
-                };
-                console.log('[Checkout] Attaching full customer data');
-            } else {
-                console.log('[Checkout] Omitting customer data (missing required fields), user will fill on checkout page');
-            }
+            console.log('[Checkout] Attaching customer data from DB:', billingData.customer.email);
 
             console.log('Sending to AbacatePay v1 API...');
             const session = await abacateService.createBilling(billingData);
