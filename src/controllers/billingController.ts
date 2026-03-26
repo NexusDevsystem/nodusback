@@ -29,6 +29,7 @@ export class BillingController {
                 .single();
             
             console.log(`[CHECKOUT] Supabase fetch: ${Date.now() - startTime}ms`);
+            console.log(`[CHECKOUT] Supabase user fetch took ${Date.now() - startTime}ms`);
 
             if (userError || !user) {
                 return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -36,19 +37,6 @@ export class BillingController {
 
             if (!['monthly', 'annual'].includes(planId)) {
                 return res.status(400).json({ error: 'Plano inválido' });
-            }
-
-            // Sync user data to DB if missing (taxId/cellphone)
-            const { error: updateError } = await supabase
-                .from('users')
-                .update({
-                    tax_id: taxId || user.tax_id,
-                    cellphone: cellphone || user.cellphone
-                })
-                .eq('id', user.id);
-
-            if (updateError) {
-                console.warn('[CHECKOUT] Erro ao atualizar info do usuário:', updateError.message);
             }
 
             const amount = planId === 'monthly' ? 1990 : 19900; // Example: R$ 19,90 or R$ 199,00
