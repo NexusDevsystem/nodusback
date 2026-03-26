@@ -179,7 +179,8 @@ app.get('/health', (req, res) => {
 
 // Root endpoint
 app.get('/', (req, res) => {
-    res.json({ message: 'Nodus Backend API', version: '1.0.0', env: process.env.NODE_ENV || 'development' });
+    console.log('[DEBUG] Root endpoint hit');
+    res.json({ message: 'Nodus Backend API', version: '1.1.0-debug', env: process.env.NODE_ENV || 'production' });
 });
 
 // 404 Handler
