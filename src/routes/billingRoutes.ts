@@ -1,22 +1,19 @@
 import { Router } from 'express';
-import { billingController } from '../controllers/billingController.js';
+import { BillingController } from '../controllers/billingController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// Checkout session creation (authenticated) - Now default is AbacatePay
-router.post('/checkout', authMiddleware, billingController.createCheckout);
+// 🛒 CHECKOUT: Create a billing session (PROTECTED)
+// Users must be authenticated to buy a plan
+router.post('/checkout', authMiddleware, BillingController.checkout);
 
-// Webhook endpoint (AbacatePay)
-router.post('/webhook', billingController.handleWebhook);
+// 🔔 WEBHOOK: Listener for AbacatePay events (PUBLIC)
+// This is the endpoint you must register in AbacatePay dashboard
+router.post('/webhook', BillingController.webhook);
 
-// Auto-reconcile (Check payment status manually)
-router.post('/auto-reconcile', authMiddleware, billingController.handleAutoReconcile);
-
-// Get Public Config (Public)
-router.get('/config', billingController.getConfig);
-
-// Test Ping (Public)
-router.get('/ping', (req, res) => res.json({ message: 'billing router is alive' }));
+// 🔀 RECONCILE: Manually sync plan (PROTECTED)
+// Used when the user comes back to the admin to check their status
+router.post('/auto-reconcile', authMiddleware, BillingController.autoReconcile);
 
 export default router;

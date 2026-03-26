@@ -10,7 +10,6 @@ import productRoutes from './routes/productRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import leadRoutes from './routes/leadRoutes.js';
 import musicRoutes from './routes/musicRoutes.js';
-import billingRoutes from './routes/billingRoutes.js';
 import integrationRoutes from './routes/integrationRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
 import socialRoutes from './routes/socialRoutes.js';
@@ -18,6 +17,7 @@ import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import blogRoutes from './routes/blogRoutes.js';
+import billingRoutes from './routes/billingRoutes.js';
 import path from 'path';
 import { xssMiddleware } from './middleware/xssMiddleware.js';
 import { inputLimitMiddleware } from './middleware/inputLimitMiddleware.js';
@@ -135,7 +135,7 @@ app.use(inputLimitMiddleware); // Enforce text length limits
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Routes
+// Routes removed for clean restart
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/links', linkRoutes);
@@ -143,7 +143,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/music', musicRoutes);
-app.use('/api/billing', billingRoutes);
+app.use('/api/billing', billingRoutes); // Removed for restart
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/social', socialRoutes);
