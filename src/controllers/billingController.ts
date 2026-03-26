@@ -153,10 +153,8 @@ export const billingController = {
             // Fetch current fresh profile status from database
             const profile = await profileService.getProfileByUserId(profileId as string);
             
-            if (profile && profile.subscriptionStatus === 'active') {
-                return res.json({ status: 'PAID', profile });
-            }
-
+            // Retornando sempre PENDING para evitar o "zap" (fechamento automático)
+            // O usuário agora decide quando fechar a aba
             return res.json({ status: 'PENDING', profile });
 
         } catch (error: any) {
