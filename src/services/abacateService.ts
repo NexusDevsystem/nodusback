@@ -2,8 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import 'dotenv/config';
 
-const ABACATE_API_URL = 'https://api.abacatepay.com/v2';
-const ABACATE_API_URL_V1 = 'https://api.abacatepay.com/v1';
+const ABACATE_API_URL = 'https://api.abacatepay.com/v1';
 
 const cleanToken = (token: string) => (token || '')
     .trim()
@@ -17,7 +16,7 @@ const getHeaders = () => ({
     'Authorization': `Bearer ${apiToken}`,
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'User-Agent': 'Nodus-Backend/2.0.0'
+    'User-Agent': 'Nodus-Backend/1.0.0'
 });
 
 const axiosConfig = {
@@ -146,7 +145,7 @@ export const abacateService = {
     async createBilling(params: {
         frequency: 'ONE_TIME' | 'MULTIPLE_PAYMENTS';
         methods: ('PIX' | 'CARD')[];
-        items: AbacateProduct[];
+        products: AbacateProduct[];
         returnUrl: string;
         completionUrl: string;
         customerId?: string;
@@ -156,15 +155,15 @@ export const abacateService = {
         try {
             const response = await axios({
                 method: 'post',
-                url: `${ABACATE_API_URL}/checkouts/create`,
+                url: `${ABACATE_API_URL}/billing/create`,
                 data: params,
                 headers: getHeaders(),
                 timeout: 15000
             });
-            // AbacatePay v2 returns { data: { url: '...', ... } }
+            // AbacatePay v1 returns { data: { url: '...', id: '...' } }
             return response.data;
         } catch (error: any) {
-            console.error('Error creating AbacatePay v2 checkout:', JSON.stringify(error.response?.data || error.message));
+            console.error('Error creating AbacatePay billing:', JSON.stringify(error.response?.data || error.message));
             throw error;
         }
     },

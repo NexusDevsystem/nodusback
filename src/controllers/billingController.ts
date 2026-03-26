@@ -30,8 +30,8 @@ export const billingController = {
             const billingData: any = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
-                items: [{
-                    externalId: planId === 'monthly' ? monthlyId : annualId,
+                products: [{
+                    externalId: (planId === 'monthly' ? monthlyId : annualId).toString(),
                     name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
                     quantity: 1,
                     price: planId === 'monthly' ? 2990 : 29900
@@ -60,7 +60,7 @@ export const billingController = {
                 console.log('[Checkout] Omitting customer data (missing required fields), user will fill on checkout page');
             }
 
-            console.log('Sending to AbacatePay v2 API...');
+            console.log('Sending to AbacatePay v1 API...');
             const session = await abacateService.createBilling(billingData);
             
             console.log('--- ABACATEPAY RESPONSE DEBUG ---');
@@ -68,12 +68,12 @@ export const billingController = {
             console.log('---------------------------------');
 
             if (session && session.data && session.data.url) {
-                console.log('Success! Checkout URL generated:', session.data.url);
+                console.log('Success! Billing URL generated:', session.data.url);
                 return res.json({ url: session.data.url });
             } 
             
             console.error('AbacatePay invalid response:', session);
-            return res.status(500).json({ error: 'AbacatePay v2 retornou resposta inválida' });
+            return res.status(500).json({ error: 'AbacatePay retornou resposta inválida' });
 
         } catch (error: any) {
             console.error('CRITICAL ERROR in createCheckout:', error.message);
@@ -81,7 +81,7 @@ export const billingController = {
                 console.error('AbacatePay Error Response:', JSON.stringify(error.response.data, null, 2));
             }
             return res.status(500).json({ 
-                error: 'Erro interno ao processar checkout v2',
+                error: 'Erro interno ao processar checkout AbacatePay',
                 details: error.message 
             });
         }
