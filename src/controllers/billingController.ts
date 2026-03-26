@@ -6,7 +6,7 @@ import { abacateService } from '../services/abacateService.js';
 export const billingController = {
     async createCheckout(req: AuthRequest, res: Response) {
         try {
-            const { planId } = req.body;
+            const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
 
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -14,21 +14,55 @@ export const billingController = {
                 return res.status(400).json({ error: 'Plano inválido' });
             }
 
-            // Links manuais estáticos fornecidos pelo usuário
-            const annualBillingId = 'bill_Q2txZXXGbjm45xdcQRtH1AET';
-            const monthlyBillingId = 'bill_K6SJkLeCN2kZmBjYG6qpG55E';
+            const profile = await profileService.getProfileByUserId(userId);
+            if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
+
+            const finalTaxId = taxId || profile.taxId;
+            const finalCellphone = cellphone || profile.cellphone;
+
+            // Prices in cents (R$ 29,90 and R$ 299,00)
+            const price = planId === 'monthly' ? 2990 : 29900;
+            const planName = planId === 'monthly' ? 'Nodus Pro Mensal' : 'Nodus Pro Anual';
             
-            const selectedId = planId === 'annual' ? annualBillingId : monthlyBillingId;
-            
-            // Retorna URL de pagamento direta da AbacatePay. 
-            // Tentamos anexar o userId como metadado na URL para que o webhook possa identificá-lo.
-            const checkoutUrl = `https://app.abacatepay.com/pay/${selectedId}?externalId=${userId}`;
-            
-            console.log(`[ManualCheckout] Returning static link for ${planId}: ${checkoutUrl}`);
-            res.json({ url: checkoutUrl });
+            // AbacatePay Product IDs (Configurable via Environment Variables)
+            const abacateProductId = planId === 'monthly' 
+                ? (process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr') 
+                : (process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC');
+
+            const frontendUrl = process.env.FRONTEND_URL || 'https://nodustree.com.br';
+            const successUrl = `${frontendUrl.startsWith('http') ? '' : 'https://'}${frontendUrl}/payment/success`;
+
+            const billingData: any = {
+                frequency: 'ONE_TIME',
+                methods: ['PIX', 'CARD'],
+                products: [{
+                    externalId: abacateProductId, // Identificador opcional do produto
+                    name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
+                    quantity: 1,
+                    price: planId === 'monthly' ? 2990 : 29900 // Preço em centavos
+                }],
+                externalId: profile.id, // Store Profile ID here for webhook identification
+                returnUrl: successUrl,
+                completionUrl: successUrl,
+            };
+
+            // Only send customer if we have at least the email.
+            // If taxId/cellphone are missing, AbacatePay checkout will ask for them on its own page.
+            if (profile.email) {
+                billingData.customer = {
+                    name: profile.name || 'User',
+                    email: profile.email,
+                    taxId: finalTaxId || '',
+                    cellphone: finalCellphone || ''
+                };
+            }
+
+            const session = await abacateService.createBilling(billingData);
+            console.log('AbacatePay Session Created (Dynamic):', session.data.id);
+            res.json({ url: session.data.url });
         } catch (error: any) {
-            console.error('Manual Checkout Error:', error);
-            res.status(500).json({ error: 'Falha ao processar checkout manual' });
+            console.error('AbacatePay Checkout Error (Dynamic):', error);
+            res.status(500).json({ error: error.message || 'Falha ao criar sessão de pagamento' });
         }
     },
 
