@@ -133,6 +133,79 @@ export class BillingController {
     }
 
     /**
+     * Cancel the current subscription (downgrade to free).
+     */
+    static async cancelSubscription(req: Request, res: Response) {
+        try {
+            const userId = (req as any).userId;
+            if (!userId) return res.status(401).json({ error: 'Não autorizado' });
+
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({
+                    plan_type: 'free',
+                    subscription_status: 'canceled',
+                    // We keep the expiry date in history or clear it?
+                    // Usually we clear it to effectively move to free.
+                    subscription_expiry_date: null
+                })
+                .eq('id', userId);
+
+            if (updateError) {
+                console.error('[CANCEL] Erro no update do banco:', updateError.message);
+                return res.status(500).json({ error: 'Erro ao cancelar assinatura' });
+            }
+
+            console.log(`[CANCEL] Assinatura cancelada para o usuário ${userId}`);
+            res.json({ success: true, message: 'Assinatura cancelada com sucesso' });
+        } catch (error: any) {
+            console.error('[CANCEL] Erro:', error.message);
+            res.status(500).json({ error: 'Erro interno ao cancelar' });
+        }
+    }
+
+    /**
+     * Get payment history (billings) for the current user.
+     */
+    static async getInvoices(req: Request, res: Response) {
+        try {
+            const userId = (req as any).userId;
+            if (!userId) return res.status(401).json({ error: 'Não autorizado' });
+
+            const { data: user } = await supabase
+                .from('users')
+                .select('abacate_customer_id')
+                .eq('id', userId)
+                .single();
+
+            if (!user?.abacate_customer_id) {
+                return res.json({ data: [] });
+            }
+
+            const billings = await AbacateService.listBillings();
+            
+            // Filter billings belonging to this customer and that are PAID
+            const userBillings = billings
+                .filter((b: any) => b.customerId === user.abacate_customer_id && b.status === 'PAID')
+                .map((b: any) => ({
+                    id: b.id,
+                    amount_paid: b.amount,
+                    currency: 'brl',
+                    status: b.status,
+                    created: Math.floor(new Date(b.createdAt).getTime() / 1000),
+                    invoice_pdf: b.url, // AbacatePay billing URL acts as receipt
+                    number: b.id.replace('bill_', 'REC-'),
+                    hosted_invoice_url: b.url
+                }));
+
+            res.json({ data: userBillings });
+        } catch (error: any) {
+            console.error('[INVOICES] Erro:', error.message);
+            res.status(500).json({ error: 'Erro ao buscar recibos' });
+        }
+    }
+
+    /**
      * Manually check if user should be PRO.
      */
     static async autoReconcile(req: Request, res: Response) {

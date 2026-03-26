@@ -12,6 +12,12 @@ router.post('/checkout', authMiddleware, BillingController.checkout);
 // This is the endpoint you must register in AbacatePay dashboard
 router.post('/webhook', BillingController.webhook);
 
+// 🚫 CANCEL: Support for cancellation (PROTECTED)
+router.post('/cancel', authMiddleware, BillingController.cancelSubscription);
+
+// 🧾 INVOICES: Get payment history (PROTECTED)
+router.get('/invoices', authMiddleware, BillingController.getInvoices);
+
 // 🔀 RECONCILE: Manually sync plan (PROTECTED)
 // Used when the user comes back to the admin to check their status
 router.post('/auto-reconcile', authMiddleware, BillingController.autoReconcile);
