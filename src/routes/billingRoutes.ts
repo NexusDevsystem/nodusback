@@ -10,6 +10,9 @@ router.post('/checkout', authMiddleware, billingController.createCheckout);
 // Webhook endpoint (AbacatePay)
 router.post('/webhook', billingController.handleWebhook);
 
+// Auto-reconcile (Check payment status manually)
+router.post('/auto-reconcile', authMiddleware, billingController.handleAutoReconcile);
+
 // Get Public Config (Public)
 router.get('/config', billingController.getConfig);
 

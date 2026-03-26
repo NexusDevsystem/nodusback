@@ -6,7 +6,7 @@ import { abacateService } from '../services/abacateService.js';
 export const billingController = {
     async createCheckout(req: AuthRequest, res: Response) {
         try {
-            const { planId } = req.body;
+            const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
 
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -16,6 +16,18 @@ export const billingController = {
 
             const profile = await profileService.getProfileByUserId(userId);
             if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
+
+            // AbacatePay V1 requires TaxID and Cellphone for PIX/Card in most cases.
+            // We use what came in the request, or fallback to the profile.
+            const finalTaxId = taxId || profile.taxId;
+            const finalCellphone = cellphone || profile.cellphone;
+
+            if (!finalTaxId || !finalCellphone) {
+                return res.status(400).json({ 
+                    error: 'CPF e Celular são obrigatórios para processar o pagamento do PIX/Cartão.',
+                    missingFields: true 
+                });
+            }
 
             // Prices in cents (R$ 29,90 and R$ 299,00)
             const price = planId === 'monthly' ? 2990 : 29900;
@@ -41,8 +53,8 @@ export const billingController = {
                 customer: {
                     name: profile.name || 'User',
                     email: profile.email,
-                    cellphone: '',
-                    taxId: ''
+                    cellphone: finalCellphone,
+                    taxId: finalTaxId
                 }
             });
 
@@ -130,6 +142,62 @@ export const billingController = {
         } catch (error: any) {
              console.error('Abacate Webhook Error:', error);
              res.status(500).send('Webhook process failed');
+        }
+    },
+
+    async handleAutoReconcile(req: AuthRequest, res: Response) {
+        try {
+            const userId = req.userId;
+            if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+            console.log(`[AutoReconcile] Checking status for user ${userId}...`);
+
+            // 1. Fetch recent billings from AbacatePay
+            const billingsResponse = await abacateService.listBillings();
+            const billings = billingsResponse.data || [];
+
+            // 2. Find the most recent PAID billing that belongs to this user
+            const paidBilling = billings.find((b: any) => 
+                b.externalId === userId && 
+                b.status === 'PAID'
+            );
+
+            const currentProfile = await profileService.getProfileByUserId(userId);
+
+            if (!paidBilling) {
+                // Return current profile if no payment found
+                return res.json(currentProfile);
+            }
+
+            // 3. If found, ensure profile is upgraded (Logic identical to webhook)
+            const product = paidBilling.products?.[0];
+            const abacateProdId = product?.externalId;
+            
+            let planId: 'monthly' | 'annual' | null = null;
+            if (abacateProdId === 'prod_HfZuk60kqgMcYtg1wceKgZTr') planId = 'monthly';
+            if (abacateProdId === 'prod_PamM5q2LRFN6gHHESs4jrGqC') planId = 'annual';
+
+            if (currentProfile && currentProfile.id && planId) {
+                // Only update if not already active or if status is not 'active'
+                if (currentProfile.planType !== planId || currentProfile.subscriptionStatus !== 'active') {
+                    const expiryDate = new Date();
+                    if (planId === 'monthly') expiryDate.setDate(expiryDate.getDate() + 30);
+                    else expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+                    const updated = await profileService.updateProfile(currentProfile.id, {
+                        planType: planId,
+                        subscriptionStatus: 'active',
+                        subscriptionExpiryDate: expiryDate.toISOString()
+                    });
+                    console.log(`✅ [AutoReconcile] Successfully upgraded user ${userId} to ${planId}`);
+                    return res.json(updated);
+                }
+            }
+
+            return res.json(currentProfile);
+        } catch (error: any) {
+            console.error('AutoReconcile Error:', error);
+            res.status(500).json({ error: 'Falha na conciliação automática' });
         }
     },
 
