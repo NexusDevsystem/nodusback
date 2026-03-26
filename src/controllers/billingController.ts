@@ -190,8 +190,12 @@ export const billingController = {
 
     async handleAutoReconcile(req: AuthRequest, res: Response) {
         try {
-            const profile = (req as any).profile;
-            if (!profile) return res.status(401).json({ error: 'Perfil não encontrado' });
+            const profileId = req.profileId;
+            if (!profileId) return res.status(401).json({ error: 'Sessão inválida' });
+
+            // Fetch full profile data
+            const profile = await profileService.getProfileByUserId(profileId as string);
+            if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
 
             console.log(`[AutoReconcile] Checking status for user ${profile.id}...`);
 
@@ -228,7 +232,7 @@ export const billingController = {
                     subscriptionExpiryDate: expiryDate.toISOString()
                 });
 
-                const updated = await profileService.getProfileByUserId(profile.userId);
+                const updated = await profileService.getProfileByUserId(profileId as string);
                 return res.json({ status: 'PAID', profile: updated });
             }
 
