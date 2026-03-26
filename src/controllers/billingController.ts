@@ -195,7 +195,9 @@ export class BillingController {
                     created: Math.floor(new Date(b.createdAt).getTime() / 1000),
                     invoice_pdf: b.url, // AbacatePay billing URL acts as receipt
                     number: b.id.replace('bill_', 'REC-'),
-                    hosted_invoice_url: b.url
+                    hosted_invoice_url: b.url,
+                    payment_method: b.method || 'PIX', // PIX or CREDIT_CARD
+                    card: b.card || null // { brand: 'visa', last4: '4242', expiryMonth: '12', expiryYear: '2029' }
                 }));
 
             res.json({ data: userBillings });
