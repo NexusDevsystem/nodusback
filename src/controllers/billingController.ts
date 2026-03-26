@@ -87,17 +87,18 @@ export const billingController = {
                         profileToUpdate = await profileService.getProfileByUserId(profileId as string);
                     }
                     
-                    if (!profileToUpdate && billing?.customer?.email) {
-                        const customerEmail = billing.customer.email.toLowerCase();
-                        console.log(`[Webhook Fallback] Searching user by email (case-insensitive): ${customerEmail}`);
+                    const customerEmail = billing?.customer?.metadata?.email || billing?.customer?.email;
+
+                    if (!profileToUpdate && customerEmail) {
+                        const emailToSearch = customerEmail.toLowerCase();
+                        console.log(`[Webhook Fallback] Searching user by email (case-insensitive): ${emailToSearch}`);
                         
-                        // We'll search by username/email in a more generic way if getProfileByEmail fails
-                        profileToUpdate = await profileService.getProfileByEmail(customerEmail);
+                        profileToUpdate = await profileService.getProfileByEmail(emailToSearch);
                         if (profileToUpdate) profileId = profileToUpdate.id;
                     }
 
                     if (!profileId || !planId) {
-                        console.error('Webhook Error: Missing identification data', { profileId, planId, amount, email: billing?.customer?.email });
+                        console.error('Webhook Error: Missing identification data', { profileId, planId, amount, email: customerEmail });
                         return res.status(400).send('Missing payload identification');
                     }
 
@@ -153,7 +154,8 @@ export const billingController = {
             const currentProfile = await profileService.getProfileByUserId(userId);
             
             const paidBilling = billings.find((b: any) => 
-                (b.externalId === userId || (currentProfile?.email && b.customer?.email === currentProfile.email)) && 
+                (b.externalId === userId || 
+                 (currentProfile?.email && (b.customer?.metadata?.email === currentProfile.email || b.customer?.email === currentProfile.email))) && 
                 b.status === 'PAID'
             );
 
