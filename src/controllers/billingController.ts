@@ -89,39 +89,35 @@ export class BillingController {
         const webhookSecret = req.query.webhookSecret;
         const expectedSecret = process.env.ABACATE_PAY_WEBHOOK_SECRET;
 
+        console.log('🚀 Webhook recebido! Query Secret:', webhookSecret ? 'Sim' : 'Não');
+
         if (expectedSecret && webhookSecret !== expectedSecret) {
             console.warn('🚨 Webhook: Secret inválido ou faltando na URL');
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        const signature = req.headers['abacatepay-signature'] as string;
-        
-        // HMAC signature validation (if enabled)
-        /*
-        if (expectedSecret && signature) {
-            const hmac = crypto.createHmac('sha256', expectedSecret);
-            const digest = hmac.update(JSON.stringify(req.body)).digest('hex');
-            if (digest !== signature) {
-               console.warn('🚨 Webhook: Assinatura HMAC inválida');
-               return res.status(401).json({ error: 'Invalid signature' });
-            }
-        }
-        */
+        // --- FULL PAYLOAD LOGGING ---
+        console.log('📦 FULL WEBHOOK PAYLOAD (v1):', JSON.stringify(req.body, null, 2));
 
         const { event, data } = req.body;
-
-        console.log(`🔔 AbacatePay Webhook (v1): ${event}`);
 
         if (event === 'billing.paid') {
             const billingData = data;
             
-            // v1 paths: customer is an object { id, email }
-            const customerId = billingData.customer?.id;
+            // v1 paths: Try all possible locations for customer ID
+            const customerId = 
+                billingData.customer?.id || 
+                billingData.customerId || 
+                billingData.customer_id;
             
-            // In v1, the product internal ID might be in the products array or externalId
-            const product = billingData.products?.[0];
-            const abacateProductId = product?.externalId || billingData.externalId;
+            // Try all possible locations for product/plan ID
+            const abacateProductId = 
+                billingData.products?.[0]?.externalId || 
+                billingData.externalId || 
+                billingData.metadata?.planId;
             
+            console.log(`🔎 Extração Webhook: customerId=${customerId}, planId=${abacateProductId}`);
+
             const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY;
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL;
 
@@ -131,7 +127,7 @@ export class BillingController {
             }
 
             if (!customerId) {
-                console.error('❌ Webhook error: customerId not found in data');
+                console.error('❌ Webhook error: customerId not found in data. Body logged above.');
                 return res.sendStatus(200);
             }
 
