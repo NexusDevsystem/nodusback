@@ -20,15 +20,6 @@ export const billingController = {
             const finalTaxId = taxId || profile.taxId;
             const finalCellphone = cellphone || profile.cellphone;
 
-            // Prices in cents (R$ 29,90 and R$ 299,00)
-            const price = planId === 'monthly' ? 2990 : 29900;
-            const planName = planId === 'monthly' ? 'Nodus Pro Mensal' : 'Nodus Pro Anual';
-            
-            // AbacatePay Product IDs (Configurable via Environment Variables)
-            const abacateProductId = planId === 'monthly' 
-                ? (process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr') 
-                : (process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC');
-
             const frontendUrl = process.env.FRONTEND_URL || 'https://nodustree.com.br';
             const successUrl = `${frontendUrl.startsWith('http') ? '' : 'https://'}${frontendUrl}/payment/success`;
 
@@ -36,18 +27,15 @@ export const billingController = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
                 products: [{
-                    externalId: abacateProductId, // Identificador opcional do produto
                     name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
                     quantity: 1,
-                    price: planId === 'monthly' ? 2990 : 29900 // Preço em centavos
+                    price: planId === 'monthly' ? 2990 : 29900
                 }],
-                externalId: profile.id, // Store Profile ID here for webhook identification
+                externalId: profile.id,
                 returnUrl: successUrl,
                 completionUrl: successUrl,
             };
 
-            // Only send customer if we have at least the email.
-            // If taxId/cellphone are missing, AbacatePay checkout will ask for them on its own page.
             if (profile.email) {
                 billingData.customer = {
                     name: profile.name || 'User',
@@ -57,12 +45,20 @@ export const billingController = {
                 };
             }
 
+            console.log('Creating AbacatePay Session with payload:', JSON.stringify(billingData, null, 2));
             const session = await abacateService.createBilling(billingData);
-            console.log('AbacatePay Session Created (Dynamic):', session.data.id);
-            res.json({ url: session.data.url });
+            
+            if (session.data && session.data.url) {
+                console.log('AbacatePay Session Created Success:', session.data.id, 'URL:', session.data.url);
+                return res.json({ url: session.data.url });
+            } else {
+                console.error('AbacatePay Response missing URL:', session);
+                throw new Error('AbacatePay não retornou URL de checkout');
+            }
         } catch (error: any) {
-            console.error('AbacatePay Checkout Error (Dynamic):', error);
-            res.status(500).json({ error: error.message || 'Falha ao criar sessão de pagamento' });
+            const apiError = error.response?.data;
+            console.error('AbacatePay Checkout Error (Detailed):', JSON.stringify(apiError || error.message, null, 2));
+            res.status(500).json({ error: 'Falha ao criar sessão de pagamento. Verifique os dados do perfil.' });
         }
     },
 
