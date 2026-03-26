@@ -23,10 +23,14 @@ export const billingController = {
             const frontendUrl = process.env.FRONTEND_URL || 'https://nodustree.com.br';
             const successUrl = `${frontendUrl.startsWith('http') ? '' : 'https://'}${frontendUrl}/payment/success`;
 
+            const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
+            const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
+
             const billingData: any = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
                 products: [{
+                    externalId: planId === 'monthly' ? monthlyId : annualId,
                     name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
                     quantity: 1,
                     price: planId === 'monthly' ? 2990 : 29900
