@@ -6,73 +6,29 @@ import { abacateService } from '../services/abacateService.js';
 export const billingController = {
     async createCheckout(req: AuthRequest, res: Response) {
         try {
-            const { planId, taxId, cellphone } = req.body;
+            const { planId } = req.body;
             const userId = req.userId;
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-            if (!planId || (planId !== 'monthly' && planId !== 'annual')) {
-                return res.status(400).json({ error: 'Plano inválido' });
+
+            const monthlyLink = process.env.ABACATE_PAY_MONTHLY_LINK;
+            const annualLink = process.env.ABACATE_PAY_ANNUAL_LINK;
+
+            console.log(`[Checkout] User ${userId} requested manual link for plan: ${planId}`);
+
+            if (planId === 'monthly') {
+                if (!monthlyLink) return res.status(500).json({ error: 'Link mensal não configurado' });
+                return res.json({ url: monthlyLink });
+            } else if (planId === 'annual') {
+                if (!annualLink) return res.status(500).json({ error: 'Link anual não configurado' });
+                return res.json({ url: annualLink });
             }
 
-            console.log(`[Checkout] Starting for user: ${userId}, plan: ${planId}`);
-
-            const profile = await profileService.getProfileByUserId(userId);
-            if (!profile) {
-                return res.status(404).json({ error: 'Perfil não encontrado' });
-            }
-
-            const frontendUrl = process.env.FRONTEND_URL || 'https://nodus.my';
-            const successUrl = `${frontendUrl.startsWith('http') ? '' : 'https://'}${frontendUrl}/payment/success`;
-
-            const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
-            const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
-
-            // Base billing data
-            const billingData: any = {
-                frequency: 'ONE_TIME',
-                methods: ['PIX', 'CARD'],
-                products: [{
-                    externalId: (planId === 'monthly' ? monthlyId : annualId).toString(),
-                    name: planId === 'monthly' ? 'Nodus Pro - Mensal' : 'Nodus Pro - Anual',
-                    quantity: 1,
-                    price: planId === 'monthly' ? 2990 : 29900
-                }],
-                externalId: profile.id,
-                returnUrl: successUrl || 'https://nodus.my',
-                completionUrl: successUrl || 'https://nodus.my',
-            };
-
-            // Mandatory customer data for AbacatePay v1 (All 4 fields MUST be strings)
-            billingData.customer = {
-                name: (profile.name || 'Cliente').trim(),
-                email: (profile.email || '').trim(),
-                taxId: (taxId || profile.taxId || '').toString().trim(),
-                cellphone: (cellphone || profile.cellphone || '').toString().trim()
-            };
-
-            console.log('[Checkout] Attaching customer data from DB:', billingData.customer.email);
-
-            console.log('Sending to AbacatePay v1 API...');
-            const session = await abacateService.createBilling(billingData);
-            
-            console.log('--- ABACATEPAY RESPONSE DEBUG ---');
-            console.log(JSON.stringify(session, null, 2));
-            console.log('---------------------------------');
-
-            if (session && session.data && session.data.url) {
-                console.log('Success! Billing URL generated:', session.data.url);
-                return res.json({ url: session.data.url });
-            } 
-            
-            console.error('AbacatePay invalid response:', session);
-            return res.status(500).json({ error: 'AbacatePay retornou resposta inválida' });
+            return res.status(400).json({ error: 'Plano inválido' });
 
         } catch (error: any) {
             console.error('CRITICAL ERROR in createCheckout:', error.message);
-            if (error.response) {
-                console.error('AbacatePay Error Response:', JSON.stringify(error.response.data, null, 2));
-            }
             return res.status(500).json({ 
-                error: 'Erro interno ao processar checkout AbacatePay',
+                error: 'Erro interno ao processar checkout',
                 details: error.message 
             });
         }
