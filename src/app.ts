@@ -32,12 +32,16 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,ht
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
+        // Allow requests with no origin (like mobile apps or curl) or from localhost
+        if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+            return callback(null, true);
+        }
+        
         const isAllowed = allowedOrigins.includes(origin) ||
-            origin.includes('localhost') ||
             origin.includes('nodus.my') ||
             origin.includes('nodus.app') ||
             origin.endsWith('.vercel.app');
+
         if (isAllowed) {
             callback(null, true);
         } else {
@@ -46,7 +50,7 @@ app.use(cors({
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'abacatepay-signature'],
     credentials: true,
     maxAge: 86400
 }));
