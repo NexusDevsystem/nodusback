@@ -6,31 +6,54 @@ import { abacateService } from '../services/abacateService.js';
 export const billingController = {
     async createCheckout(req: AuthRequest, res: Response) {
         try {
-            const { planId } = req.body;
+            const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-            // IDs passados pelo usuário
-            const monthlyId = "bill_Q2txZXXGbjm45xdcQRtH1AET";
-            const annualId = "bill_K6SJkLeCN2kZmBjYG6qpG55E";
+            const profile = await profileService.getProfileByUserId(userId);
+            if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
 
-            console.log(`[Checkout] User ${userId} requested manual link for plan: ${planId}`);
+            console.log(`[AbacatePay API] Starting payment for: ${profile.email}`);
 
-            let targetUrl = "";
-            if (planId === 'monthly') {
-                targetUrl = `https://app.abacatepay.com/pay/${monthlyId}`;
-            } else if (planId === 'annual') {
-                targetUrl = `https://app.abacatepay.com/pay/${annualId}`;
-            } else {
-                return res.status(400).json({ error: 'Plano inválido' });
+            // Preços fixos em centavos
+            const price = (planId === 'annual') ? 29900 : 2990;
+            const planName = (planId === 'annual') ? 'Nodus Pro - Anual' : 'Nodus Pro - Mensal';
+
+            const payload = {
+                frequency: 'ONE_TIME' as const,
+                methods: ['PIX', 'CARD'] as ('PIX' | 'CARD')[],
+                products: [{
+                    externalId: planId as string,
+                    name: planName,
+                    quantity: 1,
+                    price: price
+                }],
+                customer: {
+                    name: (profile.name || 'Cliente').trim(),
+                    email: (profile.email || '').trim(),
+                    taxId: (taxId || profile.taxId || '00000000000').toString().trim(),
+                    cellphone: (cellphone || profile.cellphone || '00000000000').toString().trim()
+                },
+                externalId: profile.id as string,
+                devMode: true,
+                returnUrl: 'https://nodus.my/payment/success',
+                completionUrl: 'https://nodus.my/payment/success'
+            };
+
+            const session = await abacateService.createBilling(payload);
+            
+            if (session?.data?.url) {
+                return res.json({ url: session.data.url });
             }
 
-            return res.json({ url: targetUrl });
+            console.error('AbacatePay invalid response:', session);
+            return res.status(500).json({ error: 'Erro ao gerar checkout na API' });
 
         } catch (error: any) {
-            console.error('CRITICAL ERROR in createCheckout:', error.message);
+            console.error('API ERROR in createCheckout:', error.message);
             return res.status(500).json({ 
-                error: 'Erro interno ao processar checkout'
+                error: 'Falha na API de pagamento',
+                details: error.response?.data || error.message
             });
         }
     },
