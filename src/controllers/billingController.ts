@@ -58,6 +58,8 @@ export const billingController = {
                 case 'billing.paid':
                 case 'pix.paid': // Some v1 integrations use pix.paid for direct QR Codes
                     const billing = data.billing || data;
+                    console.log('[AbacatePay Webhook Payload]:', JSON.stringify(billing, null, 2));
+
                     let profileId = billing?.externalId; // Nodus uses externalId to link billing to profile.id
                     
                     // Identify the product/plan
@@ -86,13 +88,16 @@ export const billingController = {
                     }
                     
                     if (!profileToUpdate && billing?.customer?.email) {
-                        console.log(`[Webhook Fallback] Searching user by email: ${billing.customer.email}`);
-                        profileToUpdate = await profileService.getProfileByEmail(billing.customer.email);
+                        const customerEmail = billing.customer.email.toLowerCase();
+                        console.log(`[Webhook Fallback] Searching user by email (case-insensitive): ${customerEmail}`);
+                        
+                        // We'll search by username/email in a more generic way if getProfileByEmail fails
+                        profileToUpdate = await profileService.getProfileByEmail(customerEmail);
                         if (profileToUpdate) profileId = profileToUpdate.id;
                     }
 
                     if (!profileId || !planId) {
-                        console.error('Webhook Error: Missing identification data', { profileId, planId, amount });
+                        console.error('Webhook Error: Missing identification data', { profileId, planId, amount, email: billing?.customer?.email });
                         return res.status(400).send('Missing payload identification');
                     }
 
