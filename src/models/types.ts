@@ -10,7 +10,7 @@ export interface UserProfileDB {
     plan_type?: 'free' | 'monthly' | 'annual';
     subscription_status?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
     subscription_expiry_date?: string | null;
-    stripe_customer_id?: string | null;
+    abacate_customer_id?: string | null;
     tax_id?: string | null;
     cellphone?: string | null;
     user_category?: 'creator' | 'personal' | 'business' | null;
@@ -163,7 +163,7 @@ export interface UserProfile {
     planType?: 'free' | 'monthly' | 'annual';
     subscriptionStatus?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
     subscriptionExpiryDate?: string | null;
-    stripeCustomerId?: string | null;
+    abacateCustomerId?: string | null;
     taxId?: string | null;
     cellphone?: string | null;
     userCategory?: 'creator' | 'personal' | 'business' | null;
@@ -295,7 +295,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         planType: dbProfile.plan_type,
         subscriptionStatus: dbProfile.subscription_status,
         subscriptionExpiryDate: dbProfile.subscription_expiry_date,
-        stripeCustomerId: dbProfile.stripe_customer_id,
+        abacateCustomerId: dbProfile.abacate_customer_id,
         taxId: dbProfile.tax_id,
         cellphone: dbProfile.cellphone,
         userCategory: dbProfile.user_category || null,
@@ -344,7 +344,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.planType !== undefined) dbProfile.plan_type = apiProfile.planType;
     if (apiProfile.subscriptionStatus !== undefined) dbProfile.subscription_status = apiProfile.subscriptionStatus;
     if (apiProfile.subscriptionExpiryDate !== undefined) dbProfile.subscription_expiry_date = apiProfile.subscriptionExpiryDate;
-    if (apiProfile.stripeCustomerId !== undefined) dbProfile.stripe_customer_id = apiProfile.stripeCustomerId;
+    if (apiProfile.abacateCustomerId !== undefined) dbProfile.abacate_customer_id = apiProfile.abacateCustomerId;
     if (apiProfile.taxId !== undefined) dbProfile.tax_id = apiProfile.taxId;
     if (apiProfile.cellphone !== undefined) dbProfile.cellphone = apiProfile.cellphone;
     if (apiProfile.userCategory !== undefined) dbProfile.user_category = apiProfile.userCategory;

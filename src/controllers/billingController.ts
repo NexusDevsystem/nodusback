@@ -11,10 +11,21 @@ export class BillingController {
     static async checkout(req: any, res: Response) {
         try {
             const { planId, taxId, cellphone } = req.body;
-            const user = req.user;
+            const userId = req.userId;
 
-            if (!user) {
+            if (!userId) {
                 return res.status(401).json({ error: 'Não autorizado' });
+            }
+
+            // Fetch user from DB to handle synchronization correctly
+            const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .single();
+
+            if (userError || !user) {
+                return res.status(404).json({ error: 'Usuário não encontrado' });
             }
 
             if (!['monthly', 'annual'].includes(planId)) {
@@ -52,10 +63,10 @@ export class BillingController {
             });
 
             // Update user's Abacate customer ID if it's the first time
-            if (!user.stripe_customer_id && billingRes.customer?.id) {
+            if (!user.abacate_customer_id && billingRes.customer?.id) {
                 await supabase
                     .from('users')
-                    .update({ stripe_customer_id: billingRes.customer.id })
+                    .update({ abacate_customer_id: billingRes.customer.id })
                     .eq('id', user.id);
             }
 
@@ -105,11 +116,11 @@ export class BillingController {
 
             if (!customerId) return res.sendStatus(200);
 
-            // Find user by customerId
+            // Find user by abacate_customer_id
             const { data: userData, error: userError } = await supabase
                 .from('users')
                 .select('id, name')
-                .eq('stripe_customer_id', customerId)
+                .eq('abacate_customer_id', customerId)
                 .single();
 
             if (userError || !userData) {
@@ -150,9 +161,27 @@ export class BillingController {
      */
     static async autoReconcile(req: any, res: Response) {
         try {
-            const user = req.user;
-            if (!user.stripe_customer_id) {
-                return res.json({ planType: 'free' });
+            const userId = req.userId;
+            if (!userId) {
+                return res.status(401).json({ error: 'Não autorizado' });
+            }
+
+            // Fetch current user from DB to get their customer ID
+            const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .single();
+
+            if (userError || !user) {
+                return res.status(404).json({ error: 'Usuário não encontrado' });
+            }
+
+            // We use abacate_customer_id field
+            const abacateCustomerId = user.abacate_customer_id;
+
+            if (!abacateCustomerId) {
+                return res.json({ plan_type: 'free', subscription_status: 'unpaid' });
             }
 
             // Fetch billings from AbacatePay for this customer
@@ -160,7 +189,7 @@ export class BillingController {
             
             // Check if there is ANY paid billing for this customer
             const paidBilling = billings.find((b: any) => 
-                b.customerId === user.stripe_customer_id && b.status === 'PAID'
+                b.customerId === abacateCustomerId && b.status === 'PAID'
             );
 
             if (paidBilling) {
