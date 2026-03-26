@@ -8,24 +8,25 @@ export const billingController = {
         try {
             const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
-
             if (!userId) return res.status(401).json({ error: 'Unauthorized' });
             if (!planId || (planId !== 'monthly' && planId !== 'annual')) {
                 return res.status(400).json({ error: 'Plano inválido' });
             }
 
+            console.log(`[Checkout] Starting for user: ${userId}, plan: ${planId}`);
+
             const profile = await profileService.getProfileByUserId(userId);
-            if (!profile) return res.status(404).json({ error: 'Perfil não encontrado' });
+            if (!profile) {
+                return res.status(404).json({ error: 'Perfil não encontrado' });
+            }
 
-            const finalTaxId = taxId || profile.taxId;
-            const finalCellphone = cellphone || profile.cellphone;
-
-            const frontendUrl = process.env.FRONTEND_URL || 'https://nodustree.com.br';
+            const frontendUrl = process.env.FRONTEND_URL || 'https://nodus.my';
             const successUrl = `${frontendUrl.startsWith('http') ? '' : 'https://'}${frontendUrl}/payment/success`;
 
             const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
 
+            // Base billing data
             const billingData: any = {
                 frequency: 'ONE_TIME',
                 methods: ['PIX', 'CARD'],
@@ -36,18 +37,19 @@ export const billingController = {
                     price: planId === 'monthly' ? 2990 : 29900
                 }],
                 externalId: profile.id,
-                returnUrl: successUrl,
-                completionUrl: successUrl,
+                returnUrl: successUrl || 'https://nodus.my',
+                completionUrl: successUrl || 'https://nodus.my',
             };
 
+            // Optional customer data
             if (profile.email) {
                 const customer: any = {
                     email: profile.email,
                     name: (profile.name || 'User').trim()
                 };
 
-                const cleanTaxId = (finalTaxId || '').toString().trim();
-                const cleanCellphone = (finalCellphone || '').toString().trim();
+                const cleanTaxId = (taxId || profile.taxId || '').toString().trim();
+                const cleanCellphone = (cellphone || profile.cellphone || '').toString().trim();
 
                 if (cleanTaxId) customer.taxId = cleanTaxId;
                 if (cleanCellphone) customer.cellphone = cleanCellphone;
@@ -55,20 +57,23 @@ export const billingController = {
                 billingData.customer = customer;
             }
 
-            console.log('Creating AbacatePay Session with payload:', JSON.stringify(billingData, null, 2));
+            console.log('Sending to AbacatePay...');
             const session = await abacateService.createBilling(billingData);
-            
-            if (session.data && session.data.url) {
-                console.log('AbacatePay Session Created Success:', session.data.id, 'URL:', session.data.url);
+
+            if (session && session.data && session.data.url) {
+                console.log('Success! URL generated.');
                 return res.json({ url: session.data.url });
-            } else {
-                console.error('AbacatePay Response missing URL:', session);
-                throw new Error('AbacatePay não retornou URL de checkout');
             }
+
+            console.error('AbacatePay invalid response:', session);
+            return res.status(500).json({ error: 'AbacatePay retornou resposta inválida' });
+
         } catch (error: any) {
-            const apiError = error.response?.data;
-            console.error('AbacatePay Checkout Error (Detailed):', JSON.stringify(apiError || error.message, null, 2));
-            res.status(500).json({ error: 'Falha ao criar sessão de pagamento. Verifique os dados do perfil.' });
+            console.error('CRITICAL ERROR in createCheckout:', error.message);
+            return res.status(500).json({
+                error: 'Erro interno ao processar checkout',
+                details: error.message
+            });
         }
     },
 
@@ -78,7 +83,7 @@ export const billingController = {
             const expectedSecret = process.env.ABACATE_PAY_WEBHOOK_SECRET;
 
             console.log('--- ABACATEPAY WEBHOOK RECEIVED ---');
-            
+
             // Security: Case 1 - Query Secret validation (Recommended for v1 when HMAC is not available)
             if (expectedSecret && webhookSecret !== expectedSecret) {
                 console.error('❌ Webhook Error: Invalid webhookSecret token');
@@ -88,11 +93,11 @@ export const billingController = {
             // Security: Case 2 - HMAC signature (Optional fallback/defense in depth)
             const signature = req.headers['abacatepay-signature'];
             if (!abacateService.verifyWebhook(req.body, signature as string)) {
-                 // Note: If no HMAC secret is set in the service, this currently just logs a warning but continues.
+                // Note: If no HMAC secret is set in the service, this currently just logs a warning but continues.
             }
 
             const { event, data } = req.body;
-            
+
             // Logical routing based on event
             switch (event) {
                 case 'billing.paid':
@@ -101,12 +106,12 @@ export const billingController = {
                     console.log('[AbacatePay Webhook Payload]:', JSON.stringify(billing, null, 2));
 
                     let profileId = billing?.externalId; // Nodus uses externalId to link billing to profile.id
-                    
+
                     // Identify the product/plan
                     const product = billing?.products?.[0];
                     const abacateProdId = product?.externalId;
                     const amount = billing?.amount || 0;
-                    
+
                     // Map Abacate Product ID back to Nodus planId
                     let planId: 'monthly' | 'annual' | null = null;
                     const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
@@ -114,7 +119,7 @@ export const billingController = {
 
                     if (abacateProdId === monthlyId) planId = 'monthly';
                     else if (abacateProdId === annualId) planId = 'annual';
-                    
+
                     // Robust fallback for manual links: Identify plan by amount
                     if (!planId) {
                         if (amount >= 2900 && amount <= 3100) planId = 'monthly';
@@ -126,13 +131,13 @@ export const billingController = {
                     if (profileId) {
                         profileToUpdate = await profileService.getProfileByUserId(profileId as string);
                     }
-                    
+
                     const customerEmail = billing?.customer?.metadata?.email || billing?.customer?.email;
 
                     if (!profileToUpdate && customerEmail) {
                         const emailToSearch = customerEmail.toLowerCase();
                         console.log(`[Webhook Fallback] Searching user by email (case-insensitive): ${emailToSearch}`);
-                        
+
                         profileToUpdate = await profileService.getProfileByEmail(emailToSearch);
                         if (profileToUpdate) profileId = profileToUpdate.id;
                     }
@@ -166,7 +171,7 @@ export const billingController = {
                 case 'billing.failed':
                     console.log('[AbacatePay] Billing Failed:', data.id);
                     break;
-                
+
                 default:
                     console.log(`[AbacatePay] Ignoring unhandled event: ${event}`);
             }
@@ -174,8 +179,8 @@ export const billingController = {
             // Always respond with 200 OK
             res.status(200).json({ received: true });
         } catch (error: any) {
-             console.error('Abacate Webhook Error:', error);
-             res.status(500).send('Webhook process failed');
+            console.error('Abacate Webhook Error:', error);
+            res.status(500).send('Webhook process failed');
         }
     },
 
@@ -192,10 +197,10 @@ export const billingController = {
 
             // 2. Find the most recent PAID billing that belongs to this user
             const currentProfile = await profileService.getProfileByUserId(userId);
-            
-            const paidBilling = billings.find((b: any) => 
-                (b.externalId === userId || 
-                 (currentProfile?.email && (b.customer?.metadata?.email === currentProfile.email || b.customer?.email === currentProfile.email))) && 
+
+            const paidBilling = billings.find((b: any) =>
+                (b.externalId === userId ||
+                    (currentProfile?.email && (b.customer?.metadata?.email === currentProfile.email || b.customer?.email === currentProfile.email))) &&
                 b.status === 'PAID'
             );
 
@@ -207,7 +212,7 @@ export const billingController = {
             // 3. If found, ensure profile is upgraded (Logic identical to webhook)
             const product = paidBilling.products?.[0];
             const abacateProdId = product?.externalId;
-            
+
             let planId: 'monthly' | 'annual' | null = null;
             const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'prod_HfZuk60kqgMcYtg1wceKgZTr';
             const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'prod_PamM5q2LRFN6gHHESs4jrGqC';
