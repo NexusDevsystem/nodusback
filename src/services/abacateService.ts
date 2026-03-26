@@ -41,7 +41,7 @@ export class AbacateService {
                         externalId: options.externalId,
                         name: options.externalId === process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL ? 'Nodus Pro - Anual' : 'Nodus Pro - Mensal',
                         quantity: 1,
-                        price: Math.round(Number(options.amount)) // Correct field name is 'price'
+                        price: Math.round(Number(options.amount))
                     }
                 ],
                 returnUrl: `${process.env.FRONTEND_URL}/payment/success`,
@@ -58,6 +58,7 @@ export class AbacateService {
             console.log('[ABACATE] Sending payload:', JSON.stringify(payload, null, 2));
 
             const response = await abacateApi.post('/billing/create', payload);
+            console.log('[ABACATE] Response status:', response.status, response.statusText);
             return response.data.data;
         } catch (error: any) {
             console.error('[ABACATE] createBilling error:', error.response?.data || error.message);

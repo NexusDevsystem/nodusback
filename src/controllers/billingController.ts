@@ -17,7 +17,7 @@ export class BillingController {
             const startTime = Date.now();
 
             if (!userId) {
-                console.warn('⚠️ Tentativa de checkout sem userId');
+                console.warn('[CHECKOUT] Tentativa de checkout sem userId');
                 return res.status(401).json({ error: 'Não autorizado' });
             }
 
@@ -48,7 +48,7 @@ export class BillingController {
                 .eq('id', user.id);
 
             if (updateError) {
-                console.warn('⚠️ Erro ao atualizar info do usuário:', updateError.message);
+                console.warn('[CHECKOUT] Erro ao atualizar info do usuário:', updateError.message);
             }
 
             const amount = planId === 'monthly' ? 1990 : 19900; // Example: R$ 19,90 or R$ 199,00
@@ -73,7 +73,7 @@ export class BillingController {
             } catch (error: any) {
                 // If the error was specifically related to the customerId, try without it
                 if (user.abacate_customer_id && (error.message.includes('customer') || error.message.includes('customerId') || error.message.includes('404'))) {
-                    console.warn('⚠️ Existing customerId seems invalid. Trying to create without it...');
+                    console.warn('[CHECKOUT] Existing customerId seems invalid. Trying to create without it...');
                     billingRes = await AbacateService.createBilling({
                         customerId: undefined,
                         email: user.email,
