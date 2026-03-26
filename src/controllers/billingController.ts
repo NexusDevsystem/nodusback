@@ -49,8 +49,9 @@ export const billingController = {
                  };
             }
 
-            console.log('Sending minimal payload to AbacatePay...');
-            const session = await abacateService.createBilling(billingData);
+            console.log('DEBUG: Bypassing AbacatePay call for testing...');
+            // const session = await abacateService.createBilling(billingData);
+            const session = { data: { url: 'https://nodus.my/payment/success?debug=true', id: 'debug_123' } };
 
             if (session && session.data && session.data.url) {
                 console.log('Success! URL generated.');
