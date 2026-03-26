@@ -135,14 +135,10 @@ export class BillingController {
     /**
      * Manually check if user should be PRO.
      */
-    static async autoReconcile(req: any, res: Response) {
+    static async autoReconcile(req: Request, res: Response) {
         try {
-            const userId = req.userId;
-            if (!userId) {
-                return res.status(401).json({ error: 'Não autorizado' });
-            }
+            const userId = (req as any).user.id;
 
-            // Fetch current user from DB to get their customer ID
             const { data: user, error: userError } = await supabase
                 .from('users')
                 .select('*')
@@ -150,44 +146,23 @@ export class BillingController {
                 .single();
 
             if (userError || !user) {
-                return res.status(404).json({ error: 'Usuário não encontrado' });
+                return res.status(404).json({ error: 'Usuario nao encontrado' });
             }
 
-            // We use abacate_customer_id field
-            const abacateCustomerId = user.abacate_customer_id;
+            // Map snake_case to camelCase for frontend compatibility
+            const profile = {
+                ...user,
+                planType: user.plan_type,
+                subscriptionStatus: user.subscription_status,
+                subscriptionExpiryDate: user.subscription_expiry_date,
+                abacateCustomerId: user.abacate_customer_id,
+                taxId: user.tax_id,
+                cellphone: user.cellphone
+            };
 
-            if (!abacateCustomerId) {
-                return res.json({ plan_type: 'free', subscription_status: 'unpaid' });
-            }
-
-            // Fetch billings from AbacatePay for this customer
-            const billings = await AbacateService.listBillings();
-
-            // Check if there is ANY paid billing for this customer
-            const paidBilling = billings.find((b: any) =>
-                b.customerId === abacateCustomerId && b.status === 'PAID'
-            );
-
-            if (paidBilling) {
-                const planId = paidBilling.products?.[0]?.externalId || 'monthly';
-
-                // Update local status just in case webhook failed
-                const { data: updatedProfile, error: updateError } = await supabase
-                    .from('users')
-                    .update({
-                        plan_type: planId,
-                        subscription_status: 'active'
-                    })
-                    .eq('id', user.id)
-                    .select()
-                    .single();
-
-                return res.json(updatedProfile);
-            }
-
-            res.json({ planType: 'free' });
+            res.json(profile);
         } catch (error: any) {
-            console.error('❌ Error in autoReconcile:', error.message);
+            console.error('[RECONCILE] Erro:', error.message);
             res.status(500).json({ error: error.message });
         }
     }
