@@ -18,6 +18,7 @@ export interface CreateBillingOptions {
     email: string;
     name: string;
     taxId?: string;
+    cellphone?: string;
     amount: number; // in cents
     externalId: string; // The specific plan ID (monthly/annual)
     userId: string; // Internal User ID
@@ -30,31 +31,33 @@ export class AbacateService {
     static async createBilling(options: CreateBillingOptions) {
         try {
             const payload = {
-                frequency: 'ONE_TIME', // Nodus currently uses one-time checkout for simplicity or "intentions"
+                frequency: 'ONE_TIME',
                 methods: ['PIX'],
+                amount: Math.round(Number(options.amount)), // Top level amount in cents
                 products: [
                     {
                         externalId: options.externalId,
                         name: options.externalId === process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL ? 'Nodus Pro - Anual' : 'Nodus Pro - Mensal',
                         quantity: 1,
-                        priceUnit: Math.round(Number(options.amount))
+                        price: Math.round(Number(options.amount)) // Correct field name is 'price'
                     }
                 ],
                 returnUrl: `${process.env.FRONTEND_URL}/payment/success`,
                 completionUrl: `${process.env.FRONTEND_URL}/admin`,
-                customerId: options.customerId,
-                customer: {
+                customerId: options.customerId || undefined,
+                customer: !options.customerId ? {
                     name: options.name,
                     email: options.email,
-                    taxId: options.taxId?.replace(/\D/g, '') || '00000000000' // Abacate requires taxId, we use placeholder if missing
-                }
+                    taxId: options.taxId?.replace(/\D/g, '') || '00000000000',
+                    cellphone: options.cellphone || '00000000000' // Abacate requires cellphone
+                } : undefined
             };
 
             const response = await abacateApi.post('/billing/create', payload);
             return response.data.data;
         } catch (error: any) {
             console.error('❌ AbacatePay createBilling error:', error.response?.data || error.message);
-            throw new Error(error.response?.data?.message || 'Erro ao criar cobrança no AbacatePay');
+            throw new Error(error.response?.data?.error || 'Erro ao criar cobrança no AbacatePay');
         }
     }
 

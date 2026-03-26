@@ -57,9 +57,10 @@ export class BillingController {
                 email: user.email,
                 name: user.name,
                 taxId: taxId || user.tax_id,
+                cellphone: cellphone || user.cellphone,
                 amount,
-                externalId: abacateProductId, // Identify the real product ID
-                customerId: user.stripe_customer_id || '' // If already has an Abacate customer
+                externalId: abacateProductId,
+                customerId: user.abacate_customer_id || undefined
             });
 
             // Update user's Abacate customer ID if it's the first time
