@@ -10,15 +10,35 @@ import * as kickService from './kickService.js';
 import * as youtubeService from './youtubeService.js';
 
 export const profileService = {
-    // Helper to check and react to plan expiration
+    // Helper to check and react to plan expiration (Business Rules - Nodus.my)
     _checkPlanExpiration(profile: UserProfile): UserProfile {
         if (profile.planType && profile.planType !== 'free' && profile.subscriptionExpiryDate) {
-            const expiry = new Date(profile.subscriptionExpiryDate);
-            const now = new Date();
-            if (expiry < now) {
-                console.log(`[ProfileService] Plan expired for user ${profile.id} (${profile.username}). Expiry was: ${profile.subscriptionExpiryDate}`);
+            const expiry = new Date(profile.subscriptionExpiryDate).getTime();
+            const now = Date.now();
+
+            // REGRA: Usuários que cancelaram voluntariamente não têm carência.
+            // Usuários ativos (aguardando PIX) têm 3 dias de carência.
+            const gracePeriodDays = profile.subscriptionStatus === 'canceled' ? 0 : 3;
+            const gracePeriodMs = gracePeriodDays * 24 * 60 * 60 * 1000;
+
+            if (now > (expiry + gracePeriodMs)) {
+                console.log(`[ProfileService] Plan expired/downgraded for user ${profile.id} (${profile.username}).`);
+                
+                // SOFT DOWNGRADE: Mudamos o plano mas não deletamos dados
                 profile.planType = 'free';
-                profile.subscriptionStatus = 'canceled';
+                profile.subscriptionStatus = 'expired';
+
+                // Disparar atualização assíncrona no banco para persistir o downgrade
+                supabase
+                    .from('users')
+                    .update({ 
+                        plan_type: 'free', 
+                        subscription_status: 'expired' 
+                    })
+                    .eq('id', profile.id)
+                    .then(({ error }) => {
+                        if (error) console.error(`[ProfileService] Error persisting downgrade for ${profile.id}:`, error.message);
+                    });
             }
         }
         return profile;

@@ -8,7 +8,7 @@ export interface UserProfileDB {
     avatar_url?: string;
     auth_provider?: string;
     plan_type?: 'free' | 'monthly' | 'annual';
-    subscription_status?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
+    subscription_status?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | 'expired' | 'refunded';
     subscription_expiry_date?: string | null;
     abacate_customer_id?: string | null;
     tax_id?: string | null;
@@ -160,7 +160,7 @@ export interface UserProfile {
     avatarUrl: string;
     authProvider?: string;
     planType?: 'free' | 'monthly' | 'annual';
-    subscriptionStatus?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
+    subscriptionStatus?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | 'expired' | 'refunded';
     subscriptionExpiryDate?: string | null;
     abacateCustomerId?: string | null;
     taxId?: string | null;
