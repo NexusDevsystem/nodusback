@@ -11,26 +11,20 @@ export class BillingController {
      */
     static async checkout(req: any, res: Response) {
         try {
-            const { planId, taxId, cellphone } = req.body;
             const userId = req.userId;
+            const { planId } = req.body;
 
             console.log(`[CHECKOUT] Iniciando checkout: userId=${userId}, planId=${planId}`);
-            const startTime = Date.now();
 
             if (!userId) {
-                console.warn('[CHECKOUT] Tentativa de checkout sem userId');
                 return res.status(401).json({ error: 'Não autorizado' });
             }
 
-            // Fetch user from DB to handle synchronization correctly
             const { data: user, error: userError } = await supabase
                 .from('users')
                 .select('*')
                 .eq('id', userId)
                 .single();
-            
-            console.log(`[CHECKOUT] Supabase fetch: ${Date.now() - startTime}ms`);
-            console.log(`[CHECKOUT] Supabase user fetch took ${Date.now() - startTime}ms`);
 
             if (userError || !user) {
                 return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -40,21 +34,22 @@ export class BillingController {
                 return res.status(400).json({ error: 'Plano inválido' });
             }
 
-            const amount = planId === 'monthly' ? 1990 : 19900; // Example: R$ 19,90 or R$ 199,00
+            const amount = planId === 'monthly' ? 2990 : 29900; // Correct prices based on payload (299.00 / 29.90)
+            const externalId = planId === 'annual' ? 'nodus_anual' : 'nodus_mensal';
 
-            const monthlyId = process.env.ABACATE_PAY_PRODUCT_ID_MONTHLY || 'monthly';
-            const annualId = process.env.ABACATE_PAY_PRODUCT_ID_ANNUAL || 'annual';
-            const abacateProductId = planId === 'annual' ? annualId : monthlyId;
-            // 3. Request Checkout Session from AbacatePay v1
-            // 3. Use Fixed Billing Links
-            const annualLink = "https://app.abacatepay.com/pay/bill_k0J6rzHHKHRMbb4gqX64AQNJ";
-            const monthlyLink = "https://app.abacatepay.com/pay/bill_6WwrTTTeETXXxxhSMfe3Ss3x";
-            
-            const checkoutUrl = planId === "annual" ? annualLink : monthlyLink;
+            console.log(`[CHECKOUT] Criando cobrança AbacatePay para ${user.email} (${planId})`);
 
-            console.log(`[CHECKOUT] Link fixo: ${planId}`);
+            const billing = await AbacateService.createBilling({
+                userId: user.id,
+                email: user.email,
+                name: user.name || user.email.split('@')[0],
+                amount,
+                externalId,
+                customerId: user.abacate_customer_id || undefined
+            });
 
-            res.json({ url: checkoutUrl });
+            console.log(`[CHECKOUT] Sucesso: ${billing.url}`);
+            res.json({ url: billing.url });
         } catch (error: any) {
             console.error('[CHECKOUT] Erro:', error.message);
             res.status(500).json({ error: error.message });
@@ -62,8 +57,7 @@ export class BillingController {
     }
 
     /**
-     * Webhook updated for fixed links.
-     * Matches by abacate_customer_id or email.
+     * Webhook for AbacatePay.
      */
     static async webhook(req: Request, res: Response) {
         const webhookSecret = req.query.webhookSecret;
@@ -76,34 +70,52 @@ export class BillingController {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        console.log('[WEBHOOK] Payload:', JSON.stringify(req.body, null, 2));
+        const body = req.body;
+        console.log('[WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
 
-        const { event, data } = req.body;
+        const event = body.event;
+        const data = body.data || body.metadata?.data || body;
 
         if (event === 'billing.paid') {
             const billing = data?.billing || data;
-            const amount = billing?.amount || 0;
-            const customer = billing?.customer || data?.customer;
-            const customerId = customer?.id || billing?.customerId || data?.customerId;
-            const customerEmail = (customer?.email || billing?.customerEmail || data?.customerEmail || "")?.toString()?.toLowerCase()?.trim();
-            
-            let planType: 'monthly' | 'annual' = amount >= 19000 ? 'annual' : 'monthly';
+            const amount = billing?.amount || data?.amount || body.amount || 0;
+            const customer = billing?.customer || data?.customer || body.customer;
 
-            console.log(`[WEBHOOK] Detalhes: Amount=${amount}, Plan=${planType}, Email=${customerEmail || 'no-email'}, CustomerID=${customerId || 'no-id'}`);
+            // Try to find the externalId from products as in user's log
+            const product = data?.products?.[0] || body.products?.[0];
+            const externalId = product?.externalId || data?.externalId || billing?.externalId;
+
+            const customerId = customer?.id || billing?.customerId || data?.customerId || body.customerId || 'no-id';
+            const customerEmail = (
+                customer?.email || 
+                billing?.email || 
+                billing?.customerEmail || 
+                data?.customerEmail || 
+                data?.email ||
+                body.customerEmail ||
+                ""
+            )?.toString()?.toLowerCase()?.trim();
+
+            let planType: 'monthly' | 'annual' = (externalId === 'nodus_anual' || amount >= 19000) ? 'annual' : 'monthly';
+
+            console.log(`[WEBHOOK] Extração: Amount=${amount}, Plan=${planType}, Email=${customerEmail || 'no-email'}, CustomerID=${customerId}`);
+            if (externalId) console.log(`[WEBHOOK] ExternalId: ${externalId}`);
 
             let userData: any = null;
-            if (customerId) {
-                const { data: dbUser } = await supabase.from('users').select('id, name').eq('abacate_customer_id', customerId).maybeSingle();
+            if (customerId && customerId !== 'no-id') {
+                const { data: dbUser } = await supabase.from('users').select('id, name, email').eq('abacate_customer_id', customerId).maybeSingle();
                 userData = dbUser;
+                if (userData) console.log(`[WEBHOOK] Encontrado via ID: ${userData.email}`);
             }
 
             if (!userData && customerEmail) {
-                const { data: dbUserEmail } = await supabase.from('users').select('id, name').ilike('email', customerEmail).maybeSingle();
+                const { data: dbUserEmail } = await supabase.from('users').select('id, name, email').ilike('email', customerEmail).maybeSingle();
                 userData = dbUserEmail;
+                if (userData) console.log(`[WEBHOOK] Encontrado via E-mail: ${userData.email}`);
             }
 
             if (!userData) {
-                console.error('[WEBHOOK] Usuario nao encontrado para:', customerEmail || customerId);
+                console.error('[WEBHOOK] Erro: Usuario nao encontrado para:', { customerEmail, customerId });
                 return res.sendStatus(200);
             }
 
@@ -144,7 +156,7 @@ export class BillingController {
 
             // Fetch current plan status to log it
             const { data: user } = await supabase.from('users').select('plan_type, subscription_expiry_date').eq('id', userId).single();
-            
+
             if (user?.plan_type === 'free' || !user?.plan_type) {
                 return res.status(400).json({ error: 'Você não possui uma assinatura ativa para cancelar.' });
             }
@@ -166,8 +178,8 @@ export class BillingController {
             }
 
             console.log(`[CANCEL] Renovação cancelada para o usuário ${userId}. Permanecendo ${user.plan_type} até ${user.subscription_expiry_date}`);
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 message: 'Renovação cancelada! Você continuará com acesso Pro até o final do período pago.',
                 expiryDate: user.subscription_expiry_date
             });
@@ -187,7 +199,7 @@ export class BillingController {
 
             // Fetch current plan status
             const { data: user } = await supabase.from('users').select('plan_type, subscription_status').eq('id', userId).single();
-            
+
             if (user?.subscription_status !== 'canceled') {
                 return res.status(400).json({ error: 'Apenas assinaturas canceladas podem ser reativadas.' });
             }
@@ -205,8 +217,8 @@ export class BillingController {
             }
 
             console.log(`[REACTIVATE] Assinatura reativada para o usuário ${userId}`);
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 message: 'Assinatura reativada com sucesso! A renovação automática foi religada.'
             });
         } catch (error: any) {
@@ -234,7 +246,7 @@ export class BillingController {
             }
 
             const billings = await AbacateService.listBillings();
-            
+
             // Filter billings belonging to this customer and that are PAID
             const userBillings = billings
                 .filter((b: any) => b.customerId === user.abacate_customer_id && b.status === 'PAID')
@@ -303,3 +315,5 @@ export class BillingController {
         }
     }
 }
+
+export default BillingController;
