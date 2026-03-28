@@ -36,7 +36,10 @@ export const linkService = {
         }).filter(link => {
             if (!publicView) return true;
             if (link.isActive === false) return false;
-            if (link.scheduleStart && new Date(link.scheduleStart) > now) return false;
+            
+            // Allow showing the link if it has a countdown, even if it hasn't started yet
+            if (link.scheduleStart && new Date(link.scheduleStart) > now && !link.showCountdown) return false;
+            
             if (link.scheduleEnd && new Date(link.scheduleEnd) < now) return false;
             return true;
         });
@@ -100,7 +103,7 @@ export const linkService = {
             .map(db => linkDbToApi(db))
             .filter(link => {
                 if (!publicView) return true;
-                if (link.scheduleStart && new Date(link.scheduleStart) > now) return false;
+                if (link.scheduleStart && new Date(link.scheduleStart) > now && !link.showCountdown) return false;
                 if (link.scheduleEnd && new Date(link.scheduleEnd) < now) return false;
                 return true;
             });
