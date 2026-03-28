@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabaseClient.js';
 import { AbacateService } from '../services/abacateService.js';
+import { UserProfileDB, dbToApi } from '../models/types.js';
 import crypto from 'crypto';
 
 export class BillingController {
@@ -281,10 +282,8 @@ export class BillingController {
 
             console.log(`[RECONCILE] DB plan_type: ${user.plan_type}`);
 
-            res.json({
-                ...user,
-                planType: user.plan_type
-            });
+            // Return mapped profile
+            res.json(dbToApi(user as UserProfileDB));
         } catch (error: any) {
             console.error('[RECONCILE] Erro critico:', error.message);
             res.status(500).json({ error: error.message });
