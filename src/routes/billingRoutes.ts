@@ -6,7 +6,7 @@ const router = Router();
 
 // 🛒 CHECKOUT: Create a billing session (PROTECTED)
 // Users must be authenticated to buy a plan
-router.post('/checkout', authMiddleware, BillingController.checkout);
+router.post('/p', authMiddleware, BillingController.checkout);
 
 // 🔔 WEBHOOK: Listener for AbacatePay events (PUBLIC)
 // This is the endpoint you must register in AbacatePay dashboard
