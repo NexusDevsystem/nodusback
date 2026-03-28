@@ -25,4 +25,7 @@ router.get('/invoices', authMiddleware, BillingController.getInvoices);
 // Used when the user comes back to the admin to check their status
 router.post('/auto-reconcile', authMiddleware, BillingController.autoReconcile);
 
+// ⚙️ CONFIG: Get public billing settings
+router.get('/config', BillingController.getConfig);
+
 export default router;

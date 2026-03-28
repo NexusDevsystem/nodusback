@@ -289,4 +289,17 @@ export class BillingController {
             res.status(500).json({ error: error.message });
         }
     }
+    /**
+     * Get billing configuration (gateway, env, etc)
+     */
+    static async getConfig(req: Request, res: Response) {
+        try {
+            res.json({
+                gateway: 'abacatepay',
+                env: process.env.NODE_ENV || 'development'
+            });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
 }
