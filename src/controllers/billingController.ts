@@ -67,16 +67,20 @@ export class BillingController {
 
         console.log('[WEBHOOK] Processando billing.paid...');
 
-        // Robust extraction from diverse payload structures
-        const billing = payload.data || payload.metadata?.data?.billing || payload.metadata?.data || {};
+        // Deeply robust extraction for AbacatePay v1 (Legacy)
+        // Levels: payload.data.billing (V1) OR payload.metadata.data.billing (Test Logs)
+        const data = payload.data || {};
+        const metadata = payload.metadata?.data || {};
+        const billing = data.billing || metadata.billing || data || metadata || {};
         const customer = billing.customer || {};
+        const custMeta = customer.metadata || {};
 
-        let customerEmail = (billing.email || customer.email || "").toString().toLowerCase().trim();
+        let customerEmail = (custMeta.email || billing.email || customer.email || "").toString().toLowerCase().trim();
         let customerId = (customer.id || billing.id || "").toString().trim();
-        let amount = billing.amount || 0;
+        let amount = billing.amount || data.payment?.amount || 0;
         let externalId = billing.externalId || (billing.products?.[0]?.externalId) || "";
 
-        console.log(`[WEBHOOK] Extração: Email=${customerEmail || 'N/A'}, ID=${customerId || 'N/A'}, Valor=${amount}, ExternalID=${externalId || 'N/A'}`);
+        console.log(`[WEBHOOK] Extração V2: Email=${customerEmail || 'N/A'}, ID=${customerId || 'N/A'}, Valor=${amount}, ExternalID=${externalId || 'N/A'}`);
         if (!customerEmail || customerEmail === 'null' || customerEmail === 'undefined') customerEmail = "";
         if (!customerId || customerId === 'null' || customerId === 'undefined') customerId = "";
 
