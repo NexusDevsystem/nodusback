@@ -67,19 +67,21 @@ export class BillingController {
 
         console.log('[WEBHOOK] Processando billing.paid...');
 
-        // 1. Extração Direta (Seguindo Documentação API v1)
-        const docData = payload.data || {};
-        const logData = payload.metadata?.data?.billing || payload.metadata?.data || {};
+        // Robust extraction from diverse payload structures
+        const billing = payload.data || payload.metadata?.data?.billing || payload.metadata?.data || {};
+        const customer = billing.customer || {};
 
-        let customerEmail = (docData.customer?.email || logData.email || logData.customer?.email || "").toLowerCase().trim();
-        let customerId = docData.customer?.id || logData.customer?.id || logData.id || "";
-        let amount = docData.amount || logData.amount || 0;
-        let externalId = docData.externalId || logData.products?.[0]?.externalId || "";
+        let customerEmail = (billing.email || customer.email || "").toString().toLowerCase().trim();
+        let customerId = (customer.id || billing.id || "").toString().trim();
+        let amount = billing.amount || 0;
+        let externalId = billing.externalId || (billing.products?.[0]?.externalId) || "";
 
-        console.log(`[WEBHOOK] Dados: Email=${customerEmail || 'N/A'}, ID=${customerId || 'N/A'}, Valor=${amount}`);
+        console.log(`[WEBHOOK] Extração: Email=${customerEmail || 'N/A'}, ID=${customerId || 'N/A'}, Valor=${amount}, ExternalID=${externalId || 'N/A'}`);
+        if (!customerEmail || customerEmail === 'null' || customerEmail === 'undefined') customerEmail = "";
+        if (!customerId || customerId === 'null' || customerId === 'undefined') customerId = "";
 
         if (!customerEmail && !customerId) {
-            console.error('[WEBHOOK] Identificadores ausentes no payload');
+            console.error('[WEBHOOK] Identificadores ausentes no payload:', JSON.stringify(payload, null, 2));
             return res.sendStatus(200);
         }
 
