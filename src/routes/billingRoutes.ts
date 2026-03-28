@@ -15,6 +15,9 @@ router.post('/webhook', BillingController.webhook);
 // 🚫 CANCEL: Support for cancellation (PROTECTED)
 router.post('/cancel', authMiddleware, BillingController.cancelSubscription);
 
+// 🔄 REACTIVATE: Support for restoring canceled subscription (PROTECTED)
+router.post('/reactivate', authMiddleware, BillingController.reactivateSubscription);
+
 // 🧾 INVOICES: Get payment history (PROTECTED)
 router.get('/invoices', authMiddleware, BillingController.getInvoices);
 

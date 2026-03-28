@@ -134,20 +134,28 @@ export class BillingController {
 
     /**
      * Cancel the current subscription (downgrade to free).
+     * INDICATES THAT THE RENEWAL IS CANCELED, but user remains PRO until expiry.
      */
     static async cancelSubscription(req: Request, res: Response) {
         try {
             const userId = (req as any).userId;
             if (!userId) return res.status(401).json({ error: 'Não autorizado' });
 
+            // Fetch current plan status to log it
+            const { data: user } = await supabase.from('users').select('plan_type, subscription_expiry_date').eq('id', userId).single();
+            
+            if (user?.plan_type === 'free' || !user?.plan_type) {
+                return res.status(400).json({ error: 'Você não possui uma assinatura ativa para cancelar.' });
+            }
+
             const { error: updateError } = await supabase
                 .from('users')
                 .update({
-                    plan_type: 'free',
-                    subscription_status: 'canceled',
-                    // We keep the expiry date in history or clear it?
-                    // Usually we clear it to effectively move to free.
-                    subscription_expiry_date: null
+                    // 🔥 DEFERRED CANCELLATION logic:
+                    // We DO NOT change plan_type to 'free' yet.
+                    // We DO NOT clear the expiry date.
+                    // We only mark the status as 'canceled', which indicates it won't rotate/renew.
+                    subscription_status: 'canceled'
                 })
                 .eq('id', userId);
 
@@ -156,11 +164,53 @@ export class BillingController {
                 return res.status(500).json({ error: 'Erro ao cancelar assinatura' });
             }
 
-            console.log(`[CANCEL] Assinatura cancelada para o usuário ${userId}`);
-            res.json({ success: true, message: 'Assinatura cancelada com sucesso' });
+            console.log(`[CANCEL] Renovação cancelada para o usuário ${userId}. Permanecendo ${user.plan_type} até ${user.subscription_expiry_date}`);
+            res.json({ 
+                success: true, 
+                message: 'Renovação cancelada! Você continuará com acesso Pro até o final do período pago.',
+                expiryDate: user.subscription_expiry_date
+            });
         } catch (error: any) {
             console.error('[CANCEL] Erro:', error.message);
             res.status(500).json({ error: 'Erro interno ao cancelar' });
+        }
+    }
+
+    /**
+     * Reactivate a previously canceled but not yet expired subscription.
+     */
+    static async reactivateSubscription(req: Request, res: Response) {
+        try {
+            const userId = (req as any).userId;
+            if (!userId) return res.status(401).json({ error: 'Não autorizado' });
+
+            // Fetch current plan status
+            const { data: user } = await supabase.from('users').select('plan_type, subscription_status').eq('id', userId).single();
+            
+            if (user?.subscription_status !== 'canceled') {
+                return res.status(400).json({ error: 'Apenas assinaturas canceladas podem ser reativadas.' });
+            }
+
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({
+                    subscription_status: 'active'
+                })
+                .eq('id', userId);
+
+            if (updateError) {
+                console.error('[REACTIVATE] Erro no update do banco:', updateError.message);
+                return res.status(500).json({ error: 'Erro ao reativar assinatura' });
+            }
+
+            console.log(`[REACTIVATE] Assinatura reativada para o usuário ${userId}`);
+            res.json({ 
+                success: true, 
+                message: 'Assinatura reativada com sucesso! A renovação automática foi religada.'
+            });
+        } catch (error: any) {
+            console.error('[REACTIVATE] Erro:', error.message);
+            res.status(500).json({ error: 'Erro interno ao reativar' });
         }
     }
 
