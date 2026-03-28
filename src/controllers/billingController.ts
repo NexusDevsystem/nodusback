@@ -52,88 +52,78 @@ export class BillingController {
      * Webhook for AbacatePay.
      */
     static async webhook(req: Request, res: Response) {
-        const webhookSecret = req.query.webhookSecret;
         const expectedSecret = process.env.ABACATE_PAY_WEBHOOK_SECRET;
-
-        console.log('[WEBHOOK] Recebido');
+        const webhookSecret = req.query.webhookSecret;
 
         if (expectedSecret && webhookSecret !== expectedSecret) {
-            console.warn('[WEBHOOK] Secret invalido');
+            console.warn('[WEBHOOK] Assinatura inválida');
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        const body = req.body;
-        console.log('[WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
-
-        const event = body.event;
-        const data = body.data || body.metadata?.data || body;
-
-        if (event === 'billing.paid') {
-            const billing = data?.billing || data;
-            const amount = billing?.amount || data?.amount || body.amount || 0;
-            const customer = billing?.customer || data?.customer || body.customer;
-
-            // Try to find the externalId from products as in user's log
-            const product = data?.products?.[0] || body.products?.[0];
-            const externalId = product?.externalId || data?.externalId || billing?.externalId;
-
-            const customerId = customer?.id || billing?.customerId || data?.customerId || body.customerId || 'no-id';
-            const customerEmail = (
-                customer?.email || 
-                billing?.email || 
-                billing?.customerEmail || 
-                data?.customerEmail || 
-                data?.email ||
-                body.customerEmail ||
-                ""
-            )?.toString()?.toLowerCase()?.trim();
-
-            let planType: 'monthly' | 'annual' = (externalId === 'nodus_anual' || amount >= 19000) ? 'annual' : 'monthly';
-
-            console.log(`[WEBHOOK] Extração: Amount=${amount}, Plan=${planType}, Email=${customerEmail || 'no-email'}, CustomerID=${customerId}`);
-            if (externalId) console.log(`[WEBHOOK] ExternalId: ${externalId}`);
-
-            let userData: any = null;
-            if (customerId && customerId !== 'no-id') {
-                const { data: dbUser } = await supabase.from('users').select('id, name, email').eq('abacate_customer_id', customerId).maybeSingle();
-                userData = dbUser;
-                if (userData) console.log(`[WEBHOOK] Encontrado via ID: ${userData.email}`);
-            }
-
-            if (!userData && customerEmail) {
-                const { data: dbUserEmail } = await supabase.from('users').select('id, name, email').ilike('email', customerEmail).maybeSingle();
-                userData = dbUserEmail;
-                if (userData) console.log(`[WEBHOOK] Encontrado via E-mail: ${userData.email}`);
-            }
-
-            if (!userData) {
-                console.error('[WEBHOOK] Erro: Usuario nao encontrado para:', { customerEmail, customerId });
-                return res.sendStatus(200);
-            }
-
-            const expiryDate = new Date();
-            if (planType === 'annual') {
-                expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-            } else {
-                expiryDate.setMonth(expiryDate.getMonth() + 1);
-            }
-
-            const { error: updateError } = await supabase
-                .from('users')
-                .update({
-                    plan_type: planType,
-                    subscription_status: 'active',
-                    subscription_expiry_date: expiryDate.toISOString(),
-                    abacate_customer_id: customerId
-                })
-                .eq('id', userData.id);
-
-            if (updateError) {
-                console.error('[WEBHOOK] Erro no update do banco:', updateError.message);
-            } else {
-                console.log(`[WEBHOOK] Ativado: ${userData.name} (${planType})`);
-            }
+        const payload = req.body;
+        if (payload.event !== 'billing.paid') {
+            return res.sendStatus(200);
         }
+
+        console.log('[WEBHOOK] Processando billing.paid...');
+
+        // 1. Extração Direta (Seguindo Documentação API v1)
+        const docData = payload.data || {};
+        const logData = payload.metadata?.data?.billing || payload.metadata?.data || {};
+
+        let customerEmail = (docData.customer?.email || logData.email || logData.customer?.email || "").toLowerCase().trim();
+        let customerId = docData.customer?.id || logData.customer?.id || logData.id || "";
+        let amount = docData.amount || logData.amount || 0;
+        let externalId = docData.externalId || logData.products?.[0]?.externalId || "";
+
+        console.log(`[WEBHOOK] Dados: Email=${customerEmail || 'N/A'}, ID=${customerId || 'N/A'}, Valor=${amount}`);
+
+        if (!customerEmail && !customerId) {
+            console.error('[WEBHOOK] Identificadores ausentes no payload');
+            return res.sendStatus(200);
+        }
+
+        // 2. Busca de Usuário (Direto e Reto)
+        let user: any = null;
+
+        // Tenta por ID do AbacatePay primeiro
+        if (customerId) {
+            const { data } = await supabase.from('users').select('id, email').eq('abacate_customer_id', customerId).maybeSingle();
+            user = data;
+        }
+
+        // Tenta por E-mail se não achou por ID (fundamental para o primeiro pagamento)
+        if (!user && customerEmail) {
+            const { data } = await supabase.from('users').select('id, email').ilike('email', customerEmail).maybeSingle();
+            user = data;
+        }
+
+        if (!user) {
+            console.error(`[WEBHOOK] Usuário não encontrado no DB para ${customerEmail || customerId}`);
+            return res.sendStatus(200);
+        }
+
+        // 3. Ativação do Plano
+        const planType: 'monthly' | 'annual' = (externalId === 'nodus_anual' || amount >= 19000) ? 'annual' : 'monthly';
+        const expiryDate = new Date();
+        expiryDate.setMonth(expiryDate.getMonth() + (planType === 'annual' ? 12 : 1));
+
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({
+                plan_type: planType,
+                subscription_status: 'active',
+                subscription_expiry_date: expiryDate.toISOString(),
+                abacate_customer_id: customerId || undefined
+            })
+            .eq('id', user.id);
+
+        if (updateError) {
+            console.error('[WEBHOOK] Falha ao atualizar Supabase:', updateError.message);
+        } else {
+            console.log(`[WEBHOOK] SUCESSO: Plano ${planType} ativado para ${user.email}`);
+        }
+
         res.sendStatus(200);
     }
 

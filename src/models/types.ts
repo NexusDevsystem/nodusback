@@ -160,7 +160,7 @@ export interface UserProfile {
     bio: string;
     avatarUrl: string;
     authProvider?: string;
-    planType?: 'free' | 'monthly' | 'annual';
+    plan_type?: 'free' | 'monthly' | 'annual';
     subscriptionStatus?: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | 'expired' | 'refunded';
     subscriptionExpiryDate?: string | null;
     abacateCustomerId?: string | null;
@@ -198,7 +198,7 @@ export interface UserProfile {
     bannerBlurColor?: string | null;
     hideBranding?: boolean;
     onboardingCompleted?: boolean;
-    plan_type?: 'free' | 'monthly' | 'annual';
+
 }
 
 export interface LinkItem {
@@ -293,7 +293,7 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         bio: dbProfile.bio || '',
         avatarUrl: dbProfile.avatar_url || '',
         authProvider: dbProfile.auth_provider,
-        planType: dbProfile.plan_type,
+
         subscriptionStatus: dbProfile.subscription_status,
         subscriptionExpiryDate: dbProfile.subscription_expiry_date,
         abacateCustomerId: dbProfile.abacate_customer_id,
@@ -343,7 +343,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.bio !== undefined) dbProfile.bio = apiProfile.bio;
     if (apiProfile.avatarUrl !== undefined) dbProfile.avatar_url = apiProfile.avatarUrl;
     if (apiProfile.authProvider !== undefined) dbProfile.auth_provider = apiProfile.authProvider;
-    if (apiProfile.planType !== undefined) dbProfile.plan_type = apiProfile.planType;
+    if (apiProfile.plan_type !== undefined) dbProfile.plan_type = apiProfile.plan_type;
     if (apiProfile.subscriptionStatus !== undefined) dbProfile.subscription_status = apiProfile.subscriptionStatus;
     if (apiProfile.subscriptionExpiryDate !== undefined) dbProfile.subscription_expiry_date = apiProfile.subscriptionExpiryDate;
     if (apiProfile.abacateCustomerId !== undefined) dbProfile.abacate_customer_id = apiProfile.abacateCustomerId;

@@ -12,7 +12,7 @@ import * as youtubeService from './youtubeService.js';
 export const profileService = {
     // Helper to check and react to plan expiration (Business Rules - Nodus.my)
     _checkPlanExpiration(profile: UserProfile): UserProfile {
-        if (profile.planType && profile.planType !== 'free' && profile.subscriptionExpiryDate) {
+        if (profile.plan_type && profile.plan_type !== 'free' && profile.subscriptionExpiryDate) {
             const expiry = new Date(profile.subscriptionExpiryDate).getTime();
             const now = Date.now();
 
@@ -25,7 +25,7 @@ export const profileService = {
                 console.log(`[ProfileService] Plan expired/downgraded for user ${profile.id} (${profile.username}).`);
                 
                 // SOFT DOWNGRADE: Mudamos o plano mas não deletamos dados
-                profile.planType = 'free';
+                profile.plan_type = 'free';
                 profile.subscriptionStatus = 'expired';
 
                 // Disparar atualização assíncrona no banco para persistir o downgrade
