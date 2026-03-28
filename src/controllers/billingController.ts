@@ -34,22 +34,14 @@ export class BillingController {
                 return res.status(400).json({ error: 'Plano inválido' });
             }
 
-            const amount = planId === 'monthly' ? 2990 : 29900; // Correct prices based on payload (299.00 / 29.90)
-            const externalId = planId === 'annual' ? 'nodus_anual' : 'nodus_mensal';
+            // USE FIXED BILLING LINKS AS REQUESTED
+            const annualLink = "https://app.abacatepay.com/pay/bill_k0J6rzHHKHRMbb4gqX64AQNJ";
+            const monthlyLink = "https://app.abacatepay.com/pay/bill_6WwrTTTeETXXxxhSMfe3Ss3x";
+            
+            const checkoutUrl = planId === "annual" ? annualLink : monthlyLink;
 
-            console.log(`[CHECKOUT] Criando cobrança AbacatePay para ${user.email} (${planId})`);
-
-            const billing = await AbacateService.createBilling({
-                userId: user.id,
-                email: user.email,
-                name: user.name || user.email.split('@')[0],
-                amount,
-                externalId,
-                customerId: user.abacate_customer_id || undefined
-            });
-
-            console.log(`[CHECKOUT] Sucesso: ${billing.url}`);
-            res.json({ url: billing.url });
+            console.log(`[CHECKOUT] Redirecionando para link fixo: ${planId}`);
+            res.json({ url: checkoutUrl });
         } catch (error: any) {
             console.error('[CHECKOUT] Erro:', error.message);
             res.status(500).json({ error: error.message });
