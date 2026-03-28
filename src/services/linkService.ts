@@ -280,7 +280,7 @@ export const linkService = {
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     const dbLink = linkApiToDb(item, userId) as LinkItemDB;
-                    
+
                     const validId = getValidId(item.id);
                     dbLink.id = validId;
                     dbLink.parent_id = parentId;
@@ -315,7 +315,7 @@ export const linkService = {
                 const { error: upsertError } = await supabase
                     .from('links')
                     .upsert(flattenedDbLinks);
-                
+
                 if (upsertError) {
                     console.error('[bulkSave] Batch upsert failed:', upsertError);
                     throw upsertError;
@@ -324,7 +324,7 @@ export const linkService = {
 
             // 3. Handle Agenda Events in parallel batches
             if (agendaItems.length > 0) {
-                await Promise.all(agendaItems.map(item => 
+                await Promise.all(agendaItems.map(item =>
                     eventService.replaceEvents(userId, item.linkId, item.events)
                 ));
             }
