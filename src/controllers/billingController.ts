@@ -35,8 +35,8 @@ export class BillingController {
             }
 
             // USE FIXED BILLING LINKS AS REQUESTED
-            const annualLink = "https://app.abacatepay.com/pay/bill_k0J6rzHHKHRMbb4gqX64AQNJ";
-            const monthlyLink = "https://app.abacatepay.com/pay/bill_6WwrTTTeETXXxxhSMfe3Ss3x";
+            const annualLink = "https://app.abacatepay.com/pay/bill_UXCKsWLutwJ5p6ShLaw2Wx25";
+            const monthlyLink = "https://app.abacatepay.com/pay/bill_KQczWUE3RJ0UuttZTk1DwRT1";
             
             const checkoutUrl = planId === "annual" ? annualLink : monthlyLink;
 
