@@ -85,18 +85,18 @@ export class BillingController {
             return res.sendStatus(200);
         }
 
-        // 2. Busca de Usuário (Direto e Reto)
+        // 2. Busca de Usuário (Prioridade E-mail)
         let user: any = null;
 
-        // Tenta por ID do AbacatePay primeiro
-        if (customerId) {
-            const { data } = await supabase.from('users').select('id, email').eq('abacate_customer_id', customerId).maybeSingle();
+        // Tenta por E-mail primeiro (Mais confiável)
+        if (customerEmail) {
+            const { data } = await supabase.from('users').select('id, email').ilike('email', customerEmail).maybeSingle();
             user = data;
         }
 
-        // Tenta por E-mail se não achou por ID (fundamental para o primeiro pagamento)
-        if (!user && customerEmail) {
-            const { data } = await supabase.from('users').select('id, email').ilike('email', customerEmail).maybeSingle();
+        // Tenta por ID do AbacatePay se não achou por E-mail
+        if (!user && customerId) {
+            const { data } = await supabase.from('users').select('id, email').eq('abacate_customer_id', customerId).maybeSingle();
             user = data;
         }
 
