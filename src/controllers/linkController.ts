@@ -50,19 +50,7 @@ export const linkController = {
     async getLinksByUsername(req: AuthRequest, res: Response) {
         try {
             const { username } = req.params;
-
-            // First get the profile to get user_id
-            const { data: profile } = await supabase
-                .from('users')
-                .select('id')
-                .ilike('username', username)
-                .single();
-
-            if (!profile) {
-                return res.status(404).json({ error: 'Profile not found' });
-            }
-
-            const links = await linkService.getLinksByProfileId(profile.id);
+            const links = await linkService.getLinksByUsername(username);
             res.json(links);
         } catch (error) {
             console.error('Error fetching links:', error);
