@@ -222,7 +222,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const { email, password, name, username, plan_type } = req.body;
+        const { email, password, name, username, plan_type, subscription_expiry_date } = req.body;
 
         if (!email || !password || !username) {
             res.status(400).json({ error: 'Email, senha e username são obrigatórios.' });
@@ -257,6 +257,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 password_hash: passwordHash,
                 auth_provider: 'email',
                 plan_type: plan_type || 'free',
+                subscription_expiry_date: subscription_expiry_date || null,
+                subscription_status: (subscription_expiry_date || (plan_type && plan_type !== 'free')) ? 'active' : 'canceled',
                 theme_id: 'default',
                 font_family: 'Inter',
                 is_verified: false,
