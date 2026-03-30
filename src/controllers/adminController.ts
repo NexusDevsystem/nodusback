@@ -259,7 +259,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 plan_type: plan_type || 'free',
                 theme_id: 'default',
                 font_family: 'Inter',
-                is_verified: false
+                is_verified: false,
+                onboarding_completed: true
             })
             .select('*')
             .single();
