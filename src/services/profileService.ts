@@ -8,6 +8,7 @@ import * as tiktokService from './tiktokService.js';
 import * as twitchService from './twitchService.js';
 import * as kickService from './kickService.js';
 import * as youtubeService from './youtubeService.js';
+import { enforcePlanRestrictions } from './planGuard.js';
 
 export const profileService = {
     // Helper to check and react to plan expiration (Business Rules - Nodus.my)
@@ -141,9 +142,25 @@ export const profileService = {
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
         console.log(`[ProfileService] Updating profile for user ${userId}:`, JSON.stringify(updates));
 
-        // Check if username is being changed and apply 7-day restriction
+        // ── Step 1: Load the current profile from DB ──────────────────────────
+        // We always need the current profile to:
+        //   a) Enforce the username 7-day rule
+        //   b) Read the authoritative plan_type (NEVER trust the client for this)
+        const currentProfile = await this.getProfileByUserId(userId);
+
+        // ── Step 2: Enforce plan restrictions BEFORE touching anything ────────
+        // This strips PRO-only fields from `updates` if the user is FREE.
+        // This happens server-side and cannot be bypassed by the client.
+        const guardResult = enforcePlanRestrictions(currentProfile?.plan_type, updates as Record<string, any>);
+        if (guardResult.strippedFields.length > 0) {
+            console.warn(
+                `[PlanGuard] Stripped PRO fields from userId=${userId} (plan=${currentProfile?.plan_type}): ` +
+                guardResult.strippedFields.join(', ')
+            );
+        }
+
+        // ── Step 3: Username 7-day restriction ───────────────────────────────
         if (updates.username) {
-            const currentProfile = await this.getProfileByUserId(userId);
             if (currentProfile && currentProfile.username && currentProfile.username.toLowerCase() !== updates.username.toLowerCase()) {
                 if (currentProfile.usernameUpdatedAt) {
                     const lastUpdate = new Date(currentProfile.usernameUpdatedAt);
@@ -155,7 +172,6 @@ export const profileService = {
                         throw new Error(`O nome de usuário só pode ser alterado a cada 7 dias. Faltam ${remainingDays} ${remainingDays === 1 ? 'dia' : 'dias'}.`);
                     }
                 }
-                // Update the timestamp if username is actually changing
                 updates.usernameUpdatedAt = new Date().toISOString();
             }
         }
