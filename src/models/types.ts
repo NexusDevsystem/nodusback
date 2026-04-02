@@ -50,6 +50,11 @@ export interface UserProfileDB {
     hide_branding?: boolean;
     onboarding_completed?: boolean;
     show_store_shortcut_on_links?: boolean;
+    // Gamified onboarding progress
+    has_profile_pic?: boolean;
+    has_first_link?: boolean;
+    has_copied_url?: boolean;
+    onboarding_dismissed?: boolean;
 }
 
 export interface LinkItemDB {
@@ -205,6 +210,11 @@ export interface UserProfile {
     hideBranding?: boolean;
     onboardingCompleted?: boolean;
     showStoreShortcutOnLinks?: boolean;
+    // Gamified onboarding progress
+    hasProfilePic?: boolean;
+    hasFirstLink?: boolean;
+    hasCopiedUrl?: boolean;
+    onboardingDismissed?: boolean;
 }
 
 export interface LinkItem {
@@ -341,6 +351,10 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         hideBranding: !!dbProfile.hide_branding,
         onboardingCompleted: !!dbProfile.onboarding_completed,
         showStoreShortcutOnLinks: !!dbProfile.show_store_shortcut_on_links,
+        hasProfilePic: !!dbProfile.has_profile_pic,
+        hasFirstLink: !!dbProfile.has_first_link,
+        hasCopiedUrl: !!dbProfile.has_copied_url,
+        onboardingDismissed: !!dbProfile.onboarding_dismissed,
         plan_type: dbProfile.plan_type
     };
 }
@@ -394,6 +408,10 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.hideBranding !== undefined) dbProfile.hide_branding = apiProfile.hideBranding;
     if (apiProfile.onboardingCompleted !== undefined) dbProfile.onboarding_completed = apiProfile.onboardingCompleted;
     if (apiProfile.showStoreShortcutOnLinks !== undefined) dbProfile.show_store_shortcut_on_links = apiProfile.showStoreShortcutOnLinks;
+    if (apiProfile.hasProfilePic !== undefined) dbProfile.has_profile_pic = apiProfile.hasProfilePic;
+    if (apiProfile.hasFirstLink !== undefined) dbProfile.has_first_link = apiProfile.hasFirstLink;
+    if (apiProfile.hasCopiedUrl !== undefined) dbProfile.has_copied_url = apiProfile.hasCopiedUrl;
+    if (apiProfile.onboardingDismissed !== undefined) dbProfile.onboarding_dismissed = apiProfile.onboardingDismissed;
     if (apiProfile.plan_type !== undefined) dbProfile.plan_type = apiProfile.plan_type;
 
     return dbProfile;

@@ -22,4 +22,8 @@ router.get('/me', authMiddleware, profileController.getMyProfile);
 router.put('/me', authMiddleware, profileController.updateProfile);
 router.post('/', authMiddleware, profileController.createProfile);
 
+// Onboarding
+router.patch('/onboarding/copy-url', authMiddleware, profileController.markUrlCopied);
+router.patch('/onboarding/dismiss', authMiddleware, profileController.dismissOnboarding);
+
 export default router;

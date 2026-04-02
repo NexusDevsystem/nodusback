@@ -124,6 +124,22 @@ export const linkController = {
             }
 
             const savedLinks = await linkService.replaceAllLinks(req.profileId, links);
+
+            // ── ONBOARDING: Track first link ────────────────────────────────
+            // Count active top-level links (not collections)
+            const activeLinks = savedLinks.filter((l: any) => l.isActive !== false);
+            const hasFirstLink = activeLinks.length > 0;
+
+            // Fire-and-forget update to user onboarding status
+            supabase
+                .from('users')
+                .update({ has_first_link: hasFirstLink })
+                .eq('id', req.profileId)
+                .then(({ error }) => {
+                    if (error) console.error('[Onboarding] Failed to update has_first_link:', error.message);
+                });
+            // ────────────────────────────────────────────────────────────────
+
             res.json(savedLinks);
         } catch (error) {
             console.error('Error replacing links:', error);

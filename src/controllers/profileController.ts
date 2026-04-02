@@ -131,5 +131,32 @@ export const profileController = {
             console.error('Error checking username:', error);
             res.status(500).json({ error: 'Failed to check username' });
         }
+    },
+
+    // ── ONBOARDING ENDPOINTS ─────────────────────────────────────────────────
+
+    // Mark that user has copied their Nodus URL (step 4 of onboarding)
+    async markUrlCopied(req: AuthRequest, res: Response) {
+        try {
+            if (!req.userId) return res.status(401).json({ error: 'Unauthorized' });
+            await profileService.updateProfile(req.userId, { hasCopiedUrl: true });
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error marking URL copied:', error);
+            res.status(500).json({ error: 'Failed to update onboarding status' });
+        }
+    },
+
+    // Dismiss onboarding card permanently (only allowed at 100%)
+    async dismissOnboarding(req: AuthRequest, res: Response) {
+        try {
+            if (!req.userId) return res.status(401).json({ error: 'Unauthorized' });
+            await profileService.updateProfile(req.userId, { onboardingDismissed: true });
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error dismissing onboarding:', error);
+            res.status(500).json({ error: 'Failed to dismiss onboarding' });
+        }
     }
 };
+

@@ -177,6 +177,12 @@ export const profileService = {
         }
 
         const dbUpdates = apiToDb(updates);
+
+        // ── Step 4: ONBOARDING: Track profile pic ───────────────────────────
+        if (updates.avatarUrl !== undefined) {
+            dbUpdates.has_profile_pic = !!updates.avatarUrl;
+        }
+
         console.log(`[ProfileService] Converted DB updates for ${userId}:`, JSON.stringify(dbUpdates));
 
         const { data, error } = await supabase
