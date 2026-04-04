@@ -91,10 +91,13 @@ const fileController = {
                 }
             }
 
-            // Generate a unique filename to avoid collisions
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const name = path.basename(multerReq.file.originalname, originalExt).replace(/[^a-zA-Z0-9]/g, '_');
-            const fileName = `${name}-${uniqueSuffix}${finalExt}`;
+            // Generate a unique SHORT filename to avoid giant URLs
+            const shortId = Math.random().toString(36).substring(2, 7); // 5 random chars
+            const baseName = path.basename(multerReq.file.originalname, originalExt)
+                .substring(0, 12) // Limit original name length to 12 chars
+                .replace(/[^a-zA-Z0-9]/g, '_');
+            
+            const fileName = `${baseName}-${shortId}${finalExt}`;
             const folder = (req.query.folder as string) || '';
             const type = (req.query.type as string) || 'user_upload';
             const storageFolder = folder ? `${folder}/` : '';
