@@ -120,13 +120,16 @@ const fileController = {
                 .from('uploads')
                 .getPublicUrl(filePath);
 
+            const brandedUrl = `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${fileName}`;
+
             // Register asset in database for permanent tracking and precise filtering
+            // IMPORTANT: We now save the BRANDED URL in the DB as requested.
             await supabase
                 .from('blog_assets')
                 .insert({
-                    user_id: (req as any).profileId, // Using profileId for consistency with other parts of system
+                    user_id: (req as any).profileId,
                     filename: fileName,
-                    url: publicUrl,
+                    url: brandedUrl,
                     mimetype: mimetype,
                     size: buffer.length,
                     asset_type: type
@@ -139,8 +142,8 @@ const fileController = {
                     name: multerReq.file.originalname,
                     filename: fileName,
                     size: buffer.length,
-                    url: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${fileName}`,
-                    cloudUrl: publicUrl, // Internal reference
+                    url: brandedUrl,
+                    cloudUrl: publicUrl, // Internal reference for this response only
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -320,14 +323,16 @@ const fileController = {
         try {
             const filename = req.params.filename || (req.params as any)[0];
 
-            // Security: Use filename to look up original URL
-            const { data: file, error } = await supabase
+            // Security: Use filename to look up identity and type
+            // Note: We don't use 'url' from DB anymore because it's now the branded one.
+            // We reconstruct the cloud URL on the fly.
+            const { data: asset, error } = await supabase
                 .from('blog_assets')
-                .select('url, mimetype')
+                .select('user_id, asset_type, mimetype')
                 .eq('filename', filename)
                 .single();
 
-            if (error || !file) {
+            if (error || !asset) {
                 console.warn(`⚠️ [PROXY] File not found or error: ${filename}`);
                 // Simple minimalist 404 page for files
                 return res.status(404).send(`
@@ -339,19 +344,25 @@ const fileController = {
                 `);
             }
 
+            // Reconstruct the original Supabase Cloud URl
+            // Format: https://[SUBDOMAIN].supabase.co/storage/v1/object/public/uploads/[USER_ID]/[FOLDER][FILENAME]
+            const storageFolder = asset.asset_type === 'blog' ? 'blog/' : '';
+            const supabaseUrl = process.env.SUPABASE_URL || 'https://gadqvlcijsmgtbwydvay.supabase.co';
+            const cloudUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${asset.user_id}/${storageFolder}${filename}`;
+
             // Stream response from Supabase directly through our backend to mask the URL
             const response = await axios({
                 method: 'get',
-                url: file.url,
+                url: cloudUrl,
                 responseType: 'stream',
                 timeout: 30000 // 30s timeout
             });
 
             // Replicate relevant headers from cloud storage
-            res.setHeader('Content-Type', file.mimetype || response.headers['content-type'] || 'application/octet-stream');
+            res.setHeader('Content-Type', asset.mimetype || response.headers['content-type'] || 'application/octet-stream');
             
             // For non-images, suggest a filename for download
-            const isImage = file.mimetype?.startsWith('image/');
+            const isImage = asset.mimetype?.startsWith('image/');
             if (!isImage) {
                 res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
             }
