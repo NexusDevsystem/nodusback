@@ -143,7 +143,7 @@ const fileController = {
                     filename: fileName,
                     size: buffer.length,
                     url: brandedUrl,
-                    cloudUrl: publicUrl, // Internal reference for this response only
+                    cloudUrl: publicUrl, 
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -319,6 +319,7 @@ const fileController = {
     },
 
     // Public: Proxy-serve file content from cloud storage
+    // Public: Redirect to cloud storage
     getFileRedirect: async (req: Request, res: Response) => {
         try {
             const filename = req.params.filename || (req.params as any)[0];
@@ -333,8 +334,7 @@ const fileController = {
                 .single();
 
             if (error || !asset) {
-                console.warn(`⚠️ [PROXY] File not found or error: ${filename}`);
-                // Simple minimalist 404 page for files
+                console.warn(`⚠️ [REDIRECT] File not found or error: ${filename}`);
                 return res.status(404).send(`
                     <div style="font-family:sans-serif; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; background:#fff; color:#000;">
                         <h1 style="font-weight:900; text-transform:uppercase; letter-spacing:0.2em; font-size:12px; margin-bottom:20px;">Nodus Link</h1>
@@ -345,38 +345,14 @@ const fileController = {
             }
 
             // Reconstruct the original Supabase Cloud URl
-            // Format: https://[SUBDOMAIN].supabase.co/storage/v1/object/public/uploads/[USER_ID]/[FOLDER][FILENAME]
             const storageFolder = asset.asset_type === 'blog' ? 'blog/' : '';
             const supabaseUrl = process.env.SUPABASE_URL || 'https://gadqvlcijsmgtbwydvay.supabase.co';
             const cloudUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${asset.user_id}/${storageFolder}${filename}`;
 
-            // Stream response from Supabase directly through our backend to mask the URL
-            const response = await axios({
-                method: 'get',
-                url: cloudUrl,
-                responseType: 'stream',
-                timeout: 30000 // 30s timeout
-            });
-
-            // Replicate relevant headers from cloud storage
-            res.setHeader('Content-Type', asset.mimetype || response.headers['content-type'] || 'application/octet-stream');
-            
-            // For non-images, suggest a filename for download
-            const isImage = asset.mimetype?.startsWith('image/');
-            if (!isImage) {
-                res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
-            }
-
-            // Set Cache-Control for 1 year (files are expected to be permanent/versioned)
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-
-            // Pipe stream to the express response
-            response.data.pipe(res);
+            // Perform 302 redirect to original cloud storage URL (fastest and most reliable)
+            return res.redirect(cloudUrl);
         } catch (error: any) {
-            console.error('File proxy error:', error);
-            if (error.response?.status === 404) {
-                 return res.status(404).send('Arquivo não encontrado no provedor original.');
-            }
+            console.error('File redirect error:', error);
             res.status(500).send('Erro interno ao processar o arquivo no sistema Nodus.');
         }
     }
