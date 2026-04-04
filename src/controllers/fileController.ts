@@ -139,7 +139,7 @@ const fileController = {
                     filename: fileName,
                     size: buffer.length,
                     url: publicUrl,
-                    nodusUrl: `${req.protocol}://${req.get('host')}/arquivo/${fileName}`,
+                    nodusUrl: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${fileName}`,
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -170,7 +170,7 @@ const fileController = {
 
             const formattedFiles = dbFiles?.map(f => ({
                 ...f,
-                nodusUrl: `${req.protocol}://${req.get('host')}/arquivo/${f.filename}`
+                nodusUrl: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${f.filename}`
             })) || [];
 
             res.json({ success: true, files: formattedFiles });
