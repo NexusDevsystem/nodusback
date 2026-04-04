@@ -318,7 +318,7 @@ const fileController = {
     // Public: Proxy-serve file content from cloud storage
     getFileRedirect: async (req: Request, res: Response) => {
         try {
-            const { filename } = req.params;
+            const filename = req.params.filename || (req.params as any)[0];
 
             // Security: Use filename to look up original URL
             const { data: file, error } = await supabase

@@ -26,7 +26,7 @@ import fileController from './controllers/fileController.js';
 const app = express();
 
 // Redirect for short file links (public)
-app.get('/arquivo/:filename', fileController.getFileRedirect);
+app.get('/arquivo/*', fileController.getFileRedirect);
 
 // Trust proxy for Railway/Proxies (required for express-rate-limit)
 app.set('trust proxy', 1);
