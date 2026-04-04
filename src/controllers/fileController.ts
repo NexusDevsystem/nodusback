@@ -34,7 +34,7 @@ export const upload = multer({
         // Allowed file types
         const allowedTypes = [
             'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-            'application/pdf', 'application/msword', 
+            'application/pdf', 'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'video/mp4', 'video/webm'
         ];
@@ -58,20 +58,20 @@ const fileController = {
 
             // 🕵️ VALIDATE MAGIC BYTES (MIME Type Sniffing)
             const realType = await fileTypeFromBuffer(multerReq.file.buffer);
-            
+
             // Only validate if detection is possible (text/svg/etc might return undefined)
             if (realType) {
-                 const allowedMimeGroups = ['image/', 'video/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument'];
-                 const isRealAllowed = allowedMimeGroups.some(group => realType.mime.startsWith(group));
-                 
-                 if (!isRealAllowed) {
+                const allowedMimeGroups = ['image/', 'video/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument'];
+                const isRealAllowed = allowedMimeGroups.some(group => realType.mime.startsWith(group));
+
+                if (!isRealAllowed) {
                     console.warn(`🚨 [SECURITY] Blocked malicious upload attempt from user ${(req as any).profileId}: ${multerReq.file.originalname} (Detected real type: ${realType.mime})`);
                     return res.status(400).json({ error: true, message: 'O conteúdo do arquivo não condiz com as extensões suportadas.' });
-                 }
+                }
             }
 
             const userId = (req as any).userId;
-            
+
             // 🖼️ IMAGE CONVERSION: PNG/WebP/etc -> Optimized JPEG
             let buffer = multerReq.file.buffer;
             let mimetype = multerReq.file.mimetype;
@@ -90,7 +90,7 @@ const fileController = {
                     // Fallback to original if processing fails
                 }
             }
-            
+
             // Generate a unique filename to avoid collisions
             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
             const name = path.basename(multerReq.file.originalname, originalExt).replace(/[^a-zA-Z0-9]/g, '_');
@@ -125,7 +125,7 @@ const fileController = {
             await supabase
                 .from('blog_assets')
                 .insert({
-                    user_id: (req as any).profileId, 
+                    user_id: (req as any).profileId,
                     filename: fileName,
                     url: publicUrl,
                     mimetype: mimetype,
@@ -141,7 +141,7 @@ const fileController = {
                     filename: fileName,
                     size: buffer.length,
                     url: publicUrl,
-                    cloudUrl: publicUrl, 
+                    cloudUrl: publicUrl,
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -157,7 +157,7 @@ const fileController = {
     listFiles: async (req: Request, res: Response) => {
         try {
             const profileId = (req as any).profileId;
-            
+
             // 🔥 CRITICAL: Don't list from storage anymore! 
             // Query only assets registered in the DB as 'user_upload'
             // This ensures total isolation for the File Manager.
@@ -213,7 +213,7 @@ const fileController = {
                 .remove([filePath]);
 
             if (storageErr) throw storageErr;
-                
+
             // 2. Remove from database tracking
             await supabase
                 .from('blog_assets')
@@ -244,7 +244,7 @@ const fileController = {
                 .single();
 
             if (!post) return res.status(404).json({ error: 'Post not found' });
-            
+
             // 🔐 Ownership Check
             if (post.user_id !== profileId) {
                 return res.status(403).json({ error: 'Acesso negado. Você não é o autor deste post.' });
@@ -252,7 +252,7 @@ const fileController = {
 
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
             const rawBuffer = Buffer.from(base64Data, 'base64');
-            
+
             // Convert card to optimized JPEG
             const buffer = await sharp(rawBuffer).jpeg({ quality: 90 }).toBuffer();
             const fileName = `blog-cards/${slug}.jpg`;
@@ -286,14 +286,14 @@ const fileController = {
             // 🔐 Ownership Check
             const profileId = (req as any).profileId;
             const { data: profile } = await supabase.from('users').select('id, username').eq('id', profileId).single();
-            
+
             if (!profile || (profile.username !== username && (req as any).role !== 'superadmin')) {
                 return res.status(403).json({ error: 'Acesso negado. Você só pode sincronizar seu próprio perfil.' });
             }
 
             const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
             const rawBuffer = Buffer.from(base64Data, 'base64');
-            
+
             // Convert profile card to optimized JPEG
             const buffer = await sharp(rawBuffer).jpeg({ quality: 90 }).toBuffer();
             const fileName = `profile-cards/${username}.jpg`;

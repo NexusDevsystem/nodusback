@@ -47,12 +47,12 @@ app.use(cors({
         if (!origin) {
             return callback(null, true);
         }
-        
+
         // Allow any localhost origin
         if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
             return callback(null, true);
         }
-        
+
         const isAllowed = allowedOrigins.includes(origin) ||
             origin.includes('nodus.my') ||
             origin.includes('nodus.app') ||
