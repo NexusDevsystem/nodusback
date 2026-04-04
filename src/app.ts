@@ -22,7 +22,11 @@ import path from 'path';
 import { xssMiddleware } from './middleware/xssMiddleware.js';
 import { inputLimitMiddleware } from './middleware/inputLimitMiddleware.js';
 
+import fileController from './controllers/fileController.js';
 const app = express();
+
+// Redirect for short file links (public)
+app.get('/arquivo/:filename', fileController.getFileRedirect);
 
 // Trust proxy for Railway/Proxies (required for express-rate-limit)
 app.set('trust proxy', 1);

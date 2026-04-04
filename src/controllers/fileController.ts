@@ -139,6 +139,7 @@ const fileController = {
                     filename: fileName,
                     size: buffer.length,
                     url: publicUrl,
+                    nodusUrl: `${req.protocol}://${req.get('host')}/arquivo/${fileName}`,
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -167,7 +168,12 @@ const fileController = {
 
             if (error) throw error;
 
-            res.json({ success: true, files: dbFiles || [] });
+            const formattedFiles = dbFiles?.map(f => ({
+                ...f,
+                nodusUrl: `${req.protocol}://${req.get('host')}/arquivo/${f.filename}`
+            })) || [];
+
+            res.json({ success: true, files: formattedFiles });
         } catch (error: any) {
             console.error('List files error:', error);
             res.status(500).json({ error: true, message: 'Error listing files' });
@@ -303,6 +309,31 @@ const fileController = {
         } catch (error: any) {
             console.error('Sync profile card error:', error);
             res.status(500).json({ error: true, message: error.message });
+        }
+    },
+
+    // Public: Redirect to actual file URL
+    getFileRedirect: async (req: Request, res: Response) => {
+        try {
+            const { filename } = req.params;
+
+            // Security: Use filename to look up original URL
+            const { data: file, error } = await supabase
+                .from('blog_assets')
+                .select('url')
+                .eq('filename', filename)
+                .single();
+
+            if (error || !file) {
+                console.warn(`⚠️ [REDIRECT] File not found or error: ${filename}`);
+                return res.status(404).send('Arquivo não encontrado no sistema Nodus.');
+            }
+
+            // Perform 302 redirect to original cloud storage URL
+            return res.redirect(file.url);
+        } catch (error) {
+            console.error('Redirect error:', error);
+            res.status(500).send('Erro interno ao processar o redirecionamento do arquivo.');
         }
     }
 };
