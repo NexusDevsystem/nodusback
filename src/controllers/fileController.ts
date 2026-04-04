@@ -6,6 +6,7 @@ import multer from 'multer';
 import { supabase } from '../config/supabaseClient.js';
 import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
+import axios from 'axios';
 
 
 // Extend Express Request interface to include user and file
@@ -138,8 +139,8 @@ const fileController = {
                     name: multerReq.file.originalname,
                     filename: fileName,
                     size: buffer.length,
-                    url: publicUrl,
-                    nodusUrl: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${fileName}`,
+                    url: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${fileName}`,
+                    cloudUrl: publicUrl, // Internal reference
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
                 }
@@ -170,7 +171,9 @@ const fileController = {
 
             const formattedFiles = dbFiles?.map(f => ({
                 ...f,
-                nodusUrl: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${f.filename}`
+                url: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${f.filename}`,
+                cloudUrl: f.url,
+                uploadedAt: f.created_at
             })) || [];
 
             res.json({ success: true, files: formattedFiles });
@@ -312,7 +315,7 @@ const fileController = {
         }
     },
 
-    // Public: Redirect to actual file URL
+    // Public: Proxy-serve file content from cloud storage
     getFileRedirect: async (req: Request, res: Response) => {
         try {
             const { filename } = req.params;
@@ -320,20 +323,50 @@ const fileController = {
             // Security: Use filename to look up original URL
             const { data: file, error } = await supabase
                 .from('blog_assets')
-                .select('url')
+                .select('url, mimetype')
                 .eq('filename', filename)
                 .single();
 
             if (error || !file) {
-                console.warn(`⚠️ [REDIRECT] File not found or error: ${filename}`);
-                return res.status(404).send('Arquivo não encontrado no sistema Nodus.');
+                console.warn(`⚠️ [PROXY] File not found or error: ${filename}`);
+                // Simple minimalist 404 page for files
+                return res.status(404).send(`
+                    <div style="font-family:sans-serif; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; background:#fff; color:#000;">
+                        <h1 style="font-weight:900; text-transform:uppercase; letter-spacing:0.2em; font-size:12px; margin-bottom:20px;">Nodus Link</h1>
+                        <p style="font-weight:700; text-transform:uppercase; letter-spacing:0.1em; font-size:10px; color:#999;">Arquivo não encontrado ou removido no sistema Nodus.</p>
+                        <a href="https://nodus.my" style="margin-top:40px; color:#000; text-decoration:underline; font-size:10px; font-weight:900; text-transform:uppercase;">Voltar ao Início</a>
+                    </div>
+                `);
             }
 
-            // Perform 302 redirect to original cloud storage URL
-            return res.redirect(file.url);
-        } catch (error) {
-            console.error('Redirect error:', error);
-            res.status(500).send('Erro interno ao processar o redirecionamento do arquivo.');
+            // Stream response from Supabase directly through our backend to mask the URL
+            const response = await axios({
+                method: 'get',
+                url: file.url,
+                responseType: 'stream',
+                timeout: 30000 // 30s timeout
+            });
+
+            // Replicate relevant headers from cloud storage
+            res.setHeader('Content-Type', file.mimetype || response.headers['content-type'] || 'application/octet-stream');
+            
+            // For non-images, suggest a filename for download
+            const isImage = file.mimetype?.startsWith('image/');
+            if (!isImage) {
+                res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+            }
+
+            // Set Cache-Control for 1 year (files are expected to be permanent/versioned)
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+            // Pipe stream to the express response
+            response.data.pipe(res);
+        } catch (error: any) {
+            console.error('File proxy error:', error);
+            if (error.response?.status === 404) {
+                 return res.status(404).send('Arquivo não encontrado no provedor original.');
+            }
+            res.status(500).send('Erro interno ao processar o arquivo no sistema Nodus.');
         }
     }
 };
