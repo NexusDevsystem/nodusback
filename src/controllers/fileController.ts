@@ -120,16 +120,14 @@ const fileController = {
                 .from('uploads')
                 .getPublicUrl(filePath);
 
-            const brandedUrl = `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${fileName}`;
-
             // Register asset in database for permanent tracking and precise filtering
-            // IMPORTANT: We now save the BRANDED URL in the DB as requested.
+            // We now store the DIRECT Supabase public URL to ensure absolute reliability
             await supabase
                 .from('blog_assets')
                 .insert({
-                    user_id: (req as any).profileId,
+                    user_id: (req as any).profileId, 
                     filename: fileName,
-                    url: brandedUrl,
+                    url: publicUrl,
                     mimetype: mimetype,
                     size: buffer.length,
                     asset_type: type
@@ -142,7 +140,7 @@ const fileController = {
                     name: multerReq.file.originalname,
                     filename: fileName,
                     size: buffer.length,
-                    url: brandedUrl,
+                    url: publicUrl,
                     cloudUrl: publicUrl, 
                     mimetype: mimetype,
                     uploadedAt: new Date().toISOString()
@@ -174,7 +172,7 @@ const fileController = {
 
             const formattedFiles = dbFiles?.map(f => ({
                 ...f,
-                url: `${process.env.FRONTEND_URL || 'https://nodus.my'}/arquivo/${f.filename}`,
+                url: f.url, // Directly use stored public URL
                 cloudUrl: f.url,
                 uploadedAt: f.created_at
             })) || [];
