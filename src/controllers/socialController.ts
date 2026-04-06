@@ -156,6 +156,7 @@ export const socialController = {
             let followers = '';
             let platform = '';
             let username = '';
+            let avatarUrl = '';
 
             if (isInstagram) {
                 platform = 'instagram';
@@ -167,12 +168,16 @@ export const socialController = {
                 const title = $('meta[property="og:title"]').attr('content') || '';
                 const userMatch = title.match(/\(@([^)]+)\)/);
                 if (userMatch) username = userMatch[1];
+
+                avatarUrl = $('meta[property="og:image"]').attr('content') || '';
             } else if (isTiktok) {
                 platform = 'tiktok';
                 const ogDescription = $('meta[property="og:description"]').attr('content') || '';
                 // Meta patterns for TikTok can vary, but og:description often contains the count or we scrape the next-data
                 const match = ogDescription.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
                 if (match) followers = match[1].trim();
+
+                avatarUrl = $('meta[property="og:image"]').attr('content') || '';
 
                 if (!followers) {
                    // Fallback for TikTok page structure
@@ -189,12 +194,14 @@ export const socialController = {
                 const metaDesc = $('meta[name="description"]').attr('content') || '';
                 const descMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões)?) (inscritos|subscribers)/i);
                 if (descMatch) followers = descMatch[1].trim();
+                avatarUrl = $('meta[property="og:image"]').attr('content') || '';
             }
 
             return res.json({
                 followers: followers ? `${followers}` : null,
                 platform,
                 username,
+                avatarUrl,
                 url
             });
 
