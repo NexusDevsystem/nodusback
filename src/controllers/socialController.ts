@@ -161,16 +161,35 @@ export const socialController = {
 
             if (isInstagram) {
                 platform = 'instagram';
-                const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                // "1.2M Followers, 500 Following, 10 Posts..."
-                const match = metaDesc.match(/^([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
-                if (match) followers = match[1].trim();
                 
-                const title = $('meta[property="og:title"]').attr('content') || '';
-                const userMatch = title.match(/\(@([^)]+)\)/);
-                if (userMatch) username = userMatch[1];
+                // Log metadata for debugging
+                const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+                const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                const ogImage = $('meta[property="og:image"]').attr('content') || '';
+                
+                console.log(`[SocialScraper] Instagram Meta - Desc: "${metaDesc}", Tit: "${ogTitle}"`);
 
-                avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                // 1. Username
+                const userMatch = ogTitle.match(/\(@([^)]+)\)/);
+                if (userMatch) username = userMatch[1];
+                if (!username) {
+                    const titleParts = ogTitle.split('•');
+                    if (titleParts.length > 0) username = titleParts[0].trim().replace('@', '');
+                }
+
+                // 2. Followers - Regex improvement
+                const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) Followers|Seguidores/i);
+                if (followersMatch) {
+                    followers = followersMatch[1].trim();
+                } else {
+                    // Try parsing from the raw text
+                    const rawText = $.text();
+                    const rawFollowersMatch = rawText.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                    if (rawFollowersMatch) followers = rawFollowersMatch[1].trim();
+                }
+                
+                // 3. Avatar
+                avatarUrl = ogImage || '';
             } else if (isTiktok) {
                 platform = 'tiktok';
                 const ogDescription = $('meta[property="og:description"]').attr('content') || '';
