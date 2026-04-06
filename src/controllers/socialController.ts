@@ -162,30 +162,35 @@ export const socialController = {
             if (isInstagram) {
                 platform = 'instagram';
                 
-                // Log metadata for debugging
+                // Try to get username from URL first as a very reliable fallback
+                const urlParts = url.split('/').filter((p: string) => p && !p.includes('?') && !p.includes('#'));
+                const lastPart = urlParts[urlParts.length - 1];
+                if (lastPart && lastPart !== 'www.instagram.com' && lastPart !== 'instagram.com') {
+                    username = lastPart.replace('@', '');
+                }
+
                 const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                 const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                 const ogImage = $('meta[property="og:image"]').attr('content') || '';
                 
-                console.log(`[SocialScraper] Instagram Meta - Desc: "${metaDesc}", Tit: "${ogTitle}"`);
+                console.log(`[SocialScraper] IG Debug - URL: ${url}, ByteSize: ${html.length}, DescLength: ${metaDesc.length}`);
 
-                // 1. Username
-                const userMatch = ogTitle.match(/\(@([^)]+)\)/);
-                if (userMatch) username = userMatch[1];
-                if (!username) {
-                    const titleParts = ogTitle.split('•');
-                    if (titleParts.length > 0) username = titleParts[0].trim().replace('@', '');
+                // 1. Username Refining (if meta title worked)
+                if (ogTitle) {
+                    const userMatch = ogTitle.match(/\(@([^)]+)\)/);
+                    if (userMatch) username = userMatch[1];
                 }
 
-                // 2. Followers - Regex improvement
+                // 2. Followers - Improved Regex for "10k Followers"
                 const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) Followers|Seguidores/i);
                 if (followersMatch) {
                     followers = followersMatch[1].trim();
                 } else {
-                    // Try parsing from the raw text
-                    const rawText = $.text();
-                    const rawFollowersMatch = rawText.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                    if (rawFollowersMatch) followers = rawFollowersMatch[1].trim();
+                    // Look for common patterns in description string
+                    const parts = metaDesc.split(' ');
+                    if (parts.length > 0 && /^\d/.test(parts[0])) {
+                        followers = parts[0].replace(',', '.');
+                    }
                 }
                 
                 // 3. Avatar
