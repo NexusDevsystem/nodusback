@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
 import { blogService } from '../services/blogService.js';
+import axios from 'axios';
 
 export const socialController = {
 
@@ -116,6 +117,90 @@ export const socialController = {
         } catch (error: any) {
             console.error('[SocialController] Error fetching YouTube info:', error);
             res.status(500).json({ error: 'Internal server error', details: error.message });
+        }
+    },
+
+    /**
+     * Unified social metadata scraper (YouTube, TikTok, Instagram). 
+     * Pure scraping, NO API keys.
+     */
+    async getSocialMetadata(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') {
+                return res.status(400).json({ error: 'URL for social profile is required' });
+            }
+
+            const lowerUrl = url.toLowerCase();
+            const isInstagram = lowerUrl.includes('instagram.com');
+            const isTiktok = lowerUrl.includes('tiktok.com');
+            const isYoutube = lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be');
+
+            if (!isInstagram && !isTiktok && !isYoutube) {
+                return res.status(400).json({ error: 'Unsupported social platform for scraping' });
+            }
+
+            console.log(`[SocialMetadata] Scraping: ${url}`);
+            
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                },
+                timeout: 10000
+            });
+
+            const html = response.data;
+            const $ = cheerio.load(html);
+            let followers = '';
+            let platform = '';
+            let username = '';
+
+            if (isInstagram) {
+                platform = 'instagram';
+                const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+                // "1.2M Followers, 500 Following, 10 Posts..."
+                const match = metaDesc.match(/^([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                if (match) followers = match[1].trim();
+                
+                const title = $('meta[property="og:title"]').attr('content') || '';
+                const userMatch = title.match(/\(@([^)]+)\)/);
+                if (userMatch) username = userMatch[1];
+            } else if (isTiktok) {
+                platform = 'tiktok';
+                const ogDescription = $('meta[property="og:description"]').attr('content') || '';
+                // Meta patterns for TikTok can vary, but og:description often contains the count or we scrape the next-data
+                const match = ogDescription.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                if (match) followers = match[1].trim();
+
+                if (!followers) {
+                   // Fallback for TikTok page structure
+                   $('strong').each((i, el) => {
+                       const text = $(el).text();
+                       if ($(el).attr('data-e2e') === 'followers-count') {
+                           followers = text;
+                       }
+                   });
+                }
+            } else if (isYoutube) {
+                platform = 'youtube';
+                // Use the existing logic for YouTube inside this unified call
+                const metaDesc = $('meta[name="description"]').attr('content') || '';
+                const descMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões)?) (inscritos|subscribers)/i);
+                if (descMatch) followers = descMatch[1].trim();
+            }
+
+            return res.json({
+                followers: followers ? `${followers}` : null,
+                platform,
+                username,
+                url
+            });
+
+        } catch (error: any) {
+            console.error('[SocialMetadata] Error:', error.message);
+            res.status(500).json({ error: 'Failed to scrape social metadata' });
         }
     },
     
