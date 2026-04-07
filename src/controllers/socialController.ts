@@ -183,11 +183,17 @@ export const socialController = {
                 }
 
                 // 2. Followers - Improved Regex for "10k Followers"
-                const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) Followers|Seguidores/i);
+                const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
                 if (followersMatch) {
                     followers = followersMatch[1].trim();
                 } else {
-                    // Look for common patterns in description string
+                    // Try another pattern: "X followers, Y following, Z posts"
+                    const statsMatch = metaDesc.match(/([\d.,]+[KMB]?)\s+(?:Followers|Seguidores)/i);
+                    if (statsMatch) followers = statsMatch[1];
+                }
+                
+                // If still empty, try extracting the first number in the description
+                if (!followers) {
                     const parts = metaDesc.split(' ');
                     if (parts.length > 0 && /^\d/.test(parts[0])) {
                         followers = parts[0].replace(',', '.');
@@ -224,9 +230,9 @@ export const socialController = {
             }
 
             return res.json({
-                followers: followers ? `${followers}` : null,
+                followers: null,
                 platform,
-                username,
+                username: username || 'User',
                 avatarUrl,
                 url
             });
