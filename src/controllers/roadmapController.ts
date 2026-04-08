@@ -116,6 +116,7 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
 export const voteTask = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
+        const { type } = req.body; // 'up' (default) or 'down'
 
         const { data: current, error: fetchError } = await supabase
             .from('roadmap_tasks')
@@ -127,9 +128,12 @@ export const voteTask = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ error: 'Task não encontrada.' });
         }
 
+        const diff = type === 'down' ? -1 : 1;
+        const newVotes = Math.max(0, (current.votes || 0) + diff);
+
         const { data, error } = await supabase
             .from('roadmap_tasks')
-            .update({ votes: (current.votes || 0) + 1 })
+            .update({ votes: newVotes })
             .eq('id', id)
             .select()
             .single();
