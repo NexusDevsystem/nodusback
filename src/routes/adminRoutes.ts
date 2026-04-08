@@ -1,5 +1,6 @@
 import express from 'express';
 import { getPlatformStats, updateUserProfile, deleteUser, getUserStats, createUser } from '../controllers/adminController.js';
+import { getAdminVerificationRequests, reviewVerificationRequest } from '../controllers/verificationController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -18,5 +19,9 @@ router.delete('/users/:targetUserId', authMiddleware, deleteUser);
 
 // Get individual user stats
 router.get('/users/:targetUserId/stats', authMiddleware, getUserStats);
+
+// Verification requests management
+router.get('/verifications', authMiddleware, getAdminVerificationRequests);
+router.patch('/verifications/:id/review', authMiddleware, reviewVerificationRequest);
 
 export default router;

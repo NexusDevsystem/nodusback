@@ -18,6 +18,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import blogRoutes from './routes/blogRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
+import verificationRoutes from './routes/verificationRoutes.js';
 import path from 'path';
 import { xssMiddleware } from './middleware/xssMiddleware.js';
 import { inputLimitMiddleware } from './middleware/inputLimitMiddleware.js';
@@ -175,6 +176,7 @@ app.use('/api/social', socialRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/blog', blogRoutes);
+app.use('/api/verification', verificationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
