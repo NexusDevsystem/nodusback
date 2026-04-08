@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS roadmap_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description TEXT,
-  status TEXT NOT NULL DEFAULT 'backlog' CHECK (status IN ('backlog', 'planned', 'in_progress', 'done')),
+  status TEXT NOT NULL DEFAULT 'backlog' CHECK (status IN ('backlog', 'planned', 'in_progress', 'done', 'rejected')),
   author_name TEXT,
   is_admin BOOLEAN DEFAULT FALSE NOT NULL,
   votes INT DEFAULT 0 NOT NULL,

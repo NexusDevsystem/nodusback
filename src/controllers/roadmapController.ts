@@ -66,7 +66,7 @@ export const updateTaskStatus = async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const { status } = req.body;
 
-        const validStatuses = ['backlog', 'planned', 'in_progress', 'done'];
+        const validStatuses = ['backlog', 'planned', 'in_progress', 'done', 'rejected'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ error: 'Status inválido.' });
         }
