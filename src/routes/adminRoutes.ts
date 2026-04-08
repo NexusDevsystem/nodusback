@@ -1,7 +1,7 @@
 import express from 'express';
 import { getPlatformStats, updateUserProfile, deleteUser, getUserStats, createUser } from '../controllers/adminController.js';
 import { getAdminVerificationRequests, reviewVerificationRequest } from '../controllers/verificationController.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { authMiddleware, AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
 
 const router = express.Router();
@@ -10,7 +10,7 @@ const router = express.Router();
 router.get('/stats', authMiddleware, getPlatformStats);
 
 // List all user emails for announcements
-router.get('/users/emails', authMiddleware, (req, res, next) => {
+router.get('/users/emails', authMiddleware, (req: AuthRequest, res: any, next) => {
     if (req.role !== 'superadmin') return res.status(403).json({ error: 'Acesso negado' });
     next();
 }, async (req: any, res: any) => {
