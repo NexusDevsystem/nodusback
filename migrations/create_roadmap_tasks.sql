@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS roadmap_tasks (
   description TEXT,
   status TEXT NOT NULL DEFAULT 'backlog' CHECK (status IN ('backlog', 'planned', 'in_progress', 'done')),
   author_name TEXT,
+  is_admin BOOLEAN DEFAULT FALSE NOT NULL,
   votes INT DEFAULT 0 NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL

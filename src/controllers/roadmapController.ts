@@ -26,7 +26,7 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
  */
 export const createTask = async (req: AuthRequest, res: Response) => {
     try {
-        const { title, description, author_name } = req.body;
+        const { title, description, author_name, is_admin } = req.body;
 
         if (!title || title.trim().length < 3) {
             return res.status(400).json({ error: 'Título deve ter pelo menos 3 caracteres.' });
@@ -40,6 +40,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
                 author_name: author_name?.trim().substring(0, 80) || null,
                 status: 'backlog',
                 votes: 0,
+                is_admin: is_admin === true,
             })
             .select()
             .single();
