@@ -621,3 +621,46 @@ export function blogPostApiToDb(api: Partial<BlogPost>): Partial<BlogPostDB> {
     if (api.position !== undefined) db.position = api.position;
     return db;
 }
+
+export interface AnnouncementDB {
+    id?: string;
+    title: string;
+    content: string;
+    image_url?: string;
+    target_user_email?: string;
+    is_active: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface Announcement {
+    id: string;
+    title: string;
+    content: string;
+    imageUrl?: string;
+    targetUserEmail?: string;
+    isActive: boolean;
+    createdAt?: string;
+}
+
+export function announcementDbToApi(db: AnnouncementDB): Announcement {
+    return {
+        id: db.id || '',
+        title: db.title,
+        content: db.content,
+        imageUrl: db.image_url,
+        targetUserEmail: db.target_user_email,
+        isActive: db.is_active,
+        createdAt: db.created_at
+    };
+}
+
+export function announcementApiToDb(api: Partial<Announcement>): Partial<AnnouncementDB> {
+    const db: Partial<AnnouncementDB> = {};
+    if (api.title !== undefined) db.title = api.title;
+    if (api.content !== undefined) db.content = api.content;
+    if (api.imageUrl !== undefined) db.image_url = api.imageUrl;
+    if (api.targetUserEmail !== undefined) db.target_user_email = api.targetUserEmail;
+    if (api.isActive !== undefined) db.is_active = api.isActive;
+    return db;
+}

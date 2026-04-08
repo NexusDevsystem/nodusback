@@ -20,6 +20,7 @@ import blogRoutes from './routes/blogRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
 import verificationRoutes from './routes/verificationRoutes.js';
 import roadmapRoutes from './routes/roadmapRoutes.js';
+import announcementRoutes from './routes/announcementRoutes.js';
 import path from 'path';
 import { xssMiddleware } from './middleware/xssMiddleware.js';
 import { inputLimitMiddleware } from './middleware/inputLimitMiddleware.js';
@@ -179,6 +180,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/blog', blogRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/roadmap', roadmapRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
