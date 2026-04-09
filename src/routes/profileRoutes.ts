@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { profileController } from '../controllers/profileController.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware.js';
 import { realtimeManager } from '../realtime/RealtimeManager.js';
 
 const router = Router();
@@ -8,7 +8,7 @@ const router = Router();
 // Public routes
 router.get('/public/:username', profileController.getPublicProfile);
 router.get('/public-bootstrap/:username', profileController.getPublicBootstrap);
-router.get('/check-username/:username', profileController.checkUsername);
+router.get('/check-username/:username', optionalAuthMiddleware, profileController.checkUsername);
 
 // REALTIME SSE ENDPOINT (No keys needed on front)
 router.get('/realtime/:username', (req, res) => {

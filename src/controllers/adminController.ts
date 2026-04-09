@@ -180,30 +180,30 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
 
         // Fetch everything in parallel
         const [userRes, viewsRes, clicksRes, linksRes, productsRes] = await Promise.all([
-            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source').eq('id', targetUserId).single(),
+            supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source, onboarding_completed').eq('id', targetUserId).single(),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'view'),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'click'),
-            supabase.from('links').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId),
-            supabase.from('products').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId)
+            supabase.from('links').select('*').eq('user_id', targetUserId).order('order', { ascending: true }),
+            supabase.from('products').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false })
         ]);
 
         if (userRes.error) throw userRes.error;
 
         const views = viewsRes.count || 0;
         const clicks = clicksRes.count || 0;
-        const linksCount = linksRes.count || 0;
-        const productsCount = productsRes.count || 0;
+        const links = linksRes.data || [];
+        const products = productsRes.data || [];
 
         res.json({
             ...userRes.data,
             views,
             clicks_count: clicks,
-            links_count: linksCount,
-            products_count: productsCount,
-            // Keep original fields for compatibility with existing components
-            clicks: [{ count: clicks }],
-            links: [{ count: linksCount }],
-            products: [{ count: productsCount }]
+            links_count: links.length,
+            products_count: products.length,
+            links,
+            products,
+            // Keep original logic for counting if needed elsewhere, but now with data
+            clicks: [{ count: clicks }]
         });
 
     } catch (error: any) {

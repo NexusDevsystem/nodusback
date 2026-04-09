@@ -125,7 +125,7 @@ export const profileController = {
     async checkUsername(req: AuthRequest, res: Response) {
         try {
             const { username } = req.params;
-            const available = await profileService.isUsernameAvailable(username);
+            const available = await profileService.isUsernameAvailable(username, req.userId);
             res.json({ available });
         } catch (error) {
             console.error('Error checking username:', error);

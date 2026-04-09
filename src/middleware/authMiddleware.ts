@@ -225,6 +225,7 @@ export const optionalAuthMiddleware = async (
                 if (profile) {
                     req.userId = profile.id;
                     req.profileId = profile.id;
+                    req.email = email;
                 }
             }
         }

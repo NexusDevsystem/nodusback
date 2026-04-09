@@ -233,19 +233,24 @@ export const profileService = {
     },
 
     // Check username availability
-    async isUsernameAvailable(username: string): Promise<boolean> {
-        const { data, error } = await supabase
+    async isUsernameAvailable(username: string, excludeUserId?: string): Promise<boolean> {
+        let query = supabase
             .from('users')
-            .select('username')
-            .ilike('username', username)
-            .maybeSingle();
+            .select('id, username')
+            .ilike('username', username);
+
+        if (excludeUserId) {
+            query = query.neq('id', excludeUserId);
+        }
+
+        const { data, error } = await query.maybeSingle();
 
         if (error) {
             console.error('Error checking username:', error);
             return false;
         }
 
-        return !data; // Available if no data found
+        return !data; // Available if no data found (or if data found is from the excluded user)
     },
 
     // Bootstrap data for Editor (Profile + Links + Products + Stores)
