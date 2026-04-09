@@ -40,7 +40,6 @@ export const createTask = async (req: AuthRequest, res: Response) => {
                 author_name: author_name?.trim().substring(0, 80) || null,
                 status: 'backlog',
                 votes: 0,
-                is_admin: is_admin === true,
             })
             .select()
             .single();
