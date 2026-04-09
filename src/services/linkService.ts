@@ -345,9 +345,9 @@ export const linkService = {
             // 5. Check for incomplete links and send notification (max once every 10h)
             try {
                 const incompleteLinks = flattenedDbLinks.filter(l => isLinkIncomplete(l.url || '', l.platform));
+                console.log(`🔍 [NotificationCheck] Incomplete items: ${incompleteLinks.length}`);
                 
                 if (incompleteLinks.length > 0) {
-                    // Fetch user info and last notification time
                     const { data: user } = await supabase
                         .from('users')
                         .select('email, name, last_incomplete_notification_at')
@@ -357,27 +357,30 @@ export const linkService = {
                     if (user && user.email) {
                         const lastSent = user.last_incomplete_notification_at ? new Date(user.last_incomplete_notification_at) : null;
                         const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000);
+                        const isTestUser = user.email.includes('jaoom');
 
-                        if (!lastSent || lastSent < tenHoursAgo) {
+                        if (!lastSent || lastSent < tenHoursAgo || isTestUser) {
+                            if (isTestUser) console.log('⚡ [Notification] Testing bypass active');
                             const platformNames = Array.from(new Set(
                                 incompleteLinks.map(l => l.platform ? capitalize(l.platform) : l.title)
                             )).join(', ');
 
-                            // Send email
                             await sendIncompleteLinkEmail(user.email, user.name || 'Usuário Nodus', platformNames);
 
-                            // Update cooldown timestamp
                             await supabase
                                 .from('users')
                                 .update({ last_incomplete_notification_at: new Date().toISOString() })
                                 .eq('id', userId);
+                            console.log(`✅ [Notification] Sent to ${user.email}`);
+                        } else {
+                            console.log(`⏳ [Notification] Cooldown active for ${user.email}`);
                         }
                     }
                 }
             } catch (notifyErr) {
-                console.error('⚠️ [NotificationCheck] Failed:', notifyErr);
-                // We DON'T throw here to not break the save flow if email fails
+                console.error('⚠️ [NotificationCheck] Error:', notifyErr);
             }
+
 
             // Return the tree as interpreted from the newly saved flat data
             // This ensures we return consistent IDs and structure
