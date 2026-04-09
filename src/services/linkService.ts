@@ -344,7 +344,7 @@ export const linkService = {
 
             // 5. Check for incomplete links and send notification (max once every 10h)
             try {
-                const incompleteLinks = flattenedDbLinks.filter(l => isLinkIncomplete(l.url || '', l.platform));
+                const incompleteLinks = flattenedDbLinks.filter(l => l.type !== 'collection' && isLinkIncomplete(l.url || '', l.platform));
                 console.log(`🔍 [NotificationCheck] Incomplete items: ${incompleteLinks.length}`);
                 
                 if (incompleteLinks.length > 0) {
