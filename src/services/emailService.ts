@@ -46,11 +46,11 @@ export const sendPasswordResetEmail = async (to: string, code: string, name: str
  */
 export const sendIncompleteLinkEmail = async (to: string, name: string, missingLinks: string) => {
     try {
-        const serviceId = process.env.EMAILJS_SERVICE_ID;
+        const serviceId = process.env.EMAILJS_SERVICE_ID || 'service_5sa2bdj';
         const publicKey = process.env.EMAILJS_PUBLIC_KEY;
         const privateKey = process.env.EMAILJS_PRIVATE_KEY;
         // The specific template ID we just created in EmailJS
-        const templateId = 'template_lmjqfo4';
+        const templateId = 'template_yx0g3hf';
 
         if (!serviceId || !publicKey || !privateKey) {
             console.warn('⚠️ [EmailJS] Missing credentials. Skipping email. Missing:', missingLinks);
