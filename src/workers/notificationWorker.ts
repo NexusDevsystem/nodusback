@@ -41,7 +41,7 @@ export const checkAndNotifyIncompleteLinks = async () => {
             const { data: links, error: linkError } = await supabase
                 .from('links')
                 .select('*')
-                .eq('profile_id', user.id)
+                .eq('user_id', user.id)
                 .eq('is_archived', false);
 
             if (linkError) {
