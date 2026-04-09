@@ -40,3 +40,44 @@ export const sendPasswordResetEmail = async (to: string, code: string, name: str
         return false;
     }
 };
+
+/**
+ * Sends a notification when a user has incomplete social links
+ */
+export const sendIncompleteLinkEmail = async (to: string, name: string, missingLinks: string) => {
+    try {
+        const serviceId = process.env.EMAILJS_SERVICE_ID;
+        const publicKey = process.env.EMAILJS_PUBLIC_KEY;
+        const privateKey = process.env.EMAILJS_PRIVATE_KEY;
+        // The specific template ID we just created in EmailJS
+        const templateId = 'template_lmjqfo4';
+
+        if (!serviceId || !publicKey || !privateKey) {
+            console.warn('⚠️ [EmailJS] Missing credentials. Skipping email. Missing:', missingLinks);
+            return true;
+        }
+
+        const data = {
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            accessToken: privateKey,
+            template_params: {
+                user_name: name,
+                to_email: to,
+                missing_links: missingLinks,
+                dashboard_url: 'https://nodus.my/editor'
+            }
+        };
+
+        await axios.post('https://api.emailjs.com/api/v1.0/email/send', data, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        console.log(`✅ [EmailJS] Incomplete link notification sent to ${to} (${missingLinks})`);
+        return true;
+    } catch (error: any) {
+        console.error('❌ [EmailJS] Failed to send notification:', error.response?.data || error.message);
+        return false;
+    }
+};

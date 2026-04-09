@@ -3,6 +3,8 @@ import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.
 import { eventService } from './eventService.js';
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { isLinkIncomplete, capitalize } from '../utils/linkValidation.js';
+import { sendIncompleteLinkEmail } from './emailService.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -338,6 +340,43 @@ export const linkService = {
             if (idsToDelete.length > 0) {
                 await supabase.from('clicks').delete().in('link_id', idsToDelete);
                 await supabase.from('links').delete().in('id', idsToDelete);
+            }
+
+            // 5. Check for incomplete links and send notification (max once every 10h)
+            try {
+                const incompleteLinks = flattenedDbLinks.filter(l => isLinkIncomplete(l.url || '', l.platform));
+                
+                if (incompleteLinks.length > 0) {
+                    // Fetch user info and last notification time
+                    const { data: user } = await supabase
+                        .from('users')
+                        .select('email, name, last_incomplete_notification_at')
+                        .eq('id', userId)
+                        .single();
+
+                    if (user && user.email) {
+                        const lastSent = user.last_incomplete_notification_at ? new Date(user.last_incomplete_notification_at) : null;
+                        const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000);
+
+                        if (!lastSent || lastSent < tenHoursAgo) {
+                            const platformNames = Array.from(new Set(
+                                incompleteLinks.map(l => l.platform ? capitalize(l.platform) : l.title)
+                            )).join(', ');
+
+                            // Send email
+                            await sendIncompleteLinkEmail(user.email, user.name || 'Usuário Nodus', platformNames);
+
+                            // Update cooldown timestamp
+                            await supabase
+                                .from('users')
+                                .update({ last_incomplete_notification_at: new Date().toISOString() })
+                                .eq('id', userId);
+                        }
+                    }
+                }
+            } catch (notifyErr) {
+                console.error('⚠️ [NotificationCheck] Failed:', notifyErr);
+                // We DON'T throw here to not break the save flow if email fails
             }
 
             // Return the tree as interpreted from the newly saved flat data

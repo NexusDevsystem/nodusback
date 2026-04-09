@@ -55,6 +55,7 @@ export interface UserProfileDB {
     has_first_link?: boolean;
     has_copied_url?: boolean;
     onboarding_dismissed?: boolean;
+    last_incomplete_notification_at?: string | null;
 }
 
 export interface LinkItemDB {
