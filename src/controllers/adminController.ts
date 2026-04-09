@@ -19,6 +19,9 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
         const lastWeek = new Date();
         lastWeek.setDate(lastWeek.getDate() - 7);
 
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
         // Run all queries in parallel for maximum performance
         const [
             usersRes,
@@ -41,18 +44,34 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source').order('created_at', { ascending: false }).limit(50),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'view'),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'click'),
-            supabase.from('clicks').select('fingerprint').eq('type', 'view').not('fingerprint', 'is', null)
+            supabase.from('clicks').select('fingerprint').eq('type', 'view').not('fingerprint', 'is', null).gte('created_at', thirtyDaysAgo.toISOString())
         ]);
 
         // Check for all errors
-        const errors = [usersRes, linksRes, productsRes, proRes, todayRes, weeklyRes, latestRes, viewsRes, clicksRes, uniqueVisitorsRes]
-            .filter(r => r.error)
-            .map(r => r.error);
+        const queryErrors = [
+            { name: 'users', error: usersRes.error },
+            { name: 'links', error: linksRes.error },
+            { name: 'products', error: productsRes.error },
+            { name: 'pro', error: proRes.error },
+            { name: 'today', error: todayRes.error },
+            { name: 'weekly', error: weeklyRes.error },
+            { name: 'latest', error: latestRes.error },
+            { name: 'views', error: viewsRes.error },
+            { name: 'clicks', error: clicksRes.error },
+            { name: 'uniqueVisitors', error: uniqueVisitorsRes.error }
+        ].filter(q => q.error);
         
-        if (errors.length > 0) {
-            console.error('⚠️ Multiple errors in admin stats queries:', errors);
-            // We only throw if critical data is missing
-            if (usersRes.error || latestRes.error) throw usersRes.error || latestRes.error;
+        if (queryErrors.length > 0) {
+            console.error('⚠️ Errors in admin stats queries:', queryErrors.map(q => ({
+                query: q.name,
+                code: (q.error as any)?.code,
+                message: q.error?.message,
+                details: (q.error as any)?.details
+            })));
+            
+            // Critical queries failure
+            if (usersRes.error) throw usersRes.error;
+            if (latestRes.error) throw latestRes.error;
         }
 
         // Ensure nodus is included if missing from the latest
