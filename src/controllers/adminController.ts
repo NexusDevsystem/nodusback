@@ -183,11 +183,13 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
             supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source, onboarding_completed').eq('id', targetUserId).single(),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'view'),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('user_id', targetUserId).eq('type', 'click'),
-            supabase.from('links').select('*').eq('user_id', targetUserId).order('order', { ascending: true }),
-            supabase.from('products').select('*').eq('user_id', targetUserId).order('created_at', { ascending: false })
+            supabase.from('links').select('id, title, url, type, is_active, is_archived, platform, clicks, position').eq('user_id', targetUserId).eq('is_archived', false).order('position', { ascending: true }),
+            supabase.from('products').select('id, name, price, image, url, is_active, store_id').eq('user_id', targetUserId).order('created_at', { ascending: false })
         ]);
 
         if (userRes.error) throw userRes.error;
+        if (linksRes.error) console.error('⚠️ Links query error:', linksRes.error);
+        if (productsRes.error) console.error('⚠️ Products query error:', productsRes.error);
 
         const views = viewsRes.count || 0;
         const clicks = clicksRes.count || 0;
