@@ -186,7 +186,28 @@ export const optionalAuthMiddleware = async (
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
 
-            // Check cache first
+            // --- 1. Try internal JWT first ---
+            try {
+                const payload = jwt.verify(token, FINAL_JWT_SECRET) as { userId: string; email: string };
+                const { data: profile } = await supabase
+                    .from('users')
+                    .select('id, username')
+                    .eq('id', payload.userId)
+                    .maybeSingle();
+
+                if (profile) {
+                    req.userId = profile.id;
+                    req.profileId = profile.id;
+                    req.username = profile.username;
+                    req.email = payload.email;
+                    req.role = (profile.username === 'nodus' || payload.email === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
+                    return next();
+                }
+            } catch (e) {
+                // Not internal JWT, continue to Google
+            }
+
+            // --- 2. Check Google token cache ---
             const cached = tokenCache.get(token);
             let email = '';
 

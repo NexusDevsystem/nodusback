@@ -3,21 +3,26 @@ import { announcementDbToApi, AnnouncementDB } from '../models/types.js';
 
 export const announcementService = {
     async getActiveAnnouncement(userId?: string, userEmail?: string) {
-        // We need to find active announcements that this user hasn't seen yet
+        // Filter to announcements not seen by this user
         let query = supabase
             .from('announcements')
-            .select('*, announcement_views!left(user_id)')
+            .select(`
+                *,
+                announcement_views!left(user_id)
+            `)
             .eq('is_active', true);
 
+        if (userId) {
+            // Only join views for the current user
+            query = query.filter('announcement_views.user_id', 'eq', userId);
+            // Then check that no such view exists
+            query = query.is('announcement_views.user_id', null);
+        }
+        
         if (userEmail) {
             query = query.or(`target_user_email.is.null,target_user_email.eq.${userEmail}`);
         } else {
             query = query.is('target_user_email', null);
-        }
-
-        // Filter out announcements where there is a view record for this user
-        if (userId) {
-            query = query.is('announcement_views.user_id', null);
         }
 
         const { data, error } = await query
