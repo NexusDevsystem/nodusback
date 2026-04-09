@@ -20,8 +20,7 @@ export const checkAndNotifyIncompleteLinks = async () => {
         
         const { data: users, error: userError } = await supabase
             .from('users')
-            .select('id, email, name, last_incomplete_notification_at')
-            .or(`last_incomplete_notification_at.is.null,last_incomplete_notification_at.lt.${fourHoursAgo}`);
+            .select('id, email, name, last_incomplete_notification_at');
 
         if (userError) throw userError;
         if (!users || users.length === 0) {

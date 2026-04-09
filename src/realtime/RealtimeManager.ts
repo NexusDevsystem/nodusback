@@ -26,7 +26,7 @@ class RealtimeManager {
             
             if (activeUsernames.length === 0) return;
 
-            console.log(`[RealtimeWatcher] Checking ${activeUsernames.length} active profiles: ${activeUsernames.join(', ')}`);
+            // console.log(`[RealtimeWatcher] Checking ${activeUsernames.length} active profiles: ${activeUsernames.join(', ')}`);
             
             // Loop through active profiles and trigger sync
             for (const username of activeUsernames) {
