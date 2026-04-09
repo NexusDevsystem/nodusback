@@ -15,6 +15,7 @@ const superadminOnly = (req: AuthRequest, res: Response, next: NextFunction) => 
 
 // Public/User Route: Get the current active announcement
 router.get('/active', optionalAuthMiddleware, announcementController.getActiveAnnouncement);
+router.post('/:id/dismiss', authMiddleware, announcementController.dismissAnnouncement);
 
 // Admin Routes (Superadmin only)
 router.get('/', authMiddleware, superadminOnly, announcementController.getAllAnnouncements);

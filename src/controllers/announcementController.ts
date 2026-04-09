@@ -6,11 +6,30 @@ import { AuthRequest } from '../middleware/authMiddleware.js';
 export const announcementController = {
     async getActiveAnnouncement(req: AuthRequest, res: Response) {
         try {
-            const announcement = await announcementService.getActiveAnnouncement(req.email);
+            const userId = req.userId;
+            const userEmail = req.email;
+            
+            const announcement = await announcementService.getActiveAnnouncement(userId, userEmail);
             if (!announcement) {
                 return res.status(204).send();
             }
             res.json(announcement);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    },
+
+    async dismissAnnouncement(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const userId = req.userId;
+            
+            if (!userId) {
+                return res.status(401).json({ error: 'Não autorizado' });
+            }
+
+            await announcementService.dismiss(id, userId);
+            res.json({ success: true });
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }

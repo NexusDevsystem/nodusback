@@ -2,19 +2,22 @@ import { supabase } from '../config/supabaseClient.js';
 import { announcementDbToApi, AnnouncementDB } from '../models/types.js';
 
 export const announcementService = {
-    async getActiveAnnouncement(userEmail?: string) {
+    async getActiveAnnouncement(userId?: string, userEmail?: string) {
+        // We need to find active announcements that this user hasn't seen yet
         let query = supabase
             .from('announcements')
-            .select('*')
+            .select('*, announcement_views!left(user_id)')
             .eq('is_active', true);
 
         if (userEmail) {
-            // Find announcements that are either for this specific user OR global (null)
             query = query.or(`target_user_email.is.null,target_user_email.eq.${userEmail}`);
-            // Prioritize specific user announcements over global ones
-            query = query.order('target_user_email', { ascending: false, nullsFirst: false });
         } else {
             query = query.is('target_user_email', null);
+        }
+
+        // Filter out announcements where there is a view record for this user
+        if (userId) {
+            query = query.is('announcement_views.user_id', null);
         }
 
         const { data, error } = await query
@@ -26,6 +29,17 @@ export const announcementService = {
         if (!data) return null;
 
         return announcementDbToApi(data as AnnouncementDB);
+    },
+
+    async dismiss(announcementId: string, userId: string) {
+        const { error } = await supabase
+            .from('announcement_views')
+            .insert([{ announcement_id: announcementId, user_id: userId }]);
+
+        if (error && error.code !== '23505') { // Ignore unique constraint violation (already dismissed)
+            throw error;
+        }
+        return true;
     },
 
     async getAll() {
