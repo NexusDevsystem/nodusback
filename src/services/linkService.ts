@@ -345,7 +345,6 @@ export const linkService = {
             // 5. Check for incomplete links and send notification (max once every 10h)
             try {
                 const incompleteLinks = flattenedDbLinks.filter(l => l.type !== 'collection' && isLinkIncomplete(l.url || '', l.platform));
-                console.log(`🔍 [NotificationCheck] Incomplete items: ${incompleteLinks.length}`);
                 
                 if (incompleteLinks.length > 0) {
                     const { data: user } = await supabase
@@ -357,10 +356,8 @@ export const linkService = {
                     if (user && user.email) {
                         const lastSent = user.last_incomplete_notification_at ? new Date(user.last_incomplete_notification_at) : null;
                         const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000);
-                        const isTestUser = user.email.includes('jaoom');
 
-                        if (!lastSent || lastSent < tenHoursAgo || isTestUser) {
-                            if (isTestUser) console.log('⚡ [Notification] Testing bypass active');
+                        if (!lastSent || lastSent < tenHoursAgo) {
                             const platformNames = Array.from(new Set(
                                 incompleteLinks.map(l => l.platform ? capitalize(l.platform) : l.title)
                             )).join(', ');
@@ -371,9 +368,6 @@ export const linkService = {
                                 .from('users')
                                 .update({ last_incomplete_notification_at: new Date().toISOString() })
                                 .eq('id', userId);
-                            console.log(`✅ [Notification] Sent to ${user.email}`);
-                        } else {
-                            console.log(`⏳ [Notification] Cooldown active for ${user.email}`);
                         }
                     }
                 }
