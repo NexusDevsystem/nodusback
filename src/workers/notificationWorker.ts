@@ -9,7 +9,7 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * Logic to check all users for incomplete links and notify them if needed
- * Cooldown: 4 hours (as requested)
+ * Cooldown: 24 hours (as requested)
  */
 export const checkAndNotifyIncompleteLinks = async () => {
     try {
@@ -34,7 +34,7 @@ export const checkAndNotifyIncompleteLinks = async () => {
             const now = new Date();
             const lastSent = user.last_incomplete_notification_at ? new Date(user.last_incomplete_notification_at) : null;
             const hoursPassed = lastSent ? (now.getTime() - lastSent.getTime()) / (1000 * 60 * 60) : 999;
-            const hoursRemaining = lastSent ? Math.max(0, 4 - hoursPassed) : 0;
+            const hoursRemaining = lastSent ? Math.max(0, 24 - hoursPassed) : 0;
 
             // 2. Fetch links for this user
             const { data: links, error: linkError } = await supabase
@@ -61,13 +61,13 @@ export const checkAndNotifyIncompleteLinks = async () => {
                         incompleteLinks.map(l => l.platform ? capitalize(l.platform) : (l.title || 'Link Sem Nome'))
                     )).join(', ');
 
-                    console.log(`📧 [Worker] ${user.email}: 4h passadas. Enviando aviso para: ${platformNames}`);
+                    console.log(`📧 [Worker] ${user.email}: 24h passadas. Enviando aviso para: ${platformNames}`);
 
                     // 4. Send the email
                     const success = await sendIncompleteLinkEmail(user.email, user.name || 'Usuário Nodus', platformNames);
 
                     if (success) {
-                        // 5. Update timestamp to start the 4h count again
+                        // 5. Update timestamp to start the 24h count again
                         await supabase
                             .from('users')
                             .update({ last_incomplete_notification_at: new Date().toISOString() })
