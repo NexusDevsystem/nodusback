@@ -631,7 +631,7 @@ export interface AnnouncementDB {
     image_urls?: string[] | any; // New: multiple images
     blog_post_id?: string | null; // New: linked blog post
     blog_posts?: { slug: string } | null; // Joined data
-    target_user_email?: string;
+    target_user_email?: string | null;
     is_active: boolean;
     created_at?: string;
     updated_at?: string;
@@ -645,7 +645,7 @@ export interface Announcement {
     imageUrls?: string[];
     blogPostId?: string | null;
     blogPostSlug?: string | null;
-    targetUserEmail?: string;
+    targetUserEmail?: string | null;
     isActive: boolean;
     createdAt?: string;
 }
@@ -671,8 +671,18 @@ export function announcementApiToDb(api: Partial<Announcement>): Partial<Announc
     if (api.content !== undefined) db.content = api.content;
     if (api.imageUrl !== undefined) db.image_url = api.imageUrl;
     if (api.imageUrls !== undefined) db.image_urls = api.imageUrls;
-    if (api.blogPostId !== undefined) db.blog_post_id = api.blogPostId;
-    if (api.targetUserEmail !== undefined) db.target_user_email = api.targetUserEmail;
+    if (api.blogPostId !== undefined) db.blog_post_id = api.blogPostId || null;
+    
+    // Crucial: ensure empty string becomes null for global announcements
+    if (api.targetUserEmail !== undefined) {
+        if (api.targetUserEmail && typeof api.targetUserEmail === 'string') {
+            const trimmed = api.targetUserEmail.trim();
+            db.target_user_email = trimmed === '' ? null : trimmed;
+        } else {
+            db.target_user_email = null;
+        }
+    }
+    
     if (api.isActive !== undefined) db.is_active = api.isActive;
     return db;
 }
