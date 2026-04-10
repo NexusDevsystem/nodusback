@@ -14,10 +14,23 @@ export const announcementService = {
             .eq('is_active', true);
 
         if (userId) {
-            // Only join views for the current user
-            query = query.filter('announcement_views.user_id', 'eq', userId);
-            // Then check that no such view exists
-            query = query.is('announcement_views.user_id', null);
+            // Correct way to find rows that do NOT have a view by this user:
+            // 1. We left join views but ONLY for this user (via query param filter in select)
+            // 2. We check that the result is null
+            query = query
+                .select(`
+                    *,
+                    blog_posts(slug),
+                    announcement_views!left(id)
+                `)
+                .filter('announcement_views.user_id', 'eq', userId)
+                .is('announcement_views.id', null);
+        } else {
+             query = query
+                .select(`
+                    *,
+                    blog_posts(slug)
+                `);
         }
         
         if (userEmail) {
