@@ -8,6 +8,7 @@ export const announcementService = {
             .from('announcements')
             .select(`
                 *,
+                blog_posts(slug),
                 announcement_views!left(user_id)
             `)
             .eq('is_active', true);
@@ -50,7 +51,7 @@ export const announcementService = {
     async getAll() {
         const { data, error } = await supabase
             .from('announcements')
-            .select('*')
+            .select('*, blog_posts(slug)')
             .order('created_at', { ascending: false });
 
         if (error) throw error;

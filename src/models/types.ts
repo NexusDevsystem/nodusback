@@ -627,7 +627,10 @@ export interface AnnouncementDB {
     id?: string;
     title: string;
     content: string;
-    image_url?: string;
+    image_url?: string; // Keep for compatibility
+    image_urls?: string[] | any; // New: multiple images
+    blog_post_id?: string | null; // New: linked blog post
+    blog_posts?: { slug: string } | null; // Joined data
     target_user_email?: string;
     is_active: boolean;
     created_at?: string;
@@ -639,6 +642,9 @@ export interface Announcement {
     title: string;
     content: string;
     imageUrl?: string;
+    imageUrls?: string[];
+    blogPostId?: string | null;
+    blogPostSlug?: string | null;
     targetUserEmail?: string;
     isActive: boolean;
     createdAt?: string;
@@ -650,6 +656,9 @@ export function announcementDbToApi(db: AnnouncementDB): Announcement {
         title: db.title,
         content: db.content,
         imageUrl: db.image_url,
+        imageUrls: Array.isArray(db.image_urls) ? db.image_urls : (db.image_url ? [db.image_url] : []),
+        blogPostId: db.blog_post_id,
+        blogPostSlug: db.blog_posts?.slug,
         targetUserEmail: db.target_user_email,
         isActive: db.is_active,
         createdAt: db.created_at
@@ -661,6 +670,8 @@ export function announcementApiToDb(api: Partial<Announcement>): Partial<Announc
     if (api.title !== undefined) db.title = api.title;
     if (api.content !== undefined) db.content = api.content;
     if (api.imageUrl !== undefined) db.image_url = api.imageUrl;
+    if (api.imageUrls !== undefined) db.image_urls = api.imageUrls;
+    if (api.blogPostId !== undefined) db.blog_post_id = api.blogPostId;
     if (api.targetUserEmail !== undefined) db.target_user_email = api.targetUserEmail;
     if (api.isActive !== undefined) db.is_active = api.isActive;
     return db;
