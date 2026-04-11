@@ -44,7 +44,7 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             supabase.from('users').select('id, username, email, name, created_at, plan_type, bio, avatar_url, is_verified, user_category, subscription_expiry_date, theme_id, referral_source').order('created_at', { ascending: false }).limit(50),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'view'),
             supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('type', 'click'),
-            supabase.from('clicks').select('fingerprint').eq('type', 'view').not('fingerprint', 'is', null).gte('created_at', thirtyDaysAgo.toISOString())
+            supabase.from('clicks').select('fingerprint').eq('type', 'view').not('fingerprint', 'is', null)
         ]);
 
         // Check for all errors
