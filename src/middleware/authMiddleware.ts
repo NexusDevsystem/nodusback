@@ -19,6 +19,7 @@ export interface AuthRequest extends Request {
     username?: string;
     email?: string;
     role?: 'user' | 'superadmin';
+    isImpersonated?: boolean;
 }
 
 // Simple in-memory cache to avoid hammering Google API on every concurrent request
@@ -58,6 +59,7 @@ export const authMiddleware = async (
             req.profileId = profile.id;
             req.username = profile.username;
             req.email = payload.email;
+            req.isImpersonated = (payload as any).isImpersonated === true;
             req.role = (profile.username === 'nodus' || payload.email === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
             
             console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Role: ${req.role})`);

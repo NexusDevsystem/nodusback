@@ -13,7 +13,8 @@ router.get('/check-username/:username', optionalAuthMiddleware, profileControlle
 // REALTIME SSE ENDPOINT (No keys needed on front)
 router.get('/realtime/:username', (req, res) => {
     const { username } = req.params;
-    realtimeManager.addClient(username, res);
+    const isStealth = req.query.stealth === 'true';
+    realtimeManager.addClient(username, res, isStealth);
 });
 
 // Protected routes (require authentication)

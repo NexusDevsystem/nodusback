@@ -1,5 +1,12 @@
 import express from 'express';
-import { getPlatformStats, updateUserProfile, deleteUser, getUserStats, createUser } from '../controllers/adminController.js';
+import { 
+    getPlatformStats, 
+    updateUserProfile, 
+    deleteUser, 
+    getUserStats, 
+    createUser, 
+    impersonateUser 
+} from '../controllers/adminController.js';
 import { getAdminVerificationRequests, reviewVerificationRequest } from '../controllers/verificationController.js';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
@@ -28,6 +35,9 @@ router.patch('/users/:targetUserId', authMiddleware, updateUserProfile);
 
 // Create new user manually
 router.post('/users', authMiddleware, createUser);
+
+// Impersonate user (Ghost mode)
+router.post('/users/:targetUserId/impersonate', authMiddleware, impersonateUser);
 
 // Delete user
 router.delete('/users/:targetUserId', authMiddleware, deleteUser);

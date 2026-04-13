@@ -4,6 +4,7 @@ import { profileService } from '../services/profileService.js';
 interface Client {
     username: string;
     res: Response;
+    isStealth: boolean;
 }
 
 class RealtimeManager {
@@ -11,8 +12,8 @@ class RealtimeManager {
     private watcherInterval: NodeJS.Timeout | null = null;
 
     constructor() {
-        // Start the background watcher to keep "Live" status updated for active viewers
-        this.startWatcher();
+        // Delay watcher start to ensure all services (supabase, profileService) are fully initialized
+        setTimeout(() => this.startWatcher(), 5000);
     }
 
     /**
@@ -22,55 +23,56 @@ class RealtimeManager {
         if (this.watcherInterval) return;
 
         this.watcherInterval = setInterval(async () => {
+            // Watcher doesn't need to skip stealth clients as it's just background syncing
             const activeUsernames = [...new Set(this.clients.map(c => c.username))];
             
             if (activeUsernames.length === 0) return;
 
-            // console.log(`[RealtimeWatcher] Checking ${activeUsernames.length} active profiles: ${activeUsernames.join(', ')}`);
-            
             // Loop through active profiles and trigger sync
             for (const username of activeUsernames) {
                 try {
-                    // Calling getProfileByUsername with triggerSync: true 
-                    // This kicks off Twitch/YouTube/Kick status checks in background
                     await profileService.getProfileByUsername(username, true);
                 } catch (err) {
                     console.error(`[RealtimeWatcher] Failed to sync ${username}:`, err);
                 }
             }
-        }, 2500); // Check every 2.5 seconds for truly instant live detection (as requested)
+        }, 2500);
     }
 
     /**
      * Add a new SSE client connection
      */
-    public addClient(username: string, res: Response) {
+    public addClient(username: string, res: Response, isStealth: boolean = false) {
         // SSE Headers
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*' // Ensure CORS for SSE if needed
+            'Access-Control-Allow-Origin': '*'
         });
 
-        // Send a heartbeat every 15s to keep the connection alive
         const heartbeat = setInterval(() => {
             res.write(': heartbeat\n\n');
         }, 15000);
 
-        const client = { username: username.toLowerCase(), res };
+        const client = { username: username.toLowerCase(), res, isStealth };
         this.clients.push(client);
 
-        // Remove client on close
         res.on('close', () => {
             clearInterval(heartbeat);
             this.clients = this.clients.filter(c => c !== client);
-            console.log(`[RealtimeManager] Connection closed for: ${username}`);
+            if (!isStealth) {
+                console.log(`[RealtimeManager] Connection closed for: ${username}`);
+            }
         });
 
         // Initial response
         res.write('data: {"status": "connected"}\n\n');
-        console.log(`[RealtimeManager] Client connected for: ${username}. Total clients: ${this.clients.length}`);
+        if (!isStealth) {
+            console.log(`[RealtimeManager] Client connected for: ${username}. Total clients: ${this.clients.length}`);
+        } else {
+            console.log(`[RealtimeManager] Stealth client (Ghost) connected for: ${username}`);
+        }
     }
 
     /**
@@ -82,12 +84,25 @@ class RealtimeManager {
         
         if (targets.length === 0) return;
 
-        console.log(`[RealtimeManager] Notifying ${targets.length} clients about update for: ${username}`);
-        
         const payload = JSON.stringify({ type: 'profile_update', timestamp: Date.now() });
         targets.forEach(c => {
             c.res.write(`data: ${payload}\n\n`);
         });
+    }
+
+    /**
+     * Get all currently connected usernames (skipping stealth)
+     */
+    public getActiveUsernames(): string[] {
+        return [...new Set(this.clients.filter(c => !c.isStealth).map(c => c.username))];
+    }
+
+    /**
+     * Check if a specific user is currently online (skipping stealth)
+     */
+    public isUserOnline(username: string): boolean {
+        const u = username.toLowerCase();
+        return this.clients.some(c => c.username === u && !c.isStealth);
     }
 }
 

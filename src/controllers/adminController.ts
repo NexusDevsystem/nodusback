@@ -1,7 +1,12 @@
 import { Response } from 'express';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
+import { realtimeManager } from '../realtime/RealtimeManager.js';
+
+const JWT_SECRET = process.env.JWT_SECRET || '';
+
 
 export const getPlatformStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -103,6 +108,8 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
             ? (totalClicks / totalViews) * 100
             : 0;
 
+        const activeUsernames = realtimeManager?.getActiveUsernames() || [];
+
         res.json({
             summary: {
                 totalUsers,
@@ -119,7 +126,10 @@ export const getPlatformStats = async (req: AuthRequest, res: Response): Promise
                 today: todayRes.count || 0,
                 thisWeek: weeklyRes.count || 0
             },
-            latestUsers: latestUsers || []
+            latestUsers: (latestUsers || []).map((u: any) => ({
+                ...u,
+                is_online: activeUsernames.includes((u.username || '').toLowerCase())
+            }))
         });
 
     } catch (error: any) {
@@ -214,9 +224,11 @@ export const getUserStats = async (req: AuthRequest, res: Response): Promise<voi
         const clicks = clicksRes.count || 0;
         const links = linksRes.data || [];
         const products = productsRes.data || [];
+        const isOnline = userRes.data?.username ? (realtimeManager?.isUserOnline(userRes.data.username) || false) : false;
 
         res.json({
             ...userRes.data,
+            is_online: isOnline,
             views,
             clicks_count: clicks,
             links_count: links.length,
@@ -296,5 +308,61 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     } catch (error: any) {
         console.error('❌ Error creating user from admin:', error);
         res.status(500).json({ error: 'Erro ao criar novo usuário.' });
+    }
+};
+
+export const impersonateUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const isAdmin = req.role === 'superadmin';
+        const userId = req.userId;
+
+        if (!userId || !isAdmin) {
+            res.status(403).json({ error: 'Acesso negado.' });
+            return;
+        }
+
+        const { targetUserId } = req.params;
+
+        // Fetch user data
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('id, email, username, name')
+            .eq('id', targetUserId)
+            .single();
+
+        if (error || !user) {
+            res.status(404).json({ error: 'Usuário não encontrado.' });
+            return;
+        }
+
+        // Generate a standard user JWT but with isImpersonated flag
+        const token = jwt.sign(
+            { 
+                userId: user.id, 
+                email: user.email, 
+                username: user.username, 
+                provider: 'email',
+                isImpersonated: true,
+                adminId: userId // Track who is impersonating for logs
+            },
+            JWT_SECRET,
+            { expiresIn: '2h' } // Short lived for security
+        );
+
+        console.log(`🕵️ [Admin] Impersonation started: ${req.email} is impersonating ${user.email}`);
+
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                username: user.username
+            }
+        });
+
+    } catch (error: any) {
+        console.error('❌ Error in impersonation:', error);
+        res.status(500).json({ error: 'Erro ao iniciar sessão de impersonação.' });
     }
 };
