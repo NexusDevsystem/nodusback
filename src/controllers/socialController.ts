@@ -120,6 +120,53 @@ export const socialController = {
             res.status(500).json({ error: 'Internal server error', details: error.message });
         }
     },
+    
+    /**
+     * Fetches metadata for Discord invites (server name, member counts, icon).
+     * Uses Discord's public API to avoid scraping.
+     */
+    async getDiscordInviteInfo(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') {
+                return res.status(400).json({ error: 'URL is required' });
+            }
+
+            // Extract invite code (handles discord.gg/, discord.com/invite/)
+            const inviteCode = url.split('/').pop()?.split('?')[0]; // Remove query params if any
+            if (!inviteCode) {
+                return res.status(400).json({ error: 'Invalid Discord URL' });
+            }
+
+            console.log(`[SocialController] Fetching Discord info for code: ${inviteCode}`);
+
+            const response = await axios.get(`https://discord.com/api/v9/invites/${inviteCode}?with_counts=true`, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+            
+            const data = response.data;
+            if (!data || !data.guild) {
+                return res.status(404).json({ error: 'Community not found or invite expired' });
+            }
+
+            return res.json({
+                name: data.guild.name,
+                online: data.approximate_presence_count || 0,
+                total: data.approximate_member_count || 0,
+                icon: data.guild.icon ? `https://cdn.discordapp.com/icons/${data.guild.id}/${data.guild.icon}.webp?size=128` : null,
+                platform: 'discord'
+            });
+
+        } catch (error: any) {
+            console.error('[SocialController] Discord fetch error:', error.response?.status || error.message);
+            if (error.response?.status === 404) {
+                return res.status(404).json({ error: 'Discord invite not found' });
+            }
+            res.status(502).json({ error: 'Failed to connect to Discord' });
+        }
+    },
 
     /**
      * Unified social metadata scraper (YouTube, TikTok, Instagram). 

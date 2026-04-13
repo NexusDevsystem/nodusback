@@ -6,6 +6,9 @@ const router = Router();
 // GET /api/social/youtube?url=<channel_url>
 router.get('/youtube', socialController.getYoutubeChannelInfo);
 
+// GET /api/social/discord?url=<invite_url>
+router.get('/discord', socialController.getDiscordInviteInfo);
+
 // GET /api/social/metadata?url=<profile_url>
 router.get('/metadata', socialController.getSocialMetadata);
 
