@@ -8,8 +8,8 @@ import { Request, Response, NextFunction } from 'express';
 const MAX_STRING_LENGTH = 10000; // 10k chars is plenty for any legitimate Nodus field
 const FIELD_LIMITS: Record<string, number> = {
     'url': 2048,           // Standard safe URL length
-    'name': 100,           // User/Link name
-    'title': 150,          // Product/Post title
+    'name': 250,           // User/Link/Product name
+    'title': 250,          // Product/Post title
     'description': 2000,   // Bio/Product description
     'username': 30,        // Max username length
     'password': 128,       // Max password length

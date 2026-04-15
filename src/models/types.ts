@@ -497,9 +497,15 @@ export function productDbToApi(db: ProductDB): Product {
 }
 
 export function productApiToDb(api: Partial<Product>, userId: string): Partial<ProductDB> {
-    const dbName = api.collection
-        ? `${api.collection} || ${api.name}`
-        : api.name;
+    let dbName = '';
+    if (api.collection && api.name) {
+        dbName = `${api.collection} || ${api.name}`;
+    } else {
+        dbName = api.name || api.collection || 'Product';
+    }
+    
+    // Safety truncation for combined name
+    dbName = dbName.substring(0, 450);
 
     const db: any = {
         user_id: userId,
