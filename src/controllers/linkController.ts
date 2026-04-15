@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import { fileTypeFromBuffer } from 'file-type';
+import { ssrfFetch, SsrfError } from '../utils/ssrfGuard.js';
 
 // Ensure uploads directory exists - Note: link thumbnails are stored separately
 // so they don't clutter the user's main file manager.
@@ -72,7 +73,11 @@ export const linkController = {
             }
 
             res.status(201).json(link);
-        } catch (error) {
+        } catch (error: any) {
+            // Surface SSRF validation errors as 400 (not 500)
+            if (error?.status === 400 || error?.code?.startsWith('SSRF')) {
+                return res.status(400).json({ error: error.message, code: error.code });
+            }
             console.error('Error creating link:', error);
             res.status(500).json({ error: 'Failed to create link' });
         }
@@ -126,11 +131,9 @@ export const linkController = {
             const savedLinks = await linkService.replaceAllLinks(req.profileId, links);
 
             // ── ONBOARDING: Track first link ────────────────────────────────
-            // Count active top-level links (not collections)
             const activeLinks = savedLinks.filter((l: any) => l.isActive !== false);
             const hasFirstLink = activeLinks.length > 0;
 
-            // Fire-and-forget update to user onboarding status
             supabase
                 .from('users')
                 .update({ has_first_link: hasFirstLink })
@@ -141,7 +144,11 @@ export const linkController = {
             // ────────────────────────────────────────────────────────────────
 
             res.json(savedLinks);
-        } catch (error) {
+        } catch (error: any) {
+            // Surface SSRF validation errors as 400 (not 500)
+            if (error?.status === 400 || error?.code?.startsWith('SSRF')) {
+                return res.status(400).json({ error: error.message, code: error.code });
+            }
             console.error('Error replacing links:', error);
             res.status(500).json({ error: 'Failed to replace links' });
         }
@@ -231,31 +238,42 @@ export const linkController = {
                 return res.status(400).json({ error: 'URL is required' });
             }
 
-            // 🔐 SSRF PROTECTION: Prevent accessing internal resources or non-standard protocols
+            // 🔐 SSRF PROTECTION: resolve DNS + block all private/reserved IP ranges
+            // Uses the central ssrfGuard utility — revalidates IP on every redirect.
+            let response: globalThis.Response;
             try {
-                const parsedUrl = new URL(url);
-                if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-                    return res.status(400).json({ error: 'Invalid protocol' });
-                }
-                
-                // Block private/local IP ranges
-                const hostname = parsedUrl.hostname;
-                if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.')) {
-                    return res.status(400).json({ error: 'Restricted domain' });
-                }
+                const result = await ssrfFetch(url, {
+                    timeout: 5000,
+                    maxRedirects: 3,
+                });
+                response = result.response;
             } catch (e) {
-                return res.status(400).json({ error: 'Malformed URL' });
+                if (e instanceof SsrfError) {
+                    console.warn(`🔐 [SSRF] Blocked proxy-upload attempt to: ${url} — ${e.message}`);
+                    return res.status(400).json({ error: e.message, code: e.code });
+                }
+                throw e;
             }
 
-            // 1. Download the image
-            const axios = (await import('axios')).default;
-            const response = await axios.get(url, { 
-                responseType: 'arraybuffer',
-                timeout: 5000,
-                maxContentLength: 5 * 1024 * 1024 // Limit to 5MB
-            });
-            const buffer = Buffer.from(response.data, 'binary');
-            const contentType = response.headers['content-type'] || 'image/jpeg';
+            // 1. Read the response as a buffer (max 5 MB)
+            const MAX_BYTES = 5 * 1024 * 1024;
+            const reader = response.body?.getReader();
+            if (!reader) {
+                return res.status(502).json({ error: 'Empty response from external URL' });
+            }
+            const chunks: Uint8Array[] = [];
+            let totalBytes = 0;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                totalBytes += value.length;
+                if (totalBytes > MAX_BYTES) {
+                    return res.status(413).json({ error: 'Imagem excede 5 MB.' });
+                }
+                chunks.push(value);
+            }
+            const buffer = Buffer.concat(chunks);
+            const contentType = response.headers.get('content-type') || 'image/jpeg';
 
             // 2. Generate filename
             const extension = contentType.split('/')[1] || 'jpg';

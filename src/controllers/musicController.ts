@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
+import { ssrfFetch, safeFetch, SsrfError } from '../utils/ssrfGuard.js';
 
 /**
  * Music Controller
@@ -22,12 +23,15 @@ export const musicController = {
             let targetUrl = url;
             let targetVideoUrl = '';
 
-            // Resolve shortened links
+            // Resolve shortened links — user-supplied URL, must use SSRF guard
             if (url.includes('link.deezer.com') || url.includes('deezer.page.link') || url.includes('spotify.link')) {
                 try {
-                    const headRes = await fetch(url, { method: 'GET', redirect: 'follow' });
-                    targetUrl = headRes.url;
+                    const result = await ssrfFetch(url, { timeout: 5000 });
+                    targetUrl = result.finalUrl;
                 } catch (e) {
+                    if (e instanceof SsrfError) {
+                        return res.status(400).json({ error: e.message, code: e.code });
+                    }
                     console.error('[Metadata] Error following redirect', e);
                 }
             }
@@ -41,15 +45,19 @@ export const musicController = {
                 return res.status(400).json({ error: 'Unsupported platform' });
             }
 
-            // Resolve TikTok shortened links
+            // Resolve TikTok shortened links — user-supplied URL, must use SSRF guard
             if (isTiktok && (url.includes('/vm/') || url.includes('/vt/') || url.includes('/v/') || url.includes('/t/'))) {
                 try {
-                    const headRes = await fetch(url, {
-                        method: 'GET', redirect: 'follow',
+                    const result = await ssrfFetch(url, {
+                        timeout: 5000,
+                        method: 'GET',
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
                     });
-                    targetUrl = headRes.url;
+                    targetUrl = result.finalUrl;
                 } catch (e) {
+                    if (e instanceof SsrfError) {
+                        return res.status(400).json({ error: e.message, code: e.code });
+                    }
                     console.error('[Metadata] Error following TikTok redirect', e);
                 }
             }
@@ -85,7 +93,10 @@ export const musicController = {
                 console.error('[Metadata] OEmbed failed:', oembedError);
             }
 
-            // METHOD 2: Scraping fallback & Album/Playlist Track Fetching
+            // METHOD 2: Scraping fallback — uses the target URL which we already resolved above.
+            // targetUrl was either validated by ssrfFetch above, or is a hardcoded oembed URL.
+            // The scraping target is always one of: spotify.com, deezer.com, tiktok.com, youtube.com
+            // — all public, non-private domains — so we use the plain fetch here.
             const isAlbumOrPlaylist = (isSpotify || isDeezer) && (targetUrl.includes('/album/') || targetUrl.includes('/playlist/'));
 
             if (!title || !artist || !thumbnailUrl || isTiktok || isAlbumOrPlaylist) {

@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { isLinkIncomplete, capitalize } from '../utils/linkValidation.js';
 import { sendIncompleteLinkEmail } from './emailService.js';
+import { validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -129,6 +130,17 @@ export const linkService = {
 
     // Create a new link
     async createLink(userId: string, link: Omit<LinkItem, 'id'>): Promise<LinkItem | null> {
+        // 🔐 SSRF Input Guard: reject private/reserved IPs at save time
+        if (link.url) {
+            try {
+                await validateUserUrl(link.url);
+            } catch (e) {
+                if (e instanceof SsrfError) {
+                    throw Object.assign(new Error(e.message), { code: e.code, status: 400 });
+                }
+            }
+        }
+
         const dbLink = linkApiToDb(link, userId);
 
         const { data, error } = await supabase
@@ -285,13 +297,26 @@ export const linkService = {
             const flatten = async (items: LinkItem[], parentId: string | null = null) => {
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
+
+                    // 🔐 SSRF Input Guard: validate URL at save time to reject private/reserved IPs
+                    // Skip validation for types that don't have user-supplied external URLs
+                    const isContentType = item.type === 'collection' || item.type === 'agenda';
+                    if (item.url && !isContentType) {
+                        try {
+                            await validateUserUrl(item.url);
+                        } catch (e) {
+                            if (e instanceof SsrfError) {
+                                throw Object.assign(new Error(`Link "${item.title}": ${e.message}`), { code: e.code, status: 400 });
+                            }
+                        }
+                    }
+
                     const dbLink = linkApiToDb(item, userId) as LinkItemDB;
 
                     const validId = getValidId(item.id);
                     dbLink.id = validId;
                     dbLink.parent_id = parentId;
                     dbLink.position = i;
-
 
                     // 🔐 Hash password if provided
                     if (item.isPasswordProtected && (item as any).linkPassword) {

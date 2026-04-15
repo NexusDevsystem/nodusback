@@ -4,6 +4,7 @@ import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
 import { blogService } from '../services/blogService.js';
 import axios from 'axios';
+import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 
 export const socialController = {
 
@@ -38,13 +39,25 @@ export const socialController = {
             // Encode URI to handle accented characters like @ZéMoitinha
             const fetchUrl = encodeURI(url);
 
-            const pageRes = await fetch(fetchUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            // 🔐 SSRF: validate URL before fetching (resolves DNS, blocks private IPs)
+            let pageRes: globalThis.Response;
+            try {
+                const result = await safeFetch(fetchUrl, {
+                    timeout: 5000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                    },
+                });
+                pageRes = result;
+            } catch (e) {
+                if (e instanceof SsrfError) {
+                    console.warn(`🔐 [SSRF] Blocked YouTube fetch: ${url} — ${e.message}`);
+                    return res.status(400).json({ error: e.message, code: e.code });
                 }
-            });
+                throw e;
+            }
 
             if (!pageRes.ok) {
                 console.warn(`[SocialController] YouTube fetch failed: ${pageRes.status}`);
@@ -190,18 +203,29 @@ export const socialController = {
 
             console.log(`[SocialMetadata] Scraping: ${url}`);
             
-            const response = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                    'Cache-Control': 'no-cache'
-                },
-                timeout: 10000
-            });
+            // 🔐 SSRF: validate URL before fetching (resolves DNS, blocks private IP ranges)
+            let html;
+            let $;
+            try {
+                const safeRes = await safeFetch(url, {
+                    timeout: 5000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                        'Cache-Control': 'no-cache',
+                    },
+                });
+                html = await safeRes.text();
+                $ = cheerio.load(html);
+            } catch (e) {
+                if (e instanceof SsrfError) {
+                    console.warn(`🔐 [SSRF] Blocked social metadata scrape: ${url} — ${e.message}`);
+                    return res.status(400).json({ error: e.message, code: e.code });
+                }
+                throw e;
+            }
 
-            const html = response.data;
-            const $ = cheerio.load(html);
             let followers = '';
             let platform = '';
             let username = '';
@@ -209,83 +233,57 @@ export const socialController = {
 
             if (isInstagram) {
                 platform = 'instagram';
-                
-                // Try to get username from URL first as a very reliable fallback
-                const urlParts = url.split('/').filter((p: string) => p && !p.includes('?') && !p.includes('#'));
+                const urlParts = url.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
                 const lastPart = urlParts[urlParts.length - 1];
                 if (lastPart && lastPart !== 'www.instagram.com' && lastPart !== 'instagram.com') {
                     username = lastPart.replace('@', '');
                 }
-
                 const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                 const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                 const ogImage = $('meta[property="og:image"]').attr('content') || '';
-                
                 console.log(`[SocialScraper] IG Debug - URL: ${url}, ByteSize: ${html.length}, DescLength: ${metaDesc.length}`);
-
-                // 1. Username Refining (if meta title worked)
                 if (ogTitle) {
                     const userMatch = ogTitle.match(/\(@([^)]+)\)/);
                     if (userMatch) username = userMatch[1];
                 }
-
-                // 2. Followers - Improved Regex for "10k Followers"
                 const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
                 if (followersMatch) {
                     followers = followersMatch[1].trim();
                 } else {
-                    // Try another pattern: "X followers, Y following, Z posts"
                     const statsMatch = metaDesc.match(/([\d.,]+[KMB]?)\s+(?:Followers|Seguidores)/i);
                     if (statsMatch) followers = statsMatch[1];
                 }
-                
-                // If still empty, try extracting the first number in the description
                 if (!followers) {
                     const parts = metaDesc.split(' ');
                     if (parts.length > 0 && /^\d/.test(parts[0])) {
                         followers = parts[0].replace(',', '.');
                     }
                 }
-                
-                // 3. Avatar
                 avatarUrl = ogImage || '';
             } else if (isTiktok) {
                 platform = 'tiktok';
                 const ogDescription = $('meta[property="og:description"]').attr('content') || '';
-                // Meta patterns for TikTok can vary, but og:description often contains the count or we scrape the next-data
                 const match = ogDescription.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
                 if (match) followers = match[1].trim();
-
                 avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-
                 if (!followers) {
-                   // Fallback for TikTok page structure
-                   $('strong').each((i, el) => {
-                       const text = $(el).text();
-                       if ($(el).attr('data-e2e') === 'followers-count') {
-                           followers = text;
-                       }
-                   });
+                    $('strong').each((i, el) => {
+                        const text = $(el).text();
+                        if ($(el).attr('data-e2e') === 'followers-count') followers = text;
+                    });
                 }
             } else if (isYoutube) {
                 platform = 'youtube';
-                // Use the existing logic for YouTube inside this unified call
                 const metaDesc = $('meta[name="description"]').attr('content') || '';
                 const descMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões)?) (inscritos|subscribers)/i);
                 if (descMatch) followers = descMatch[1].trim();
                 avatarUrl = $('meta[property="og:image"]').attr('content') || '';
             }
 
-            return res.json({
-                followers: null,
-                platform,
-                username: username || 'User',
-                avatarUrl,
-                url
-            });
+            return res.json({ followers: null, platform, username: username || 'User', avatarUrl, url });
 
-        } catch (error: any) {
-            console.error('[SocialMetadata] Error:', error.message);
+        } catch (error) {
+            console.error('[SocialMetadata] Error:', (error as any).message);
             res.status(500).json({ error: 'Failed to scrape social metadata' });
         }
     },
