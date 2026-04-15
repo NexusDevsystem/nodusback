@@ -270,6 +270,7 @@ export interface Product {
     collection?: string;
     storeId?: string;
     isActive?: boolean;
+    position?: number;
 }
 
 export interface Store {
@@ -488,7 +489,8 @@ export function productDbToApi(db: ProductDB): Product {
         url: db.url,
         discountCode: db.discount_code,
         storeId: db.store_id,
-        isActive: db.is_active ?? true
+        isActive: db.is_active ?? true,
+        position: db.position || 0
     };
 }
 
@@ -505,7 +507,8 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
         url: api.url,
         discount_code: api.discountCode,
         store_id: api.storeId,
-        is_active: api.isActive
+        is_active: api.isActive,
+        position: api.position
     };
 }
 
