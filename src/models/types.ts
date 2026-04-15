@@ -271,6 +271,7 @@ export interface Product {
     storeId?: string;
     isActive?: boolean;
     position?: number;
+    clicks?: number;
 }
 
 export interface Store {
@@ -490,7 +491,8 @@ export function productDbToApi(db: ProductDB): Product {
         discountCode: db.discount_code,
         storeId: db.store_id,
         isActive: db.is_active ?? true,
-        position: db.position || 0
+        position: db.position || 0,
+        clicks: db.clicks || 0
     };
 }
 
@@ -499,17 +501,22 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
         ? `${api.collection} || ${api.name}`
         : api.name;
 
-    return {
-        user_id: userId,  // FK to users(id)
+    const db: any = {
+        user_id: userId,
         name: dbName,
         price: api.price,
         image: api.image,
         url: api.url,
         discount_code: api.discountCode,
         store_id: api.storeId,
-        is_active: api.isActive,
+        is_active: api.isActive !== undefined ? api.isActive : true,
         position: api.position
     };
+
+    if (api.id) db.id = api.id;
+    if (api.clicks !== undefined) db.clicks = api.clicks;
+
+    return db;
 }
 
 export function storeDbToApi(db: StoreDB): Store {

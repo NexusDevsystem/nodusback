@@ -84,28 +84,52 @@ export const productService = {
     // Replace all products for a profile (bulk update)
     async replaceAllProducts(userId: string, products: Product[]): Promise<Product[]> {
         try {
-            // Delete existing products
-            await supabase
-                .from('products')
-                .delete()
-                .eq('user_id', userId);  // FK to users(id)
-
-            if (products.length === 0) return [];
-
-            // Insert new products with position
+            // Transform for DB
             const dbProducts = products.map((product, index) => ({
                 ...productApiToDb(product, userId),
                 position: index
             }));
 
+            // Delete products that are no longer in our list
+            const productIdsToKeep = products.map(p => p.id).filter(id => id && id.length > 10); // Simple UUID check
+            
+            if (productIdsToKeep.length > 0) {
+                await supabase
+                    .from('products')
+                    .delete()
+                    .eq('user_id', userId)
+                    .not('id', 'in', productIdsToKeep);
+            } else {
+                await supabase
+                    .from('products')
+                    .delete()
+                    .eq('user_id', userId);
+            }
+
+            if (dbProducts.length === 0) return [];
+
+            // Upsert all products
             const { data, error } = await supabase
                 .from('products')
-                .insert(dbProducts)
+                .upsert(dbProducts, { onConflict: 'id' })
                 .select();
 
             if (error) {
-                console.error('Error inserting products in bulk:', error);
-                return [];
+                console.error('❌ [productService] Error in bulk products update (upsert):', error);
+                
+                // Fallback: Delete and insert (if IDs changed or constraint issue)
+                console.log('Attempting fallback delete/insert for products...');
+                await supabase.from('products').delete().eq('user_id', userId);
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from('products')
+                    .insert(dbProducts)
+                    .select();
+                
+                if (fallbackError) {
+                    console.error('Fallback failed:', fallbackError);
+                    return [];
+                }
+                return (fallbackData as ProductDB[]).map(productDbToApi);
             }
 
             return (data as ProductDB[]).map(db => productDbToApi(db));
