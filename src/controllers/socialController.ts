@@ -262,10 +262,24 @@ export const socialController = {
                 avatarUrl = ogImage || '';
             } else if (isTiktok) {
                 platform = 'tiktok';
+                // 1. Extract username from URL safely as primary/fallback source
+                const urlParts = url.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
+                const tiktokHandle = urlParts.find(p => p.startsWith('@'));
+                if (tiktokHandle) {
+                  username = tiktokHandle.replace('@', '');
+                } else if (urlParts.length > 0) {
+                  username = urlParts[urlParts.length - 1].replace('@', '');
+                }
+
+                // 2. Try to scrape followers and avatar
                 const ogDescription = $('meta[property="og:description"]').attr('content') || '';
                 const match = ogDescription.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
                 if (match) followers = match[1].trim();
-                avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                
+                // Multiple strategies for TikTok avatar
+                avatarUrl = $('meta[property="og:image"]').attr('content') || 
+                            $('meta[name="twitter:image"]').attr('content') || '';
+                
                 if (!followers) {
                     $('strong').each((i, el) => {
                         const text = $(el).text();
@@ -280,7 +294,7 @@ export const socialController = {
                 avatarUrl = $('meta[property="og:image"]').attr('content') || '';
             }
 
-            return res.json({ followers: null, platform, username: username || 'User', avatarUrl, url });
+            return res.json({ followers: followers || null, platform, username: username || 'User', avatarUrl, url });
 
         } catch (error) {
             console.error('[SocialMetadata] Error:', (error as any).message);
