@@ -278,7 +278,24 @@ export const socialController = {
                 
                 // Multiple strategies for TikTok avatar
                 avatarUrl = $('meta[property="og:image"]').attr('content') || 
-                            $('meta[name="twitter:image"]').attr('content') || '';
+                            $('meta[name="twitter:image"]').attr('content') || 
+                            $('meta[property="twitter:image"]').attr('content') || '';
+                
+                // Backup strategy: Search for avatar in JSON state if meta tags fail
+                if (!avatarUrl) {
+                    $('script').each((_i, el) => {
+                        const content = $(el).html() || '';
+                        if (content.includes('avatarLarger') || content.includes('avatarMedium') || content.includes('avatarThumb')) {
+                            const match = content.match(/"avatarLarger":"([^"]+)"/) || 
+                                          content.match(/"avatarMedium":"([^"]+)"/) ||
+                                          content.match(/"avatarThumb":"([^"]+)"/);
+                            if (match) {
+                                avatarUrl = match[1].replace(/\\u002F/g, '/');
+                                return false;
+                            }
+                        }
+                    });
+                }
                 
                 if (!followers) {
                     $('strong').each((i, el) => {
