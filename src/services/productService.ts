@@ -84,52 +84,40 @@ export const productService = {
     // Replace all products for a profile (bulk update)
     async replaceAllProducts(userId: string, products: Product[]): Promise<Product[]> {
         try {
-            // Transform for DB
-            const dbProducts = products.map((product, index) => ({
-                ...productApiToDb(product, userId),
-                position: index
-            }));
+            // Delete ALL existing products for this user first
+            const { error: deleteError } = await supabase
+                .from('products')
+                .delete()
+                .eq('user_id', userId);
 
-            // Delete products that are no longer in our list
-            const productIdsToKeep = products.map(p => p.id).filter(id => id && id.length > 10); // Simple UUID check
-            
-            if (productIdsToKeep.length > 0) {
-                await supabase
-                    .from('products')
-                    .delete()
-                    .eq('user_id', userId)
-                    .not('id', 'in', productIdsToKeep);
-            } else {
-                await supabase
-                    .from('products')
-                    .delete()
-                    .eq('user_id', userId);
+            if (deleteError) {
+                console.error('❌ [productService] Error deleting products before bulk insert:', deleteError);
+                return [];
             }
 
-            if (dbProducts.length === 0) return [];
+            if (products.length === 0) return [];
 
-            // Upsert all products
+            // Insert all products with explicit position = array index
+            // IMPORTANT: Do NOT include the client-generated id field — let the DB generate UUIDs
+            const dbProducts = products.map((product, index) => {
+                const mapped = productApiToDb(product, userId);
+                // Remove the id so the database generates a fresh UUID for every product
+                // This completely avoids upsert conflicts and ID ownership issues
+                delete (mapped as any).id;
+                return {
+                    ...mapped,
+                    position: index
+                };
+            });
+
             const { data, error } = await supabase
                 .from('products')
-                .upsert(dbProducts, { onConflict: 'id' })
+                .insert(dbProducts)
                 .select();
 
             if (error) {
-                console.error('❌ [productService] Error in bulk products update (upsert):', error);
-                
-                // Fallback: Delete and insert (if IDs changed or constraint issue)
-                console.log('Attempting fallback delete/insert for products...');
-                await supabase.from('products').delete().eq('user_id', userId);
-                const { data: fallbackData, error: fallbackError } = await supabase
-                    .from('products')
-                    .insert(dbProducts)
-                    .select();
-                
-                if (fallbackError) {
-                    console.error('Fallback failed:', fallbackError);
-                    return [];
-                }
-                return (fallbackData as ProductDB[]).map(productDbToApi);
+                console.error('❌ [productService] Error inserting products in bulk:', error);
+                return [];
             }
 
             return (data as ProductDB[]).map(db => productDbToApi(db));
