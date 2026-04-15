@@ -176,6 +176,10 @@ export async function validateHostname(hostname: string): Promise<void> {
  * Valida uma URL fornecida pelo usuário antes de salvar no banco.
  * Rejeita IPs privados já na entrada, antes de qualquer requisição HTTP.
  *
+ * Schemas permitidos:
+ *  - http: / https:  → valida hostname via DNS (proteção SSRF completa)
+ *  - mailto: / tel: / sms: → schemas seguros que não fazem requisição HTTP (sem vetor SSRF)
+ *
  * @throws SsrfError se a URL for inválida ou aponte para recurso interno.
  */
 export async function validateUserUrl(rawUrl: string): Promise<URL> {
@@ -189,13 +193,22 @@ export async function validateUserUrl(rawUrl: string): Promise<URL> {
         );
     }
 
+    // Schemas seguros que não fazem requisição HTTP — sem risco de SSRF.
+    // Apenas a abertura no navegador do cliente (mailto abre o e-mail, tel discador, etc.)
+    const SAFE_SCHEMAS = ['mailto:', 'tel:', 'sms:'];
+    if (SAFE_SCHEMAS.includes(parsed.protocol)) {
+        return parsed;
+    }
+
+    // Para qualquer outro schema que não seja http/https, bloqueia.
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new SsrfError(
-            `Protocolo "${parsed.protocol}" não é permitido. Use http:// ou https://.`,
+            `Protocolo "${parsed.protocol}" não é permitido. Use http://, https://, mailto:, tel: ou sms://.`,
             'SSRF_INVALID_SCHEMA',
         );
     }
 
+    // http/https: resolve DNS e verifica IP
     await validateHostname(parsed.hostname);
     return parsed;
 }
