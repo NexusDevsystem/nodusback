@@ -348,6 +348,26 @@ export const socialController = {
                             console.log(`[SocialController] IG Strategy 2 (json) success: followers="${followers}"`);
                         }
                         
+                        // Strategy 2.0.1: DOM-based search from user inspection
+                        if (!followers) {
+                            // Look for <a> tags with /followers/
+                            $('a[href*="/followers/"]').each((_i, el) => {
+                                const title = $(el).find('span[title]').attr('title') || $(el).attr('title');
+                                if (title && /^[\d.,\s]+$/.test(title)) {
+                                    followers = title.trim();
+                                    console.log(`[SocialController] IG Strategy 2.0.1 (DOM title) success: followers="${followers}"`);
+                                }
+                                if (!followers) {
+                                    const text = $(el).text();
+                                    const match = text.match(/([\d.,]+[KMB]?)/);
+                                    if (match) {
+                                        followers = match[1].trim();
+                                        console.log(`[SocialController] IG Strategy 2.0.1 (DOM text) success: followers="${followers}"`);
+                                    }
+                                }
+                            });
+                        }
+                        
                         // Try finding avatarUrl
                         const picMatch = allScripts.match(/"profile_pic_url_hd":"([^"]+)"/) ||
                                         allScripts.match(/"profile_pic_url":"([^"]+)"/) ||
