@@ -266,6 +266,106 @@ export const socialController = {
             res.status(500).json({ error: 'Internal server error', details: error.message });
         }
     },
+    
+    /**
+     * Fetches metadata for Instagram profiles (username, name, avatar, follower count).
+     */
+    async getInstagramProfileInfo(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') {
+                return res.status(400).json({ error: 'URL is required' });
+            }
+
+            const lowerUrl = url.toLowerCase();
+            if (!lowerUrl.includes('instagram.com')) {
+                return res.status(400).json({ error: 'URL must be an Instagram URL' });
+            }
+
+            // Cleanup URL
+            const cleanUrl = url.split('?')[0].split('#')[0].replace(/\/$/, '');
+            console.log(`[SocialController] Fetching Instagram info for: ${cleanUrl}`);
+
+            let name = '';
+            let username = '';
+            let avatarUrl = '';
+            let followers = '';
+
+            // Extract username from URL as baseline
+            const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/);
+            if (handleMatch) username = handleMatch[1].replace('@', '');
+
+            // Fetch HTML
+            try {
+                const pageRes = await safeFetch(cleanUrl, {
+                    timeout: 8000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Cache-Control': 'no-cache',
+                    },
+                });
+
+                if (pageRes.ok) {
+                    const html = await pageRes.text();
+                    const $ = cheerio.load(html);
+
+                    // Strategy 1: og:description (Standard IG pattern: "X Followers, Y Following, Z Posts - ...")
+                    const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+                    if (metaDesc) {
+                        const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
+                        if (followersMatch) {
+                            followers = followersMatch[1].trim();
+                            console.log(`[SocialController] IG Strategy 1 success: followers="${followers}"`);
+                        }
+                    }
+
+                    // Strategy 2: og:title (Pattern: "Name (@username) • Instagram photos and videos")
+                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                    if (ogTitle) {
+                        const nameMatch = ogTitle.split(' (@')[0];
+                        if (nameMatch && !nameMatch.includes('Instagram')) {
+                            name = nameMatch.trim();
+                        }
+                        const userMatch = ogTitle.match(/\(@([^)]+)\)/);
+                        if (userMatch && !username) username = userMatch[1];
+                    }
+
+                    // strategy 3: Title fallback
+                    if (!name) {
+                        const pageTitle = $('title').text();
+                        const parts = pageTitle.split(' (')[0];
+                        if (parts && !parts.includes('Instagram')) name = parts.trim();
+                    }
+
+                    // Strategy 4: og:image (Avatar)
+                    avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                }
+            } catch (e) {
+                console.log('[SocialController] Instagram fetch error:', (e as any).message);
+            }
+
+            // Fallbacks
+            if (!username && handleMatch) username = handleMatch[1];
+            if (!name) name = username;
+
+            const followersText = followers ? `${followers} Seguidores` : '';
+
+            return res.json({
+                name: name || username || 'Instagram',
+                username: username || '',
+                avatarUrl,
+                followers: followersText,
+                platform: 'instagram',
+                profileUrl: cleanUrl
+            });
+
+        } catch (error: any) {
+            console.error('[SocialController] Error fetching Instagram info:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
 
 
     /**
