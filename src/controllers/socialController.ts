@@ -334,15 +334,19 @@ export const socialController = {
                         $('script').each((_i, el) => {
                             const content = $(el).html() || '';
                             
-                            // Try parsing followers count from JSON blob
-                            if (content.includes('edge_followed_by')) {
-                                const countMatch = content.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)/);
+                            // Try parsing followers count from JSON blob (multiple variants)
+                            if (content.includes('edge_followed_by') || content.includes('followers_count')) {
+                                const countMatch = content.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)/) ||
+                                                 content.match(/"followers":\s*(\d+)/) ||
+                                                 content.match(/"user_followers":\s*(\d+)/) ||
+                                                 content.match(/"followers_count":\s*(\d+)/);
+
                                 if (countMatch && !followers) {
                                     const count = parseInt(countMatch[1]);
                                     if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
                                     else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
                                     else followers = count.toString();
-                                    console.log(`[SocialController] IG Strategy 2 (edge) success: followers="${followers}"`);
+                                    console.log(`[SocialController] IG Strategy 2 (json) success: followers="${followers}"`);
                                 }
                             }
                             
@@ -469,7 +473,12 @@ export const socialController = {
             const isTiktok = lowerUrl.includes('tiktok.com');
             const isYoutube = lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be');
 
-            if (!isInstagram && !isTiktok && !isYoutube) {
+            if (isInstagram) {
+                // Use the better Instagram-specific logic
+                return this.getInstagramProfileInfo(req, res);
+            }
+
+            if (!isTiktok && !isYoutube) {
                 return res.status(400).json({ error: 'Unsupported social platform for scraping' });
             }
 
@@ -503,36 +512,7 @@ export const socialController = {
             let username = '';
             let avatarUrl = '';
 
-            if (isInstagram) {
-                platform = 'instagram';
-                const urlParts = url.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
-                const lastPart = urlParts[urlParts.length - 1];
-                if (lastPart && lastPart !== 'www.instagram.com' && lastPart !== 'instagram.com') {
-                    username = lastPart.replace('@', '');
-                }
-                const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                const ogImage = $('meta[property="og:image"]').attr('content') || '';
-                console.log(`[SocialScraper] IG Debug - URL: ${url}, ByteSize: ${html.length}, DescLength: ${metaDesc.length}`);
-                if (ogTitle) {
-                    const userMatch = ogTitle.match(/\(@([^)]+)\)/);
-                    if (userMatch) username = userMatch[1];
-                }
-                const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
-                if (followersMatch) {
-                    followers = followersMatch[1].trim();
-                } else {
-                    const statsMatch = metaDesc.match(/([\d.,]+[KMB]?)\s+(?:Followers|Seguidores)/i);
-                    if (statsMatch) followers = statsMatch[1];
-                }
-                if (!followers) {
-                    const parts = metaDesc.split(' ');
-                    if (parts.length > 0 && /^\d/.test(parts[0])) {
-                        followers = parts[0].replace(',', '.');
-                    }
-                }
-                avatarUrl = ogImage || '';
-            } else if (isTiktok) {
+            if (isTiktok) {
                 platform = 'tiktok';
                 // 1. Extract username from URL safely as primary/fallback source
                 const urlParts = url.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
