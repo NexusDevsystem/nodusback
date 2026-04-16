@@ -329,36 +329,45 @@ export const socialController = {
                         }
                     }
 
-                    // Strategy 2: Internal scripts (JSON-LD or sharedData)
+                    // Strategy 2: Internal scripts (JSON-LD or sharedData) - Deep Search
                     if (!followers || !avatarUrl) {
-                        $('script').each((_i, el) => {
-                            const content = $(el).html() || '';
-                            
-                            // Try parsing followers count from JSON blob (multiple variants)
-                            if (content.includes('edge_followed_by') || content.includes('followers_count')) {
-                                const countMatch = content.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)/) ||
-                                                 content.match(/"followers":\s*(\d+)/) ||
-                                                 content.match(/"user_followers":\s*(\d+)/) ||
-                                                 content.match(/"followers_count":\s*(\d+)/);
+                        const allScripts = $('script').map((_i, el) => $(el).html()).get().join('\n');
+                        
+                        // Try parsing followers count from JSON blob (multiple variants)
+                        const countMatch = allScripts.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)/) ||
+                                         allScripts.match(/"followers":\s*(\d+)/) ||
+                                         allScripts.match(/"user_followers":\s*(\d+)/) ||
+                                         allScripts.match(/"followers_count":\s*(\d+)/) ||
+                                         allScripts.match(/"count":\s*(\d+)[^}]*followed_by/);
 
-                                if (countMatch && !followers) {
-                                    const count = parseInt(countMatch[1]);
-                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                                    else followers = count.toString();
-                                    console.log(`[SocialController] IG Strategy 2 (json) success: followers="${followers}"`);
-                                }
-                            }
-                            
-                            // Try finding avatarUrl
-                            if (content.includes('profile_pic_url_hd')) {
-                                const picMatch = content.match(/"profile_pic_url_hd":"([^"]+)"/);
-                                if (picMatch && !avatarUrl) {
-                                    avatarUrl = picMatch[1].replace(/\\u002f/g, '/').replace(/\\/g, '');
-                                    console.log(`[SocialController] IG Strategy 2 (pic) success`);
-                                }
-                            }
-                        });
+                        if (countMatch && !followers) {
+                            const count = parseInt(countMatch[1]);
+                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                            else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                            else followers = count.toString();
+                            console.log(`[SocialController] IG Strategy 2 (json) success: followers="${followers}"`);
+                        }
+                        
+                        // Try finding avatarUrl
+                        const picMatch = allScripts.match(/"profile_pic_url_hd":"([^"]+)"/) ||
+                                        allScripts.match(/"profile_pic_url":"([^"]+)"/) ||
+                                        allScripts.match(/"avatar_url":"([^"]+)"/);
+                        if (picMatch && !avatarUrl) {
+                            avatarUrl = picMatch[1].replace(/\\u[0-9a-fA-F]{4}/g, (match) => 
+                                String.fromCharCode(parseInt(match.replace('\\u', ''), 16))
+                            ).replace(/\\/g, '');
+                            console.log(`[SocialController] IG Strategy 2 (pic) success`);
+                        }
+                    }
+
+                    // Strategy 2.1: Very aggressive whole-page search if still empty
+                    if (!followers) {
+                        const wholeText = $('body').text();
+                        const aggMatch = wholeText.match(/([\d.,]+[KMB]?)\s+(?:Followers|Seguidores)/i);
+                        if (aggMatch) {
+                            followers = aggMatch[1].trim();
+                            console.log(`[SocialController] IG Strategy 2.1 success: followers="${followers}"`);
+                        }
                     }
 
                     // Strategy 3: og:title (Pattern: "Name (@username) • Instagram photos and videos")
