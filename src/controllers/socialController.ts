@@ -35,97 +35,117 @@ export const socialController = {
             let avatarUrl = '';
             let subscribers = '';
 
-            // ─── Strategy 0: InnerTube API (YouTube's own internal API — no key required) ───
-            // This is the most reliable method. YouTube uses this internally for every page load.
-            console.log(`[SocialController] 🔄 Attempting Strategy 0 (InnerTube) for browseId...`);
+            // ─── Strategy 0: InnerTube API (YouTube's own internal API) ───
+            console.log(`[SocialController] 🔄 Attempting Strategy 0 (InnerTube) for URL: ${url}`);
             try {
-                const handleMatch = url.match(/\/@([^/?#]+)/);
+                const handleMatch = url.match(/\/(@[^/?#]+)/);
                 const channelIdMatch = url.match(/\/channel\/([^/?#]+)/);
-                const browseId = handleMatch ? `@${handleMatch[1]}` : channelIdMatch?.[1];
+                let browseId = channelIdMatch?.[1];
+                const handle = handleMatch?.[1];
 
-                console.log(`[SocialController] browseId resolved: "${browseId}"`);
+                const innerTubeContext = {
+                    client: {
+                        clientName: 'WEB',
+                        clientVersion: '2.20240410.01.00',
+                        hl: 'pt',
+                        gl: 'BR',
+                        utcOffsetMinutes: -180,
+                    }
+                };
 
-                if (browseId) {
-                    const innerTubeBody = JSON.stringify({
-                        context: {
-                            client: {
-                                clientName: 'WEB',
-                                clientVersion: '2.20240101.00.00',
-                                hl: 'pt',
-                                gl: 'BR',
-                            }
-                        },
-                        browseId
+                // If it's a handle, we need to resolve it to a channelId (UC...) first
+                if (!browseId && handle) {
+                    console.log(`[SocialController] Resolving handle "${handle}"...`);
+                    const resolveRes = await safeFetch('https://www.youtube.com/youtubei/v1/navigation/resolve_url', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.youtube.com' },
+                        body: JSON.stringify({
+                            context: innerTubeContext,
+                            url: `https://www.youtube.com/${handle}`
+                        }),
                     });
 
-                    const innerTubeRes = await safeFetch(
-                        'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
-                        {
-                            method: 'POST',
-                            timeout: 10000,
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                                'X-YouTube-Client-Name': '1',
-                                'X-YouTube-Client-Version': '2.20240101.00.00',
-                                'Origin': 'https://www.youtube.com',
-                                'Referer': 'https://www.youtube.com/',
-                            },
-                            body: innerTubeBody,
-                        }
-                    );
+                    if (resolveRes.ok) {
+                        const resolveData: any = await resolveRes.json();
+                        browseId = resolveData?.endpoint?.browseEndpoint?.browseId;
+                        console.log(`[SocialController] Resolved handle to browseId: "${browseId}"`);
+                    } else {
+                        console.log(`[SocialController] Failed to resolve handle. Status: ${resolveRes.status}`);
+                    }
+                }
 
-                    console.log(`[SocialController] InnerTube HTTP status: ${innerTubeRes.status}`);
+                if (browseId) {
+                    const innerTubeRes = await safeFetch('https://www.youtube.com/youtubei/v1/browse', {
+                        method: 'POST',
+                        timeout: 10000,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                            'X-Youtube-Client-Name': '1',
+                            'X-Youtube-Client-Version': '2.20240410.01.00',
+                            'Origin': 'https://www.youtube.com',
+                            'Referer': 'https://www.youtube.com/',
+                        },
+                        body: JSON.stringify({
+                            context: innerTubeContext,
+                            browseId
+                        }),
+                    });
+
+                    console.log(`[SocialController] InnerTube browse status: ${innerTubeRes.status}`);
 
                     if (innerTubeRes.ok) {
                         const data: any = await innerTubeRes.json();
-                        const headerKeys = Object.keys(data?.header ?? {});
-                        console.log(`[SocialController] InnerTube header keys: [${headerKeys.join(', ')}]`);
-
+                        
+                        // Try various paths in the InnerTube JSON to find subscriber count
+                        const header = data?.header?.c4TabbedHeaderRenderer 
+                            || data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
+                        
                         if (data?.header?.c4TabbedHeaderRenderer) {
                             const hdr = data.header.c4TabbedHeaderRenderer;
-                            if (hdr.title) name = hdr.title;
-
-                            // Avatar: pick highest resolution thumbnail
+                            name = name || hdr.title || '';
                             const thumbs = hdr.avatar?.thumbnails ?? [];
                             if (thumbs.length) avatarUrl = thumbs[thumbs.length - 1].url;
-
-                            // Subscribers
-                            const subRaw = hdr.subscriberCountText?.simpleText
-                                ?? hdr.subscriberCountText?.runs?.[0]?.text
-                                ?? '';
-                            subscribers = subRaw.replace(/\s*(de\s*)?(inscritos?|subscribers?)/gi, '').trim();
-                            console.log(`[SocialController] ✅ Strategy 0 (c4TabbedHeaderRenderer): name="${name}", subs="${subscribers}", subRaw="${subRaw}"`);
-
-                        } else if (data?.header?.pageHeaderRenderer) {
-                            // Newer YouTube layout (pageHeaderRenderer)
-                            const meta = data?.metadata?.channelMetadataRenderer;
-                            if (meta?.title) name = meta.title;
-                            if (meta?.avatar?.thumbnails?.length) {
-                                const thumbs = meta.avatar.thumbnails;
-                                avatarUrl = thumbs[thumbs.length - 1].url;
-                            }
-                            const headerVm = data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
-                            const subText = headerVm?.metadata?.contentMetadataViewModel?.metadataRows
-                                ?.flatMap((r: any) => r.metadataParts ?? [])
-                                ?.find((p: any) => /inscritos|subscribers/i.test(p.text?.content ?? ''))
-                                ?.text?.content ?? '';
+                            
+                            const subText = hdr.subscriberCountText?.simpleText || hdr.subscriberCountText?.runs?.[0]?.text || '';
                             if (subText) {
                                 subscribers = subText.replace(/\s*(de\s*)?(inscritos?|subscribers?)/gi, '').trim();
                             }
-                            console.log(`[SocialController] ✅ Strategy 0 (pageHeaderRenderer): name="${name}", subs="${subscribers}"`);
-                        } else {
-                            console.log(`[SocialController] ⚠️ Strategy 0: no known header. Keys: ${headerKeys.join(', ')}`);
-                            // Log a snippet to see what structure YouTube returned
-                            try { console.log(`[SocialController] InnerTube snippet: ${JSON.stringify(data).substring(0, 500)}`); } catch {}
+                        } else if (data?.header?.pageHeaderRenderer) {
+                            const hdrVm = data.header.pageHeaderRenderer.content.pageHeaderViewModel;
+                            name = name || hdrVm?.title?.dynamicTextViewModel?.text?.content || '';
+                            
+                            // Avatar from metadata
+                            const meta = data?.metadata?.channelMetadataRenderer;
+                            if (meta?.avatar?.thumbnails?.length) {
+                                avatarUrl = meta.avatar.thumbnails[meta.avatar.thumbnails.length - 1].url;
+                            }
+
+                            // Sub count from metadata rows
+                            const rows = hdrVm?.metadata?.contentMetadataViewModel?.metadataRows || [];
+                            for (const row of rows) {
+                                const parts = row.metadataParts || [];
+                                for (const part of parts) {
+                                    const text = part.text?.content || '';
+                                    if (/inscritos|subscribers/i.test(text)) {
+                                        subscribers = text.replace(/\s*(de\s*)?(inscritos?|subscribers?)/gi, '').trim();
+                                        break;
+                                    }
+                                }
+                                if (subscribers) break;
+                            }
+                        }
+
+                        if (name || subscribers) {
+                            console.log(`[SocialController] ✅ Strategy 0 success: name="${name}", subs="${subscribers}"`);
                         }
                     } else {
                         const body = await innerTubeRes.text().catch(() => '');
-                        console.log(`[SocialController] ⚠️ Strategy 0 (InnerTube) non-200: ${innerTubeRes.status} — ${body.substring(0, 200)}`);
+                        console.log(`[SocialController] ⚠️ Strategy 0 browse error: ${innerTubeRes.status} — ${body.substring(0, 100)}`);
                     }
                 }
             } catch (e) {
-                console.log('[SocialController] Strategy 0 (InnerTube) threw:', (e as any).message);
+                console.log('[SocialController] Strategy 0 fatal error:', (e as any).message);
             }
 
             // ─── Strategies 1-8: HTML scraping fallbacks ───
