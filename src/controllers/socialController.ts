@@ -43,11 +43,17 @@ export const socialController = {
             let pageRes: globalThis.Response;
             try {
                 const result = await safeFetch(fetchUrl, {
-                    timeout: 5000,
+                    timeout: 8000,
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Cache-Control': 'no-cache',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Upgrade-Insecure-Requests': '1',
                     },
                 });
                 pageRes = result;
@@ -67,61 +73,102 @@ export const socialController = {
             const html = await pageRes.text();
             const $ = cheerio.load(html);
 
-            // 1. Channel Name from og:title
-            name = $('meta[property="og:title"]').attr('content') || $('title').text().replace(' - YouTube', '') || '';
-
-            // 2. Avatar from og:image
+            // --- Strategy 1: og:title and og:image (basic meta tags) ---
+            name = $('meta[property="og:title"]').attr('content') || $('title').text().replace(/ - YouTube$/, '').trim() || '';
             avatarUrl = $('meta[property="og:image"]').attr('content') || '';
 
-            // 3. Subscriber Count - multiple strategies
+            // --- Strategy 2: Meta description subscriber count ---
             const metaDesc = $('meta[name="description"]').attr('content') || '';
-            console.log(`[SocialController] Meta description: "${metaDesc}"`);
-
-            // Strategy A: meta description patterns (Portuguese + English)
-            const descMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões)?) (inscritos|subscribers)/i);
+            console.log(`[SocialController] Meta desc (${metaDesc.length} chars): "${metaDesc.substring(0, 100)}"`);
+            const descMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões|thousand|million|billion)?)\s*(inscritos|subscribers)/i);
             if (descMatch) {
                 subscribers = descMatch[1].trim();
-                console.log(`[SocialController] Found subscribers via meta: ${subscribers}`);
+                console.log(`[SocialController] ✅ Strategy 2 (meta desc): ${subscribers}`);
             }
 
-            // Strategy B: ytInitialData in page scripts
+            // --- Strategies 3-6: Parse ytInitialData JSON from page scripts ---
             if (!subscribers) {
+                // Extract the full ytInitialData script content
+                let ytData = '';
                 $('script').each((_i: any, el: any) => {
                     const content = $(el).html() || '';
-                    if (!content.includes('subscriberCountText')) return true;
-
-                    // simpleText: "1,2 mi" or "12 mil" etc.
-                    const simpleMatch = content.match(/"subscriberCountText"\s*:\s*\{"simpleText"\s*:\s*"([^"]+)"\}/);
-                    if (simpleMatch) {
-                        subscribers = simpleMatch[1];
-                        console.log(`[SocialController] Found via simpleText: ${subscribers}`);
-                        return false;
-                    }
-
-                    // accessibility label: "1,24 million subscribers"
-                    const labelMatch = content.match(/"subscriberCountText"[^}]{0,200}"label"\s*:\s*"([^"]+)"/);
-                    if (labelMatch) {
-                        // Keep only the number part, remove "subscribers" / "inscritos"
-                        subscribers = labelMatch[1].replace(/\s+(subscribers?|inscritos?).*/i, '').trim();
-                        console.log(`[SocialController] Found via label: ${subscribers}`);
-                        return false;
+                    if (content.includes('subscriberCountText') || content.includes('ytInitialData')) {
+                        ytData += content + '\n';
                     }
                 });
+
+                if (ytData) {
+                    // Strategy 3: simpleText format {"simpleText":"1,23 mi de inscritos"}
+                    const s3 = ytData.match(/"subscriberCountText"\s*:\s*\{"simpleText"\s*:\s*"([^"]+)"\}/);
+                    if (s3) {
+                        subscribers = s3[1].replace(/\s*(inscritos?|subscribers?)/i, '').trim();
+                        console.log(`[SocialController] ✅ Strategy 3 (simpleText): ${subscribers}`);
+                    }
+
+                    // Strategy 4: runs format {"runs":[{"text":"..."}]}
+                    if (!subscribers) {
+                        const s4 = ytData.match(/"subscriberCountText"\s*:\s*\{"runs"\s*:\s*\[\{"text"\s*:\s*"([^"]+)"/);
+                        if (s4) {
+                            subscribers = s4[1].replace(/\s*(inscritos?|subscribers?)/i, '').trim();
+                            console.log(`[SocialController] ✅ Strategy 4 (runs): ${subscribers}`);
+                        }
+                    }
+
+                    // Strategy 5: accessibility label
+                    if (!subscribers) {
+                        const s5 = ytData.match(/"subscriberCountText"[^}]{0,300}"label"\s*:\s*"([^"]+)"/);
+                        if (s5) {
+                            subscribers = s5[1].replace(/\s*(inscritos?|subscribers?).*/i, '').trim();
+                            console.log(`[SocialController] ✅ Strategy 5 (label): ${subscribers}`);
+                        }
+                    }
+
+                    // Strategy 6: raw numeric count from subscriberCount field
+                    if (!subscribers) {
+                        const s6 = ytData.match(/"subscriberCount"\s*:\s*"(\d+)"/);
+                        if (s6) {
+                            const rawNum = parseInt(s6[1]);
+                            if (rawNum >= 1_000_000_000) subscribers = `${(rawNum / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+                            else if (rawNum >= 1_000_000) subscribers = `${(rawNum / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+                            else if (rawNum >= 1_000) subscribers = `${(rawNum / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+                            else if (rawNum > 0) subscribers = String(rawNum);
+                            if (subscribers) console.log(`[SocialController] ✅ Strategy 6 (raw count): ${subscribers}`);
+                        }
+                    }
+                } else {
+                    console.log('[SocialController] ⚠️ No ytInitialData with subscriberCountText found in page scripts');
+                }
             }
 
-            // Strategy C: fallback - extract from URL handle
+            // --- Strategy 7: YouTube oEmbed API for name/avatar fallback (no key needed) ---
+            if (!name || !avatarUrl) {
+                try {
+                    const oembedRes = await safeFetch(
+                        `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+                        { timeout: 4000 }
+                    );
+                    if (oembedRes.ok) {
+                        const oembedData: any = await oembedRes.json();
+                        if (!name && oembedData.author_name) name = oembedData.author_name;
+                        if (!avatarUrl && oembedData.thumbnail_url) avatarUrl = oembedData.thumbnail_url;
+                        console.log(`[SocialController] ✅ Strategy 7 (oembed): name="${oembedData.author_name}"`);
+                    }
+                } catch (e) {
+                    console.log('[SocialController] oembed fallback failed:', (e as any).message);
+                }
+            }
+
+            // --- Strategy 8: username from URL handle as last resort for name ---
             if (!name) {
                 const handleMatch = url.match(/\/@([^/?#]+)/);
                 if (handleMatch) name = handleMatch[1];
             }
 
-            // Format subscribers with "inscritos" suffix if found
-            const subscribersText = subscribers ? `${subscribers} inscritos` : 'Canal do YouTube';
-
-            console.log(`[SocialController] Result - name: "${name}", avatar: ${avatarUrl ? 'yes' : 'no'}, subscribers: "${subscribersText}"`);
+            const subscribersText = subscribers ? `${subscribers} inscritos` : '';
+            console.log(`[SocialController] Final result — name: "${name}", avatar: ${avatarUrl ? 'yes' : 'no'}, subscribers: "${subscribersText}"`);
 
             return res.json({
-                name: name || 'Canal do YouTube',
+                name: name || '',
                 avatarUrl,
                 subscribers: subscribersText,
                 platform: 'youtube',
