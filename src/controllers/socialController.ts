@@ -504,7 +504,7 @@ export const socialController = {
 
             if (isInstagram) {
                 // Use the better Instagram-specific logic
-                return this.getInstagramProfileInfo(req, res);
+                return socialController.getInstagramProfileInfo(req, res);
             }
 
             if (!isTiktok && !isYoutube) {
