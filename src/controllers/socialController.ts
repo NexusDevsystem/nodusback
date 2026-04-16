@@ -282,8 +282,11 @@ export const socialController = {
                 return res.status(400).json({ error: 'URL must be an Instagram URL' });
             }
 
-            // Cleanup URL
-            const cleanUrl = url.split('?')[0].split('#')[0].replace(/\/$/, '');
+            // Cleanup URL and ensure it has www for better results
+            let cleanUrl = url.split('?')[0].split('#')[0].replace(/\/$/, '');
+            if (cleanUrl.includes('instagram.com') && !cleanUrl.includes('www.instagram.com')) {
+                cleanUrl = cleanUrl.replace('instagram.com', 'www.instagram.com');
+            }
             console.log(`[SocialController] Fetching Instagram info for: ${cleanUrl}`);
 
             let name = '';
@@ -304,6 +307,9 @@ export const socialController = {
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
                         'Cache-Control': 'no-cache',
+                        'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
                     },
                 });
 
@@ -314,14 +320,44 @@ export const socialController = {
                     // Strategy 1: og:description (Standard IG pattern: "X Followers, Y Following, Z Posts - ...")
                     const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                     if (metaDesc) {
-                        const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
+                        const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
+                                             metaDesc.match(/(?:Followers|Seguidores):\s*([\d.,]+[KMB]?)/i) ||
+                                             metaDesc.match(/([\d.,]+[KMB]?)\s+seguidores/i);
                         if (followersMatch) {
                             followers = followersMatch[1].trim();
                             console.log(`[SocialController] IG Strategy 1 success: followers="${followers}"`);
                         }
                     }
 
-                    // Strategy 2: og:title (Pattern: "Name (@username) • Instagram photos and videos")
+                    // Strategy 2: Internal scripts (JSON-LD or sharedData)
+                    if (!followers || !avatarUrl) {
+                        $('script').each((_i, el) => {
+                            const content = $(el).html() || '';
+                            
+                            // Try parsing followers count from JSON blob
+                            if (content.includes('edge_followed_by')) {
+                                const countMatch = content.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)/);
+                                if (countMatch && !followers) {
+                                    const count = parseInt(countMatch[1]);
+                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                    else followers = count.toString();
+                                    console.log(`[SocialController] IG Strategy 2 (edge) success: followers="${followers}"`);
+                                }
+                            }
+                            
+                            // Try finding avatarUrl
+                            if (content.includes('profile_pic_url_hd')) {
+                                const picMatch = content.match(/"profile_pic_url_hd":"([^"]+)"/);
+                                if (picMatch && !avatarUrl) {
+                                    avatarUrl = picMatch[1].replace(/\\u002f/g, '/').replace(/\\/g, '');
+                                    console.log(`[SocialController] IG Strategy 2 (pic) success`);
+                                }
+                            }
+                        });
+                    }
+
+                    // Strategy 3: og:title (Pattern: "Name (@username) • Instagram photos and videos")
                     const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                     if (ogTitle) {
                         const nameMatch = ogTitle.split(' (@')[0];
@@ -332,15 +368,17 @@ export const socialController = {
                         if (userMatch && !username) username = userMatch[1];
                     }
 
-                    // strategy 3: Title fallback
+                    // strategy 4: Title fallback
                     if (!name) {
                         const pageTitle = $('title').text();
                         const parts = pageTitle.split(' (')[0];
                         if (parts && !parts.includes('Instagram')) name = parts.trim();
                     }
 
-                    // Strategy 4: og:image (Avatar)
-                    avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                    // Strategy 5: og:image (Avatar fallback)
+                    if (!avatarUrl) {
+                        avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                    }
                 }
             } catch (e) {
                 console.log('[SocialController] Instagram fetch error:', (e as any).message);

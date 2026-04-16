@@ -230,7 +230,7 @@ export async function ssrfFetch(
     url: string,
     options: SsrfFetchOptions = {},
 ): Promise<SsrfFetchResult> {
-    const { timeout = 5000, maxRedirects = 3, ...fetchOptions } = options;
+    const { timeout = 5000, maxRedirects = 10, ...fetchOptions } = options;
 
     let currentUrl = url;
     let redirectsLeft = maxRedirects;
