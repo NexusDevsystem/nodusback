@@ -37,10 +37,13 @@ export const socialController = {
 
             // ─── Strategy 0: InnerTube API (YouTube's own internal API — no key required) ───
             // This is the most reliable method. YouTube uses this internally for every page load.
+            console.log(`[SocialController] 🔄 Attempting Strategy 0 (InnerTube) for browseId...`);
             try {
                 const handleMatch = url.match(/\/@([^/?#]+)/);
                 const channelIdMatch = url.match(/\/channel\/([^/?#]+)/);
                 const browseId = handleMatch ? `@${handleMatch[1]}` : channelIdMatch?.[1];
+
+                console.log(`[SocialController] browseId resolved: "${browseId}"`);
 
                 if (browseId) {
                     const innerTubeBody = JSON.stringify({
@@ -55,26 +58,29 @@ export const socialController = {
                         browseId
                     });
 
-                    const innerTubeRes = await safeFetch('https://www.youtube.com/youtubei/v1/browse', {
-                        method: 'POST',
-                        timeout: 8000,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                            'X-YouTube-Client-Name': '1',
-                            'X-YouTube-Client-Version': '2.20240101.00.00',
-                            'Origin': 'https://www.youtube.com',
-                            'Referer': 'https://www.youtube.com/',
-                        },
-                        body: innerTubeBody,
-                    });
+                    const innerTubeRes = await safeFetch(
+                        'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+                        {
+                            method: 'POST',
+                            timeout: 10000,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                                'X-YouTube-Client-Name': '1',
+                                'X-YouTube-Client-Version': '2.20240101.00.00',
+                                'Origin': 'https://www.youtube.com',
+                                'Referer': 'https://www.youtube.com/',
+                            },
+                            body: innerTubeBody,
+                        }
+                    );
+
+                    console.log(`[SocialController] InnerTube HTTP status: ${innerTubeRes.status}`);
 
                     if (innerTubeRes.ok) {
                         const data: any = await innerTubeRes.json();
-
-                        // InnerTube response: header.c4TabbedHeaderRenderer (most channels)
-                        const h = data?.header?.c4TabbedHeaderRenderer
-                            ?? data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
+                        const headerKeys = Object.keys(data?.header ?? {});
+                        console.log(`[SocialController] InnerTube header keys: [${headerKeys.join(', ')}]`);
 
                         if (data?.header?.c4TabbedHeaderRenderer) {
                             const hdr = data.header.c4TabbedHeaderRenderer;
@@ -89,6 +95,7 @@ export const socialController = {
                                 ?? hdr.subscriberCountText?.runs?.[0]?.text
                                 ?? '';
                             subscribers = subRaw.replace(/\s*(de\s*)?(inscritos?|subscribers?)/gi, '').trim();
+                            console.log(`[SocialController] ✅ Strategy 0 (c4TabbedHeaderRenderer): name="${name}", subs="${subscribers}", subRaw="${subRaw}"`);
 
                         } else if (data?.header?.pageHeaderRenderer) {
                             // Newer YouTube layout (pageHeaderRenderer)
@@ -98,7 +105,6 @@ export const socialController = {
                                 const thumbs = meta.avatar.thumbnails;
                                 avatarUrl = thumbs[thumbs.length - 1].url;
                             }
-                            // Subscriber count in engagementPanels or channelHeaderViewModel
                             const headerVm = data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
                             const subText = headerVm?.metadata?.contentMetadataViewModel?.metadataRows
                                 ?.flatMap((r: any) => r.metadataParts ?? [])
@@ -107,17 +113,19 @@ export const socialController = {
                             if (subText) {
                                 subscribers = subText.replace(/\s*(de\s*)?(inscritos?|subscribers?)/gi, '').trim();
                             }
-                        }
-
-                        if (name || subscribers) {
-                            console.log(`[SocialController] ✅ Strategy 0 (InnerTube): name="${name}", subs="${subscribers}"`);
+                            console.log(`[SocialController] ✅ Strategy 0 (pageHeaderRenderer): name="${name}", subs="${subscribers}"`);
                         } else {
-                            console.log(`[SocialController] ⚠️ Strategy 0 (InnerTube): received data but could not extract fields. Keys: ${Object.keys(data?.header ?? {}).join(', ')}`);
+                            console.log(`[SocialController] ⚠️ Strategy 0: no known header. Keys: ${headerKeys.join(', ')}`);
+                            // Log a snippet to see what structure YouTube returned
+                            try { console.log(`[SocialController] InnerTube snippet: ${JSON.stringify(data).substring(0, 500)}`); } catch {}
                         }
+                    } else {
+                        const body = await innerTubeRes.text().catch(() => '');
+                        console.log(`[SocialController] ⚠️ Strategy 0 (InnerTube) non-200: ${innerTubeRes.status} — ${body.substring(0, 200)}`);
                     }
                 }
             } catch (e) {
-                console.log('[SocialController] Strategy 0 (InnerTube) failed:', (e as any).message);
+                console.log('[SocialController] Strategy 0 (InnerTube) threw:', (e as any).message);
             }
 
             // ─── Strategies 1-8: HTML scraping fallbacks ───
