@@ -6,6 +6,10 @@ import { blogService } from '../services/blogService.js';
 import axios from 'axios';
 import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 
+// In-memory cache for Instagram profiles (avoids hitting Instagram's rate limits)
+const igCache = new Map<string, { data: any; expiresAt: number }>();
+const IG_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+
 export const socialController = {
 
     /**
@@ -298,6 +302,14 @@ export const socialController = {
             const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/);
             if (handleMatch) username = handleMatch[1].replace('@', '');
 
+            // Check server-side cache first
+            const cacheKey = `ig:${username.toLowerCase()}`;
+            const cached = igCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) {
+                console.log(`[SocialController] IG cache hit for: ${username}`);
+                return res.json(cached.data);
+            }
+
             // Strategy 0: Instagram's internal JSON API (web_profile_info)
             // This is Instagram's own internal API endpoint that returns profile data in JSON
             try {
@@ -350,7 +362,9 @@ export const socialController = {
                     },
                 });
 
-                if (pageRes.ok) {
+                if (!pageRes.ok) {
+                    console.log(`[SocialController] IG HTML fallback returned ${pageRes.status}, giving up`);
+                } else if (pageRes.ok) {
                     const html = await pageRes.text();
                     const $ = cheerio.load(html);
 
@@ -428,15 +442,22 @@ export const socialController = {
             if (!name) name = username;
 
             const followersText = followers ? `${followers} Seguidores` : '';
-
-            return res.json({
+            const result = {
                 name: name || username || 'Instagram',
                 username: username || '',
                 avatarUrl,
                 followers: followersText,
                 platform: 'instagram',
                 profileUrl: cleanUrl
-            });
+            };
+
+            // Cache result if we got meaningful data
+            if (name || avatarUrl || followersText) {
+                igCache.set(cacheKey, { data: result, expiresAt: Date.now() + IG_CACHE_TTL_MS });
+                console.log(`[SocialController] IG Result cached for ${username}`);
+            }
+
+            return res.json(result);
 
         } catch (error: any) {
             console.error('[SocialController] Error fetching Instagram info:', error);
