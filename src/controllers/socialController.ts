@@ -188,7 +188,7 @@ export const socialController = {
 
             // Strategy 0: JSON API
             try {
-                const apiRes = await safeFetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`, {
+                const apiRes = await axios.get(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`, {
                     timeout: 5000,
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
@@ -197,8 +197,8 @@ export const socialController = {
                     },
                 });
 
-                if (apiRes.ok) {
-                    const data: any = await apiRes.json();
+                if (apiRes.status === 200) {
+                    const data: any = apiRes.data;
                     const user = data?.data?.user;
                     if (user) {
                         name = user.full_name;
