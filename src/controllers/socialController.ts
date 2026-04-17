@@ -180,40 +180,11 @@ export const socialController = {
             const cached = igCache.get(cacheKey);
             if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
 
-            console.log(`[SocialController] Fetching IG info for: ${username}`);
+            console.log(`[SocialController] Fetching IG info (Stable HTML) for: ${username}`);
 
             let name = '';
             let avatarUrl = '';
             let followers = '';
-
-            // Strategy 0: JSON API
-            try {
-                const apiRes = await safeFetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`, {
-                    timeout: 5000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                        'x-ig-app-id': '936619743392459',
-                        'x-requested-with': 'XMLHttpRequest',
-                    },
-                });
-
-                if (apiRes.ok) {
-                    const data: any = await apiRes.json();
-                    const user = data?.data?.user;
-                    if (user) {
-                        name = user.full_name;
-                        avatarUrl = user.profile_pic_url_hd || user.profile_pic_url;
-                        const count = user.edge_followed_by?.count;
-                        if (count !== undefined) {
-                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                            else if (count >= 1000) followers = Math.round(count / 100) / 10 + 'K';
-                            else followers = count.toString();
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log('[SocialController] IG API error:', (e as any).message);
-            }
 
             // Strategy 1: HTML Fallback
             if (!name || !avatarUrl || !followers) {
@@ -233,13 +204,7 @@ export const socialController = {
                             const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || metaDesc.match(/^([\d.,]+)/);
                             if (match) followers = match[1];
                         }
-                        // Filter out generic IG logo from og:image
-                        const ogImage = $('meta[property="og:image"]').attr('content') || '';
-                        const isGenericLogo = ogImage.includes('static.cdninstagram.com') || ogImage.includes('instagram.com/static') || ogImage.includes('rsrc.php');
-                        if (!avatarUrl && ogImage && !isGenericLogo) {
-                            avatarUrl = ogImage;
-                        }
-
+                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
                         if (!name) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
                     }
                 } catch (e) {
