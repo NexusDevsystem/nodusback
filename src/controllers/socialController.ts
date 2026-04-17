@@ -298,7 +298,44 @@ export const socialController = {
             const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/);
             if (handleMatch) username = handleMatch[1].replace('@', '');
 
-            // Fetch HTML
+            // Strategy 0: Instagram's internal JSON API (web_profile_info)
+            // This is Instagram's own internal API endpoint that returns profile data in JSON
+            try {
+                const apiRes = await safeFetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`, {
+                    timeout: 8000,
+                    headers: {
+                        'User-Agent': 'Instagram 123.0.0.23.114 (iPhone; CPU iPhone OS 16_0 like Mac OS X; en_US; en-US; scale=2.00; 750x1334) AppleWebKit/420+',
+                        'x-ig-app-id': '936619743392459',
+                        'Accept': '*/*',
+                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8',
+                    },
+                });
+
+                if (apiRes.ok) {
+                    const data: any = await apiRes.json();
+                    const user = data?.data?.user;
+                    if (user) {
+                        name = user.full_name || '';
+                        username = user.username || username;
+                        avatarUrl = user.profile_pic_url_hd || user.profile_pic_url || '';
+                        const followerCount = user.edge_followed_by?.count || user.follower_count;
+                        if (followerCount !== undefined) {
+                            const count = parseInt(followerCount);
+                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                            else if (count >= 1000) followers = Math.round(count / 100) / 10 + 'K';
+                            else followers = count.toString();
+                        }
+                        console.log(`[SocialController] IG Strategy 0 (API) success: name="${name}", followers="${followers}", avatar=${avatarUrl ? 'yes' : 'no'}`);
+                    }
+                } else {
+                    console.log(`[SocialController] IG API returned ${apiRes.status}, trying HTML scraping`);
+                }
+            } catch (e) {
+                console.log('[SocialController] IG API error:', (e as any).message);
+            }
+
+            // Fetch HTML (Fallback strategies)
+            if (!name || !avatarUrl || !followers) {
             try {
                 const pageRes = await safeFetch(cleanUrl, {
                     timeout: 8000,
@@ -317,82 +354,54 @@ export const socialController = {
                     const html = await pageRes.text();
                     const $ = cheerio.load(html);
 
-                    // Strategy 1: og:description (Standard IG pattern: "X Followers, Y Following, Z Posts - ...")
                     const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                    if (metaDesc) {
-                        const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
-                                             metaDesc.match(/(?:Followers|Seguidores):\s*([\d.,]+[KMB]?)/i) ||
-                                             metaDesc.match(/([\d.,]+[KMB]?)\s+seguidores/i);
+                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                    const ogImg = $('meta[property="og:image"]').attr('content') || '';
+                    console.log(`[SocialController] IG HTML: desc="${metaDesc.substring(0, 120)}", title="${ogTitle}"`);
+
+                    // Strategy 1: og:description followers
+                    if (!followers && metaDesc) {
+                        const followersMatch = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) ||
+                                             metaDesc.match(/([\d.,]+[KMB]?)\s+seguidores/i) ||
+                                             metaDesc.match(/^([\d.,]+)/); // First number in description
                         if (followersMatch) {
                             followers = followersMatch[1].trim();
-                            console.log(`[SocialController] IG Strategy 1 success: followers="${followers}"`);
+                            console.log(`[SocialController] IG Strategy 1 (desc) success: followers="${followers}"`);
                         }
                     }
 
-                    // Strategy 2: Internal scripts (JSON-LD or sharedData) - Deep Search
-                    if (!followers || !avatarUrl) {
-                        const allScripts = $('script').map((_i, el) => $(el).html()).get().join('\n');
-                        
-                        // Try parsing followers count from JSON blob (multiple variants)
+                    // Strategy 2: Deep script search for JSON data
+                    const allScripts = $('script').map((_i, el) => $(el).html()).get().join('\n');
+                    
+                    if (!followers) {
                         const countMatch = allScripts.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)/) ||
-                                         allScripts.match(/"followers":\s*(\d+)/) ||
-                                         allScripts.match(/"user_followers":\s*(\d+)/) ||
-                                         allScripts.match(/"followers_count":\s*(\d+)/) ||
-                                         allScripts.match(/"count":\s*(\d+)[^}]*followed_by/);
-
-                        if (countMatch && !followers) {
+                                         allScripts.match(/"follower_count":\s*(\d+)/) ||
+                                         allScripts.match(/"followers_count":\s*(\d+)/);
+                        if (countMatch) {
                             const count = parseInt(countMatch[1]);
                             if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                            else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                            else if (count >= 1000) followers = Math.round(count / 100) / 10 + 'K';
                             else followers = count.toString();
                             console.log(`[SocialController] IG Strategy 2 (json) success: followers="${followers}"`);
                         }
-                        
-                        // Strategy 2.0.1: DOM-based search from user inspection
-                        if (!followers) {
-                            // Look for <a> tags with /followers/
-                            $('a[href*="/followers/"]').each((_i, el) => {
-                                const title = $(el).find('span[title]').attr('title') || $(el).attr('title');
-                                if (title && /^[\d.,\s]+$/.test(title)) {
-                                    followers = title.trim();
-                                    console.log(`[SocialController] IG Strategy 2.0.1 (DOM title) success: followers="${followers}"`);
-                                }
-                                if (!followers) {
-                                    const text = $(el).text();
-                                    const match = text.match(/([\d.,]+[KMB]?)/);
-                                    if (match) {
-                                        followers = match[1].trim();
-                                        console.log(`[SocialController] IG Strategy 2.0.1 (DOM text) success: followers="${followers}"`);
-                                    }
-                                }
-                            });
-                        }
-                        
-                        // Try finding avatarUrl
+                    }
+
+                    if (!avatarUrl) {
                         const picMatch = allScripts.match(/"profile_pic_url_hd":"([^"]+)"/) ||
-                                        allScripts.match(/"profile_pic_url":"([^"]+)"/) ||
-                                        allScripts.match(/"avatar_url":"([^"]+)"/);
-                        if (picMatch && !avatarUrl) {
-                            avatarUrl = picMatch[1].replace(/\\u[0-9a-fA-F]{4}/g, (match) => 
-                                String.fromCharCode(parseInt(match.replace('\\u', ''), 16))
+                                        allScripts.match(/"profile_pic_url":"([^"]+)"/);
+                        if (picMatch) {
+                            avatarUrl = picMatch[1].replace(/\\u[0-9a-fA-F]{4}/g, (m) =>
+                                String.fromCharCode(parseInt(m.replace('\\u', ''), 16))
                             ).replace(/\\/g, '');
                             console.log(`[SocialController] IG Strategy 2 (pic) success`);
+                        } else if (ogImg) {
+                            avatarUrl = ogImg;
+                            console.log(`[SocialController] IG Strategy 3 (og:image) success: ${ogImg.substring(0, 60)}`);
                         }
                     }
 
-                    // Strategy 2.1: Very aggressive whole-page search if still empty
-                    if (!followers) {
-                        const wholeText = $('body').text();
-                        const aggMatch = wholeText.match(/([\d.,]+[KMB]?)\s+(?:Followers|Seguidores)/i);
-                        if (aggMatch) {
-                            followers = aggMatch[1].trim();
-                            console.log(`[SocialController] IG Strategy 2.1 success: followers="${followers}"`);
-                        }
-                    }
-
-                    // Strategy 3: og:title (Pattern: "Name (@username) • Instagram photos and videos")
-                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                    if (ogTitle) {
+                    // Strategy 3: og:title for name
+                    if (!name && ogTitle) {
                         const nameMatch = ogTitle.split(' (@')[0];
                         if (nameMatch && !nameMatch.includes('Instagram')) {
                             name = nameMatch.trim();
@@ -401,21 +410,18 @@ export const socialController = {
                         if (userMatch && !username) username = userMatch[1];
                     }
 
-                    // strategy 4: Title fallback
                     if (!name) {
                         const pageTitle = $('title').text();
                         const parts = pageTitle.split(' (')[0];
                         if (parts && !parts.includes('Instagram')) name = parts.trim();
                     }
-
-                    // Strategy 5: og:image (Avatar fallback)
-                    if (!avatarUrl) {
-                        avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                    }
                 }
             } catch (e) {
-                console.log('[SocialController] Instagram fetch error:', (e as any).message);
+                console.log('[SocialController] Instagram HTML fetch error:', (e as any).message);
             }
+            } // end fallback block
+
+            console.log(`[SocialController] IG Final: name="${name}", followers="${followers}", avatar=${avatarUrl ? 'yes' : 'no'}`);
 
             // Fallbacks
             if (!username && handleMatch) username = handleMatch[1];
