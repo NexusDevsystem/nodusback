@@ -299,8 +299,8 @@ export const socialController = {
             let avatarUrl = '';
             let followers = '';
 
-            // Extract username from URL as baseline
-            const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/);
+            // Extract username from URL as baseline (case-insensitive match)
+            const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/i);
             if (handleMatch) username = handleMatch[1].replace('@', '');
 
             // Check server-side cache first
@@ -353,18 +353,22 @@ export const socialController = {
                 const pageRes = await safeFetch(cleanUrl, {
                     timeout: 8000,
                     headers: {
-                        // Facebook's crawler UA triggers Instagram's pre-rendered version WITH og:tags (followers, avatar, etc.)
-                        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+                        // Use Twitterbot or other social crawler UAs which often get pre-rendered content
+                        'User-Agent': 'Twitterbot/1.0',
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8',
                     },
                 });
 
                 if (!pageRes.ok) {
-                    console.log(`[SocialController] IG HTML fallback returned ${pageRes.status}, giving up`);
-                } else if (pageRes.ok) {
-                    const html = await pageRes.text();
-                    const $ = cheerio.load(html);
+                    console.log(`[SocialController] IG HTML fallback (Twitterbot) returned ${pageRes.status}, giving up`);
+                } else {
+                    const finalUrl = pageRes.url?.toLowerCase() || '';
+                    if (finalUrl.includes('login') || finalUrl.includes('accounts/')) {
+                        console.log(`[SocialController] IG HTML fallback blocked by login wall (Twitterbot)`);
+                    } else {
+                        const html = await pageRes.text();
+                        const $ = cheerio.load(html);
 
                     const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                     const ogTitle = $('meta[property="og:title"]').attr('content') || '';
@@ -427,11 +431,12 @@ export const socialController = {
                         const parts = pageTitle.split(' (')[0];
                         if (parts && !parts.includes('Instagram')) name = parts.trim();
                     }
-                }
+                    } // closes Inner Else (369)
+                } // closes Outer Else (365)
             } catch (e) {
                 console.log('[SocialController] Instagram HTML fetch error:', (e as any).message);
             }
-            } // end fallback block
+            } // end fallback block (351)
 
             console.log(`[SocialController] IG Final: name="${name}", followers="${followers}", avatar=${avatarUrl ? 'yes' : 'no'}`);
 
@@ -475,8 +480,9 @@ export const socialController = {
                 return res.status(400).json({ error: 'URL is required' });
             }
 
-            // Extract username from URL as baseline
-            const urlParts = url.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
+            // Extract username from URL as baseline (using lowercased URL for safe matching)
+            const lowerUrl = url.toLowerCase();
+            const urlParts = lowerUrl.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
             const tiktokHandle = urlParts.find(p => p.startsWith('@'));
             let handle = tiktokHandle ? tiktokHandle.replace('@', '') : '';
             if (!handle && urlParts.length > 0) {
