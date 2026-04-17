@@ -305,7 +305,7 @@ export const socialController = {
 
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
-                name: name || `@${handle}`,
+                name: `@${handle.replace('@', '')}`,
                 username: handle,
                 avatarUrl,
                 followers: followersText,
