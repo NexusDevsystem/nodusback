@@ -233,7 +233,13 @@ export const socialController = {
                             const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || metaDesc.match(/^([\d.,]+)/);
                             if (match) followers = match[1];
                         }
-                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
+                        // Filter out generic IG logo from og:image
+                        const ogImage = $('meta[property="og:image"]').attr('content') || '';
+                        const isGenericLogo = ogImage.includes('static.cdninstagram.com') || ogImage.includes('instagram.com/static') || ogImage.includes('rsrc.php');
+                        if (!avatarUrl && ogImage && !isGenericLogo) {
+                            avatarUrl = ogImage;
+                        }
+
                         if (!name) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
                     }
                 } catch (e) {
