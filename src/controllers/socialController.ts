@@ -450,6 +450,7 @@ export const socialController = {
                 username: username || '',
                 avatarUrl,
                 followers: followersText,
+                subscribers: followersText, // Alias for compatibility
                 platform: 'instagram',
                 profileUrl: cleanUrl
             };
@@ -571,6 +572,7 @@ export const socialController = {
                 username: handle,
                 avatarUrl,
                 followers: followersText,
+                subscribers: followersText, // Alias for compatibility
                 platform: 'tiktok',
                 profileUrl: url
             };
@@ -748,7 +750,15 @@ export const socialController = {
                 avatarUrl = $('meta[property="og:image"]').attr('content') || '';
             }
 
-            return res.json({ followers: followers || null, platform, username: username || 'User', avatarUrl, url });
+            const followersText = followers ? (isYoutube ? `${followers} inscritos` : `${followers} Seguidores`) : '';
+            return res.json({ 
+                followers: followersText || null, 
+                subscribers: followersText || null, // Alias for compatibility
+                platform, 
+                username: username || 'User', 
+                avatarUrl, 
+                url 
+            });
 
         } catch (error) {
             console.error('[SocialMetadata] Error:', (error as any).message);

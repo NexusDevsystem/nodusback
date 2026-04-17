@@ -9,6 +9,9 @@ router.get('/youtube', socialController.getYoutubeChannelInfo);
 // GET /api/social/instagram?url=<profile_url>
 router.get('/instagram', socialController.getInstagramProfileInfo);
 
+// GET /api/social/tiktok?url=<profile_url>
+router.get('/tiktok', socialController.getTiktokProfileInfo);
+
 // GET /api/social/discord?url=<invite_url>
 router.get('/discord', socialController.getDiscordInviteInfo);
 
