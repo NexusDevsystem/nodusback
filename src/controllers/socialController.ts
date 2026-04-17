@@ -352,13 +352,10 @@ export const socialController = {
                 const pageRes = await safeFetch(cleanUrl, {
                     timeout: 8000,
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Cache-Control': 'no-cache',
-                        'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-                        'Sec-Ch-Ua-Mobile': '?0',
-                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        // Facebook's crawler UA triggers Instagram's pre-rendered version WITH og:tags (followers, avatar, etc.)
+                        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8',
                     },
                 });
 
@@ -451,10 +448,12 @@ export const socialController = {
                 profileUrl: cleanUrl
             };
 
-            // Cache result if we got meaningful data
-            if (name || avatarUrl || followersText) {
+            // Cache result only if we got meaningful data BEYOND just the username
+            if (avatarUrl || followersText) {
                 igCache.set(cacheKey, { data: result, expiresAt: Date.now() + IG_CACHE_TTL_MS });
                 console.log(`[SocialController] IG Result cached for ${username}`);
+            } else {
+                console.log(`[SocialController] IG No useful data found for ${username}, not caching`);
             }
 
             return res.json(result);
