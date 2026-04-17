@@ -6,9 +6,10 @@ import { blogService } from '../services/blogService.js';
 import axios from 'axios';
 import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 
-// In-memory cache for Instagram profiles (avoids hitting Instagram's rate limits)
+// In-memory cache for social profiles (avoids hitting rate limits)
 const igCache = new Map<string, { data: any; expiresAt: number }>();
-const IG_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+const tiktokCache = new Map<string, { data: any; expiresAt: number }>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
 export const socialController = {
 
@@ -450,7 +451,7 @@ export const socialController = {
 
             // Cache result only if we got meaningful data BEYOND just the username
             if (avatarUrl || followersText) {
-                igCache.set(cacheKey, { data: result, expiresAt: Date.now() + IG_CACHE_TTL_MS });
+                igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
                 console.log(`[SocialController] IG Result cached for ${username}`);
             } else {
                 console.log(`[SocialController] IG No useful data found for ${username}, not caching`);
@@ -460,6 +461,124 @@ export const socialController = {
 
         } catch (error: any) {
             console.error('[SocialController] Error fetching Instagram info:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    /**
+     * Fetches metadata for TikTok profiles (username, name, avatar, follower count).
+     */
+    async getTiktokProfileInfo(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') {
+                return res.status(400).json({ error: 'URL is required' });
+            }
+
+            // Extract username from URL as baseline
+            const urlParts = url.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
+            const tiktokHandle = urlParts.find(p => p.startsWith('@'));
+            let handle = tiktokHandle ? tiktokHandle.replace('@', '') : '';
+            if (!handle && urlParts.length > 0) {
+                handle = urlParts[urlParts.length - 1].replace('@', '');
+            }
+
+            if (!handle) {
+                return res.status(400).json({ error: 'Could not extract TikTok handle from URL' });
+            }
+
+            // Check server-side cache first
+            const cacheKey = `tiktok:${handle.toLowerCase()}`;
+            const cached = tiktokCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) {
+                console.log(`[SocialController] TikTok cache hit for: ${handle}`);
+                return res.json(cached.data);
+            }
+
+            console.log(`[SocialController] Fetching TikTok info for: @${handle}`);
+
+            let name = '';
+            let avatarUrl = '';
+            let followers = '';
+
+            try {
+                const pageRes = await safeFetch(url, {
+                    timeout: 8000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                    },
+                });
+
+                if (pageRes.ok) {
+                    const html = await pageRes.text();
+                    const $ = cheerio.load(html);
+
+                    const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                    const ogImg = $('meta[property="og:image"]').attr('content') || '';
+
+                    // Strategy 1: og:description followers (TikTok: "X Followers, Y Likes. ...")
+                    const followersMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i) || 
+                                         metaDesc.match(/([\d.,km\s]+)\s*(?:inscritos|subscribers)/i);
+                    if (followersMatch) followers = followersMatch[1].trim();
+
+                    // Strategy 2: Deep search JSON in scripts
+                    const allScripts = $('script').map((_i, el) => $(el).html()).get().join('\n');
+                    
+                    if (!followers) {
+                        const countMatch = allScripts.match(/"followerCount":\s*(\d+)/) || 
+                                         allScripts.match(/"stats":\s*\{\s*"followerCount":\s*(\d+)/);
+                        if (countMatch) {
+                            const count = parseInt(countMatch[1]);
+                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                            else if (count >= 1000) followers = Math.round(count / 100) / 10 + 'K';
+                            else followers = count.toString();
+                        }
+                    }
+
+                    if (!avatarUrl) {
+                        const picMatch = allScripts.match(/"avatarLarger":"([^"]+)"/) || 
+                                        allScripts.match(/"avatarMedium":"([^"]+)"/);
+                        if (picMatch) {
+                            avatarUrl = picMatch[1].replace(/\\u[0-9a-fA-F]{4}/g, (m) => 
+                                String.fromCharCode(parseInt(m.replace('\\u', ''), 16))
+                            ).replace(/\\/g, '');
+                        } else if (ogImg) {
+                            avatarUrl = ogImg;
+                        }
+                    }
+
+                    if (ogTitle) {
+                        const nameMatch = ogTitle.split(' | TikTok')[0];
+                        if (nameMatch) name = nameMatch.trim();
+                    }
+                }
+            } catch (e) {
+                console.log('[SocialController] TikTok fetch error:', (e as any).message);
+            }
+
+            const followersText = followers ? `${followers} Seguidores` : '';
+            const result = {
+                name: name || `@${handle}`,
+                username: handle,
+                avatarUrl,
+                followers: followersText,
+                platform: 'tiktok',
+                profileUrl: url
+            };
+
+            // Cache result if we got meaningful data
+            if (avatarUrl || followersText) {
+                tiktokCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+                console.log(`[SocialController] TikTok Result cached for @${handle}`);
+            }
+
+            return res.json(result);
+
+        } catch (error: any) {
+            console.error('[SocialController] Error fetching TikTok info:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     },
@@ -531,6 +650,11 @@ export const socialController = {
             if (isInstagram) {
                 // Use the better Instagram-specific logic
                 return socialController.getInstagramProfileInfo(req, res);
+            }
+
+            if (isTiktok) {
+                // Use the better TikTok-specific logic
+                return socialController.getTiktokProfileInfo(req, res);
             }
 
             if (!isTiktok && !isYoutube) {
