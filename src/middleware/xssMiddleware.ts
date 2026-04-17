@@ -8,7 +8,16 @@ import xss from 'xss';
  */
 const clean = (data: any): any => {
     if (typeof data === 'string') {
-        return xss(data);
+        // First sanitize to remove malicious tags
+        const sanitized = xss(data);
+        // Then decode basic symbols that xss escapes but are safe for React/Plaintext
+        // This prevents double-escaping (e.g. "->" becoming "&gt;" in DB and "&amp;gt;" in React)
+        return sanitized
+            .replace(/&gt;/g, '>')
+            .replace(/&lt;/g, '<')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
     }
     
     if (Array.isArray(data)) {
