@@ -200,11 +200,38 @@ export const socialController = {
                         const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                         
+                        // Deep JSON Regex Search (Bypass Meta Tags)
+                        const followerMatch = html.match(/"edge_followed_by":\s*\{\s*"count":\s*(\d+)\s*\}/) || html.match(/"follower_count":\s*(\d+)/);
+                        if (followerMatch) {
+                            const count = parseInt(followerMatch[1], 10);
+                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                            else if (count >= 1000) followers = Math.round(count / 100) / 10 + 'K';
+                            else followers = count.toString();
+                        }
+                        
+                        const avatarMatch = html.match(/"profile_pic_url_hd":\s*"([^"]+)"/) || html.match(/"profile_pic_url":\s*"([^"]+)"/);
+                        if (avatarMatch) {
+                            const parsedAvatar = avatarMatch[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+                            const isGenericLogo = parsedAvatar.includes('static.cdninstagram.com') || parsedAvatar.includes('instagram.com/static') || parsedAvatar.includes('rsrc.php');
+                            if (!isGenericLogo) {
+                                avatarUrl = parsedAvatar;
+                            }
+                        }
+
+                        // Fallback to Meta Tags if JSON regex failed
                         if (!followers && metaDesc) {
                             const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || metaDesc.match(/^([\d.,]+)/);
                             if (match) followers = match[1];
                         }
-                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
+                        
+                        if (!avatarUrl) {
+                            const ogImage = $('meta[property="og:image"]').attr('content') || '';
+                            const isGenericLogo = ogImage.includes('static.cdninstagram.com') || ogImage.includes('instagram.com/static') || ogImage.includes('rsrc.php');
+                            if (!isGenericLogo && ogImage) {
+                                avatarUrl = ogImage;
+                            }
+                        }
+
                         if (!name) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
                     }
                 } catch (e) {
