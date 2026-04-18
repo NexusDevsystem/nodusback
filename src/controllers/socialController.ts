@@ -446,7 +446,7 @@ export const socialController = {
 
             // Kick is tricky. We try the API first, then HTML.
             try {
-                const apiRes = await safeFetch(`https://kick.com/api/v1/channels/${username}`, {
+                const apiRes = await safeFetch(`https://api.kick.com/v1/channels/${username}`, {
                     timeout: 5000,
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -486,10 +486,29 @@ export const socialController = {
                         
                         name = name || $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
                         avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
+
+                        // Deep scan fallback for Kick's specific file structure if meta fails
+                        if (!avatarUrl || avatarUrl.includes('default')) {
+                            const imgMatch = html.match(/https:\/\/files\.kick\.com\/images\/user\/\d+\/profile_image\/[^\s"']+/);
+                            if (imgMatch) {
+                                avatarUrl = imgMatch[0].replace(/\\/g, '');
+                            }
+                        }
                         
                         const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                         const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
                         if (fMatch) followers = fMatch[1].trim();
+
+                        // JSON-LD or internal state scan for followers if meta fails
+                        if (!followers) {
+                            const folMatch = html.match(/"followers_count":\s*(\d+)/i) || html.match(/"followers":\s*(\d+)/i);
+                            if (folMatch) {
+                                const count = parseInt(folMatch[1]);
+                                if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                else followers = count.toString();
+                            }
+                        }
                     }
                 } catch (e) {
                     console.log('[SocialController] Kick HTML error:', (e as any).message);
