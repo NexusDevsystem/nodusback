@@ -15,6 +15,12 @@ router.get('/tiktok', socialController.getTiktokProfileInfo);
 // GET /api/social/discord?url=<invite_url>
 router.get('/discord', socialController.getDiscordInviteInfo);
 
+// GET /api/social/twitch?url=<channel_url>
+router.get('/twitch', socialController.getTwitchProfileInfo);
+
+// GET /api/social/kick?url=<channel_url>
+router.get('/kick', socialController.getKickProfileInfo);
+
 // GET /api/social/metadata?url=<profile_url>
 router.get('/metadata', socialController.getSocialMetadata);
 

@@ -9,6 +9,8 @@ import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 // In-memory cache for social profiles (avoids hitting rate limits)
 const igCache = new Map<string, { data: any; expiresAt: number }>();
 const tiktokCache = new Map<string, { data: any; expiresAt: number }>();
+const twitchCache = new Map<string, { data: any; expiresAt: number }>();
+const kickCache = new Map<string, { data: any; expiresAt: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
 export const socialController = {
@@ -346,6 +348,134 @@ export const socialController = {
     },
 
     /**
+     * Fetches metadata for Twitch channels.
+     */
+    async getTwitchProfileInfo(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
+
+            const username = url.split('/').filter(p => p).pop()?.toLowerCase();
+            if (!username) return res.status(400).json({ error: 'Invalid Twitch URL' });
+
+            const cacheKey = `twitch:${username}`;
+            const cached = twitchCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+
+            console.log(`[SocialController] Fetching Twitch info for: ${username}`);
+
+            let name = '';
+            let avatarUrl = '';
+            let followers = '';
+
+            // Strategy: HTML Scraping (fast, no tokens needed)
+            try {
+                const pageRes = await safeFetch(url, {
+                    timeout: 8000,
+                    headers: { 'User-Agent': 'facebookexternalhit/1.1' },
+                });
+
+                if (pageRes.ok) {
+                    const html = await pageRes.text();
+                    const $ = cheerio.load(html);
+                    
+                    name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
+                    avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                    const metaDesc = $('meta[property="og:description"]').attr('content') || '';
+                    
+                    // Twitch often includes follow count in og:description or title
+                    const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                    if (fMatch) followers = fMatch[1].trim();
+                }
+            } catch (e) {
+                console.log('[SocialController] Twitch scrape error:', (e as any).message);
+            }
+
+            const followersText = followers ? `${followers} Seguidores` : '';
+            const result = {
+                name: name || username,
+                username,
+                avatarUrl,
+                followers: followersText,
+                subscribers: followersText,
+                platform: 'twitch',
+                profileUrl: url
+            };
+
+            if (avatarUrl || followersText) twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            return res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: 'Twitch server error' });
+        }
+    },
+
+    /**
+     * Fetches metadata for Kick channels.
+     */
+    async getKickProfileInfo(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
+
+            const username = url.split('/').filter(p => p).pop();
+            if (!username) return res.status(400).json({ error: 'Invalid Kick URL' });
+
+            const cacheKey = `kick:${username.toLowerCase()}`;
+            const cached = kickCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+
+            console.log(`[SocialController] Fetching Kick info for: ${username}`);
+
+            let name = '';
+            let avatarUrl = '';
+            let followers = '';
+
+            try {
+                // Kick's HTML has good OG tags
+                const pageRes = await safeFetch(`https://kick.com/${username}`, {
+                    timeout: 8000,
+                    headers: { 
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html',
+                    },
+                });
+
+                if (pageRes.ok) {
+                    const html = await pageRes.text();
+                    const $ = cheerio.load(html);
+                    
+                    name = $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
+                    avatarUrl = $('meta[property="og:image"]').attr('content') || `https://avatar.kick.com/${username}`;
+                    const metaDesc = $('meta[property="og:description"]').attr('content') || '';
+                    
+                    // Kick usually doesn't put followers in OG tags, so we might just get name/avatar
+                    // but we can try to find it in the description if present
+                    const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                    if (fMatch) followers = fMatch[1].trim();
+                }
+            } catch (e) {
+                console.log('[SocialController] Kick error:', (e as any).message);
+            }
+
+            const followersText = followers ? `${followers} Seguidores` : '';
+            const result = {
+                name: name || username,
+                username,
+                avatarUrl,
+                followers: followersText,
+                subscribers: followersText,
+                platform: 'kick',
+                profileUrl: url
+            };
+
+            if (avatarUrl) kickCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            return res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: 'Kick server error' });
+        }
+    },
+
+    /**
      * Unified search.
      */
     async getSocialMetadata(req: Request, res: Response) {
@@ -362,6 +492,14 @@ export const socialController = {
         if (lowerUrl.includes('tiktok.com')) {
             console.log('[SocialMetadata] Routing to TikTok handler');
             return socialController.getTiktokProfileInfo(req, res);
+        }
+        if (lowerUrl.includes('twitch.tv')) {
+            console.log('[SocialMetadata] Routing to Twitch handler');
+            return socialController.getTwitchProfileInfo(req, res);
+        }
+        if (lowerUrl.includes('kick.com')) {
+            console.log('[SocialMetadata] Routing to Kick handler');
+            return socialController.getKickProfileInfo(req, res);
         }
         
         try {
