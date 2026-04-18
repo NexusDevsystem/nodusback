@@ -153,7 +153,10 @@ export async function validateHostname(hostname: string): Promise<void> {
     // Resolução DNS para hostnames
     let addresses: string[];
     try {
-        addresses = await dns.resolve(hostname);
+        // dns.lookup usa o resolver do sistema (getaddrinfo), que é mais robusto
+        // e consistente com o que o fetch/axios usam internamente.
+        const lookupResults = await dns.lookup(hostname, { all: true });
+        addresses = lookupResults.map(r => r.address);
     } catch {
         // Se o DNS falhar (NXDOMAIN, timeout), não tenta — lance o erro original para o chamador
         throw new SsrfError(
