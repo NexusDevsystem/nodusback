@@ -375,7 +375,7 @@ export const socialController = {
                 const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
                     headers: { 
-                        'User-Agent': 'facebookexternalhit/1.1',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
                 });
@@ -387,21 +387,18 @@ export const socialController = {
                     name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                     
-                    // Twitch often includes follow count in og:description or specialized tags
-                    // Support formats like "23,3 mil seguidores", "10.6K followers", etc.
-                    const fMatch = html.match(/([\d.,]+)\s*(?:&nbsp;|\s)*(?:mil|K|k|M|m)?\s*(?:followers|seguidores)/i) ||
-                                   metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                    // 1. Exact match from the user's screenshot: <p>...mil seguidores</p>
+                    const pMatch = html.match(/>([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores<\/p>/i) ||
+                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i);
                     
-                    if (fMatch) {
-                        let val = fMatch[1].replace(',', '.').trim();
-                        const fullText = fMatch[0].toLowerCase();
-                        if (fullText.includes('mil') || fullText.includes(' k')) {
-                             followers = val + 'K';
-                        } else {
-                             followers = val;
-                        }
+                    if (pMatch) {
+                        followers = pMatch[1].replace(',', '.') + 'K';
+                    } else {
+                        // 2. Fallback: Search in all meta tags and raw HTML for standard formats
+                        const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
+                                       html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                        if (fMatch) followers = fMatch[1].trim();
                     }
 
                     // Fallback: search for various follower count patterns in JSON state
