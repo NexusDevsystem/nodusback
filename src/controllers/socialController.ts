@@ -152,7 +152,7 @@ export const socialController = {
                 }
             }
 
-            const subscribersText = subscribers ? `${subscribers} inscritos` : '';
+            const subscribersText = subscribers ? `YouTube • ${subscribers} inscritos` : 'YouTube';
             return res.json({
                 name: name || '',
                 avatarUrl,
@@ -243,7 +243,8 @@ export const socialController = {
                 }
             }
 
-            const followersText = followers ? `${followers} Seguidores` : '';
+            const platformName = 'Instagram';
+            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
             const result = {
                 name: name || username || 'Instagram',
                 username,
@@ -305,7 +306,8 @@ export const socialController = {
                 console.log('[SocialController] TikTok error:', (e as any).message);
             }
 
-            const followersText = followers ? `${followers} Seguidores` : '';
+            const platformName = 'TikTok';
+            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
             const result = {
                 name: `@${handle.replace('@', '')}`,
                 username: handle,
@@ -387,25 +389,35 @@ export const socialController = {
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                     const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                     
-                    // Twitch often includes follow count in og:description: "Join them as they play [Game] with [Followers] followers."
-                    // Also works for PT: "...com [Followers] seguidores."
+                    // Twitch often includes follow count in og:description
                     const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
-                                   ogTitle.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                                   ogTitle.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
+                                   html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                     
                     if (fMatch) {
                         followers = fMatch[1].trim();
                     } else {
-                        // Strategy 2: Look for it in the script tags or title if description fails
-                        const title = $('title').text();
-                        const tMatch = title.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                        const tMatch = $('title').text().match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                         if (tMatch) followers = tMatch[1].trim();
+                    }
+
+                    // Fallback: search for "followerCount" in JSON-like blocks
+                    if (!followers) {
+                        const jsonMatch = html.match(/"follower[Cc]ount":\s*(\d+)/);
+                        if (jsonMatch) {
+                            const count = parseInt(jsonMatch[1]);
+                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                            else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                            else followers = count.toString();
+                        }
                     }
                 }
             } catch (e) {
                 console.log('[SocialController] Twitch scrape error:', (e as any).message);
             }
 
-            const followersText = followers ? `${followers} Seguidores` : '';
+            const platformName = 'Twitch';
+            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
             const result = {
                 name: name || username,
                 username,
@@ -446,10 +458,10 @@ export const socialController = {
 
             // Kick is tricky. We try the API first, then HTML.
             try {
-                const apiRes = await safeFetch(`https://api.kick.com/v1/channels/${username}`, {
+                const apiRes = await safeFetch(`https://kick.com/api/v1/channels/${username}`, {
                     timeout: 5000,
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
                         'Accept': 'application/json'
                     }
                 });
@@ -489,9 +501,10 @@ export const socialController = {
 
                         // Deep scan fallback for Kick's specific file structure if meta fails
                         if (!avatarUrl || avatarUrl.includes('default')) {
-                            const imgMatch = html.match(/https:\/\/files\.kick\.com\/images\/user\/\d+\/profile_image\/[^\s"']+/);
-                            if (imgMatch) {
-                                avatarUrl = imgMatch[0].replace(/\\/g, '');
+                            const allFilesMatches = html.match(/https:\/\/files\.kick\.com\/[^\s"']+/g);
+                            if (allFilesMatches) {
+                                const profileImg = allFilesMatches.find(m => m.includes('profile_image'));
+                                if (profileImg) avatarUrl = profileImg.replace(/\\/g, '');
                             }
                         }
                         
@@ -501,12 +514,18 @@ export const socialController = {
 
                         // JSON-LD or internal state scan for followers if meta fails
                         if (!followers) {
-                            const folMatch = html.match(/"followers_count":\s*(\d+)/i) || html.match(/"followers":\s*(\d+)/i);
+                            const folMatch = html.match(/"followers_count":\s*(\d+)/i) || 
+                                             html.match(/"followers":\s*(\d+)/i) ||
+                                             html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                             if (folMatch) {
-                                const count = parseInt(folMatch[1]);
-                                if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                                else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                                else followers = count.toString();
+                                if (folMatch[1].match(/^\d+$/)) {
+                                    const count = parseInt(folMatch[1]);
+                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                    else followers = count.toString();
+                                } else {
+                                    followers = folMatch[1].trim();
+                                }
                             }
                         }
                     }
@@ -515,7 +534,8 @@ export const socialController = {
                 }
             }
 
-            const followersText = followers ? `${followers} Seguidores` : '';
+            const platformName = 'Kick';
+            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
             const result = {
                 name: name || username,
                 username,
