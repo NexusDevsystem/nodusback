@@ -152,7 +152,7 @@ export const socialController = {
                 }
             }
 
-            const subscribersText = subscribers ? `YouTube • ${subscribers} inscritos` : 'YouTube';
+            const subscribersText = subscribers ? `${subscribers} inscritos` : '';
             return res.json({
                 name: name || '',
                 avatarUrl,
@@ -244,7 +244,7 @@ export const socialController = {
             }
 
             const platformName = 'Instagram';
-            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
+            const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: name || username || 'Instagram',
                 username,
@@ -307,7 +307,7 @@ export const socialController = {
             }
 
             const platformName = 'TikTok';
-            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
+            const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: `@${handle.replace('@', '')}`,
                 username: handle,
@@ -375,7 +375,7 @@ export const socialController = {
                 const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
                     headers: { 
-                        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+                        'User-Agent': 'facebookexternalhit/1.1',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
                 });
@@ -389,21 +389,27 @@ export const socialController = {
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                     const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                     
-                    // Twitch often includes follow count in og:description
-                    const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
-                                   ogTitle.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
-                                   html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                    // Twitch often includes follow count in og:description or specialized tags
+                    // Support formats like "23,3 mil seguidores", "10.6K followers", etc.
+                    const fMatch = html.match(/([\d.,]+)\s*(?:&nbsp;|\s)*(?:mil|K|k|M|m)?\s*(?:followers|seguidores)/i) ||
+                                   metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                     
                     if (fMatch) {
-                        followers = fMatch[1].trim();
-                    } else {
-                        const tMatch = $('title').text().match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
-                        if (tMatch) followers = tMatch[1].trim();
+                        let val = fMatch[1].replace(',', '.').trim();
+                        const fullText = fMatch[0].toLowerCase();
+                        if (fullText.includes('mil') || fullText.includes(' k')) {
+                             followers = val + 'K';
+                        } else {
+                             followers = val;
+                        }
                     }
 
-                    // Fallback: search for "followerCount" in JSON-like blocks
+                    // Fallback: search for various follower count patterns in JSON state
                     if (!followers) {
-                        const jsonMatch = html.match(/"follower[Cc]ount":\s*(\d+)/);
+                        const jsonMatch = html.match(/"follower[Cc]ount":\s*(\d+)/) || 
+                                         html.match(/"total":\s*(\d+)[^}]*followers/i) ||
+                                         html.match(/followers[^}]*"total":\s*(\d+)/i) ||
+                                         html.match(/"followers":\s*(\d+)/i);
                         if (jsonMatch) {
                             const count = parseInt(jsonMatch[1]);
                             if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
@@ -417,7 +423,7 @@ export const socialController = {
             }
 
             const platformName = 'Twitch';
-            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
+            const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: name || username,
                 username,
@@ -534,8 +540,7 @@ export const socialController = {
                 }
             }
 
-            const platformName = 'Kick';
-            const followersText = followers ? `${platformName} • ${followers} Seguidores` : platformName;
+            const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: name || username,
                 username,
