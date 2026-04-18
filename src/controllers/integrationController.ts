@@ -289,7 +289,7 @@ export const connectKickAccount = async (req: Request, res: Response) => {
         let profileData: any = {
             username: cleanUsername,
             display_name: cleanUsername,
-            avatar_url: `https://avatar.kick.com/${cleanUsername}`,
+            avatar_url: '',
             follower_count: 0,
             is_live: false
         };

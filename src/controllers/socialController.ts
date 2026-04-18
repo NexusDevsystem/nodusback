@@ -485,7 +485,7 @@ export const socialController = {
                         const $ = cheerio.load(html);
                         
                         name = name || $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
-                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || `https://avatar.kick.com/${username}`;
+                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
                         
                         const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                         const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
@@ -500,7 +500,7 @@ export const socialController = {
             const result = {
                 name: name || username,
                 username,
-                avatarUrl: avatarUrl || `https://avatar.kick.com/${username}`,
+                avatarUrl: avatarUrl || '',
                 followers: followersText,
                 subscribers: followersText,
                 platform: 'kick',

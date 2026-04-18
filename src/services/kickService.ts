@@ -220,7 +220,7 @@ export const handleCallback = async (code: string, userId: string, stateVerifier
         const profileData = {
             username: kickUsername,
             display_name: kickUser.name || kickUsername,
-            avatar_url: kickUser.profile_picture || kickUser.profile_pic || `https://avatar.kick.com/${kickUsername}`,
+            avatar_url: kickUser.profile_picture || kickUser.profile_pic || '',
             follower_count: followerCount,
             is_live: isLive,
             id: kickUser.id || kickUser.user_id
