@@ -368,11 +368,14 @@ export const socialController = {
             let avatarUrl = '';
             let followers = '';
 
-            // Strategy: HTML Scraping (fast, no tokens needed)
             try {
-                const pageRes = await safeFetch(url, {
+                // Using a more "official" crawler user agent
+                const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
-                    headers: { 'User-Agent': 'facebookexternalhit/1.1' },
+                    headers: { 
+                        'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                    },
                 });
 
                 if (pageRes.ok) {
@@ -382,10 +385,21 @@ export const socialController = {
                     name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
+                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                     
-                    // Twitch often includes follow count in og:description or title
-                    const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
-                    if (fMatch) followers = fMatch[1].trim();
+                    // Twitch often includes follow count in og:description: "Join them as they play [Game] with [Followers] followers."
+                    // Also works for PT: "...com [Followers] seguidores."
+                    const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
+                                   ogTitle.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                    
+                    if (fMatch) {
+                        followers = fMatch[1].trim();
+                    } else {
+                        // Strategy 2: Look for it in the script tags or title if description fails
+                        const title = $('title').text();
+                        const tMatch = title.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                        if (tMatch) followers = tMatch[1].trim();
+                    }
                 }
             } catch (e) {
                 console.log('[SocialController] Twitch scrape error:', (e as any).message);
@@ -430,38 +444,63 @@ export const socialController = {
             let avatarUrl = '';
             let followers = '';
 
+            // Kick is tricky. We try the API first, then HTML.
             try {
-                // Kick's HTML has good OG tags
-                const pageRes = await safeFetch(`https://kick.com/${username}`, {
-                    timeout: 8000,
-                    headers: { 
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html',
-                    },
+                const apiRes = await safeFetch(`https://kick.com/api/v1/channels/${username}`, {
+                    timeout: 5000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
                 });
-
-                if (pageRes.ok) {
-                    const html = await pageRes.text();
-                    const $ = cheerio.load(html);
+                
+                if (apiRes.ok) {
+                    const data: any = await apiRes.json();
+                    name = data.user?.username || data.name || username;
+                    avatarUrl = data.user?.profile_pic || data.user?.profile_image || data.profile_pic || '';
                     
-                    name = $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
-                    avatarUrl = $('meta[property="og:image"]').attr('content') || `https://avatar.kick.com/${username}`;
-                    const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                    
-                    // Kick usually doesn't put followers in OG tags, so we might just get name/avatar
-                    // but we can try to find it in the description if present
-                    const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
-                    if (fMatch) followers = fMatch[1].trim();
+                    const count = data.followersCount ?? data.followers_count ?? data.subscriber_count;
+                    if (count !== undefined) {
+                        if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                        else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                        else followers = count.toString();
+                    }
                 }
             } catch (e) {
-                console.log('[SocialController] Kick error:', (e as any).message);
+                console.log('[SocialController] Kick API attempt failed, trying HTML...');
+            }
+
+            if (!avatarUrl || !followers) {
+                try {
+                    const pageRes = await safeFetch(`https://kick.com/${username}`, {
+                        timeout: 8000,
+                        headers: { 
+                            'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+                            'Accept': 'text/html',
+                        },
+                    });
+
+                    if (pageRes.ok) {
+                        const html = await pageRes.text();
+                        const $ = cheerio.load(html);
+                        
+                        name = name || $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
+                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || `https://avatar.kick.com/${username}`;
+                        
+                        const metaDesc = $('meta[property="og:description"]').attr('content') || '';
+                        const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                        if (fMatch) followers = fMatch[1].trim();
+                    }
+                } catch (e) {
+                    console.log('[SocialController] Kick HTML error:', (e as any).message);
+                }
             }
 
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: name || username,
                 username,
-                avatarUrl,
+                avatarUrl: avatarUrl || `https://avatar.kick.com/${username}`,
                 followers: followersText,
                 subscribers: followersText,
                 platform: 'kick',
