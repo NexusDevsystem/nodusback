@@ -188,87 +188,70 @@ export const socialController = {
             let avatarUrl = '';
             let followers = '';
 
-            // Strategy 0: JSON API
-            try {
-                const apiRes = await axios.get(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`, {
-                    timeout: 5000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                        'x-ig-app-id': '936619743392459',
-                        'x-requested-with': 'XMLHttpRequest',
-                    },
-                });
-
-                if (apiRes.status === 200) {
-                    const data: any = apiRes.data;
-                    const user = data?.data?.user;
-                    if (user) {
-                        name = user.full_name;
-                        avatarUrl = user.profile_pic_url_hd || user.profile_pic_url;
-                        const count = user.edge_followed_by?.count;
-                        if (count !== undefined) {
-                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                            else if (count >= 1000) followers = Math.round(count / 100) / 10 + 'K';
-                            else followers = count.toString();
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log('[SocialController] IG API error:', (e as any).message);
-            }
-
-            // Strategy 1: HTML Fallback with Link-Preview UA (Often bypassed from IG rate limits)
+            // Strategy 1: HTML Fallback with Rotating UAs (Avoids 429 API blocks)
             if (!name || !avatarUrl || !followers) {
-                try {
-                    const pageRes = await safeFetch(cleanUrl, {
-                        timeout: 8000,
-                        headers: { 
-                            'User-Agent': 'WhatsApp/2.21.12.21 A',
-                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
-                        },
-                    });
+                const strategies = [
+                    { name: 'WhatsApp', ua: 'WhatsApp/2.21.12.21 A' },
+                    { name: 'Facebook', ua: 'facebookexternalhit/1.1' },
+                    { name: 'iPhone', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1' }
+                ];
 
-                    if (pageRes.ok) {
-                        const html = await pageRes.text();
-                        const $ = cheerio.load(html);
-                        
-                        // 1. Try Meta Tags (WhatsApp UA often gets these)
-                        const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                        const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
-                        
-                        if (!followers && metaDesc) {
-                            // Match: "123 Followers, 456 Following..."
-                            const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
-                                          metaDesc.match(/^([\d.,]+)/);
-                            if (match) followers = match[1];
-                        }
+                for (const strategy of strategies) {
+                    try {
+                        const pageRes = await safeFetch(cleanUrl, {
+                            timeout: 6000,
+                            headers: { 
+                                'User-Agent': strategy.ua,
+                                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                            },
+                        });
 
-                        // 2. Try Deep Scan for JSON state (window._sharedData)
-                        if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
-                            const scriptContent = $('script').text();
+                        if (pageRes.ok) {
+                            const html = await pageRes.text();
+                            const $ = cheerio.load(html);
                             
-                            // Avatar fallback
-                            const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
-                                             scriptContent.match(/"profile_pic_url":"([^"]+)"/);
-                            if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
-
-                            // Followers fallback
-                            const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
-                                                scriptContent.match(/"user_followers":(\d+)/) ||
-                                                scriptContent.match(/"follower_count":(\d+)/);
-                            if (followMatch && !followers) {
-                                const count = parseInt(followMatch[1]);
-                                if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
-                                else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
-                                else followers = count.toString();
+                            // 1. Try Meta Tags
+                            const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+                            const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                            const ogImage = $('meta[property="og:image"]').attr('content') || '';
+                            
+                            if (ogImage && !ogImage.includes('placeholder')) avatarUrl = ogImage;
+                            
+                            if (!followers && metaDesc) {
+                                const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
+                                              metaDesc.match(/^([\d.,]+)/);
+                                if (match) followers = match[1];
                             }
-                        }
 
-                        if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
+                            // 2. Try Deep Scan for JSON state
+                            if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
+                                const scriptContent = $('script').text();
+                                
+                                // Avatar fallback
+                                const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
+                                                 scriptContent.match(/"profile_pic_url":"([^"]+)"/);
+                                if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
+
+                                // Followers fallback
+                                const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
+                                                    scriptContent.match(/"user_followers":(\d+)/) ||
+                                                    scriptContent.match(/"follower_count":(\d+)/);
+                                if (followMatch && !followers) {
+                                    const count = parseInt(followMatch[1]);
+                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
+                                    else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
+                                    else followers = count.toString();
+                                }
+                            }
+
+                            if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
+                            
+                            // If we found the main data, stop rotating
+                            if (avatarUrl && followers) break;
+                        }
+                    } catch (e) {
+                        console.log(`[SocialController] IG ${strategy.name} error:`, (e as any).message);
                     }
-                } catch (e) {
-                    console.log('[SocialController] IG HTML error:', (e as any).message);
                 }
             }
 
