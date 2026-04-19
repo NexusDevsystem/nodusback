@@ -364,13 +364,13 @@ export const socialController = {
             let name = '';
             let avatarUrl = '';
             let followers = '';
-
+            
             try {
-                // Strategy 1: WhatsApp UA (The most stable one)
+                // Strategy: Googlebot (Twitch always serves full metadata to Google)
                 const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
-                    headers: {
-                        'User-Agent': 'WhatsApp/2.21.12.21 A',
+                    headers: { 
+                        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
                 });
@@ -379,49 +379,42 @@ export const socialController = {
                     const html = await pageRes.text();
                     const $ = cheerio.load(html);
 
-                    name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
-                    avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                    const metaDesc = $('meta[property="og:description"]').attr('content') || '';
+                    // Puxando o nome e a foto das etiquetas que a Twitch usa para compartilhamento
+                    name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || 
+                           $('meta[name="twitter:title"]').attr('content')?.split(' - ')[0] || username;
                     
-                    // 1. Regex for "mil seguidores" / "mil followers"
-                    const pMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i) || 
-                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i) ||
-                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i);
+                    avatarUrl = $('meta[property="og:image"]').attr('content') || 
+                                $('meta[name="twitter:image"]').attr('content') || '';
                     
-                    if (pMatch) {
-                        const rawNum = pMatch[1].replace(',', '.');
-                        followers = rawNum + 'K';
-                    } else {
-                        // 2. Standard meta patterns
-                        const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
-                                       html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
-                        if (fMatch) followers = fMatch[1].trim();
+                    const metaDesc = $('meta[property="og:description"]').attr('content') || 
+                                     $('meta[name="description"]').attr('content') || '';
+                    
+                    // Regex para capturar seguidores em qualquer formato (mil, K, etc)
+                    const fMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) || 
+                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:k\s*)?followers/i) ||
+                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
+                    
+                    if (fMatch) {
+                        let val = fMatch[1].replace(',', '.');
+                        if (fMatch[0].toLowerCase().includes('mil') || fMatch[0].toLowerCase().includes('k')) {
+                            followers = val + 'K';
+                        } else {
+                            followers = val;
+                        }
                     }
 
-                    // 3. Deep Script Scan
-                    if (!followers || !avatarUrl || avatarUrl.includes('user-default')) {
-                        const scriptPatterns = [
-                            { key: 'followers', regex: /"followerCount":\s*(\d+)/ },
-                            { key: 'avatar', regex: /"(?:profile_image_url|avatarUrl)":\s*"([^"]+)"/i }
-                        ];
+                    // Fallback: Busca profunda no código caso as etiquetas falhem
+                    if (!avatarUrl || !followers) {
+                        const scriptContent = $('script').text();
+                        const imgMatch = scriptContent.match(/"profile_image_url":"([^"]+)"/);
+                        if (imgMatch && !avatarUrl) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
 
-                        $('script').each((_, el) => {
-                            const scriptContent = $(el).text();
-                            for (const p of scriptPatterns) {
-                                if (p.key === 'followers' && followers) continue;
-                                const match = scriptContent.match(p.regex);
-                                if (match) {
-                                    if (p.key === 'followers') {
-                                        const count = parseInt(match[1]);
-                                        if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
-                                        else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
-                                        else followers = count.toString();
-                                    } else {
-                                        avatarUrl = match[1].replace(/\\u002F/g, '/');
-                                    }
-                                }
-                            }
-                        });
+                        const followMatch = scriptContent.match(/"followerCount":(\d+)/);
+                        if (followMatch && !followers) {
+                            const count = parseInt(followMatch[1]);
+                            if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
+                            else followers = count.toString();
+                        }
                     }
 
                     if (avatarUrl) avatarUrl = avatarUrl.replace(/\\u002f/g, '/');
