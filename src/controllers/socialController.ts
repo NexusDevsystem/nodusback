@@ -176,81 +176,81 @@ export const socialController = {
             const cleanUrl = url.split('?')[0].split('#')[0];
             const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/i);
             let username = handleMatch ? handleMatch[1].replace('@', '') : '';
-
-            // Check cache
             const cacheKey = `ig:${username.toLowerCase()}`;
+            
             const cached = igCache.get(cacheKey);
-            if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) return res.json(cached.data);
 
-            console.log(`[SocialController] Fetching IG info (Stable HTML) for: ${username}`);
+            console.log(`[Instagram] Resilient fetch for: ${username}`);
 
-            let name = '';
-            let avatarUrl = '';
-            let followers = '';
+            let name = '', avatarUrl = '', followers = '';
 
-            // Strategy 1: HTML Fallback with WhatsApp UA (The most stable one)
-            if (!name || !avatarUrl || !followers) {
-                try {
-                    const pageRes = await safeFetch(cleanUrl, {
-                        timeout: 8000,
-                        headers: { 
-                            'User-Agent': 'WhatsApp/2.21.12.21 A',
-                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
-                        },
+            const strategies = [
+                // 1. oEmbed (Official & Fast)
+                async () => {
+                    const oEmbedUrl = `https://graph.facebook.com/v12.0/instagram_oembed?url=${encodeURIComponent(cleanUrl)}&omitscript=true`;
+                    const res = await safeFetch(oEmbedUrl, { timeout: 5000 });
+                    if (res.ok) {
+                        const data: any = await res.json();
+                        name = data.author_name || name;
+                        avatarUrl = data.thumbnail_url || avatarUrl;
+                        return !!avatarUrl;
+                    }
+                    return false;
+                },
+                // 2. Facebook Crawler (Privileged)
+                async () => {
+                    const res = await safeFetch(cleanUrl, {
+                        headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' },
+                        timeout: 7000
                     });
-
-                    if (pageRes.ok) {
-                        const html = await pageRes.text();
+                    if (res.ok) {
+                        const html = await res.text();
                         const $ = cheerio.load(html);
-                        
-                        const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                        const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
-                        
-                        if (!followers && metaDesc) {
-                            const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
-                                          metaDesc.match(/^([\d.,]+)/);
+                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        const desc = $('meta[property="og:description"]').attr('content') || '';
+                        const match = desc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
+                        if (match) followers = match[1];
+                        return !!avatarUrl;
+                    }
+                    return false;
+                },
+                // 3. WhatsApp (Mobile View)
+                async () => {
+                    const res = await safeFetch(cleanUrl, {
+                        headers: { 'User-Agent': 'WhatsApp/2.23.20.0 A' },
+                        timeout: 7000
+                    });
+                    if (res.ok) {
+                        const html = await res.text();
+                        const $ = cheerio.load(html);
+                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        if (!followers) {
+                            const desc = $('meta[property="og:description"]').attr('content') || '';
+                            const match = desc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
                             if (match) followers = match[1];
                         }
-
-                        // Deep Scan fallback
-                        if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
-                            const scriptContent = $('script').text();
-                            const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
-                                             scriptContent.match(/"profile_pic_url":"([^"]+)"/);
-                            if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
-
-                            const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
-                                                scriptContent.match(/"user_followers":(\d+)/) ||
-                                                scriptContent.match(/"follower_count":(\d+)/);
-                            if (followMatch && !followers) {
-                                const count = parseInt(followMatch[1]);
-                                if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
-                                else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
-                                else followers = count.toString();
-                            }
-                        }
-
-                        if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
+                        return !!avatarUrl;
                     }
-                } catch (e) {
-                    console.log('[SocialController] IG error:', (e as any).message);
+                    return false;
                 }
+            ];
+
+            for (const strategy of strategies) {
+                try { if (await strategy()) break; } catch (e) {}
             }
 
-            const platformName = 'Instagram';
-            const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: name || username || 'Instagram',
                 username,
                 avatarUrl,
-                followers: followersText,
-                subscribers: followersText,
+                followers: followers ? `${followers} Seguidores` : '',
+                subscribers: followers ? `${followers} Seguidores` : '',
                 platform: 'instagram',
                 profileUrl: cleanUrl
             };
 
-            if (avatarUrl || followersText) igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            if (avatarUrl) igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
             res.status(500).json({ error: 'Server error' });
@@ -353,102 +353,68 @@ export const socialController = {
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             // Remove @ and trailing slashes
-            let username = url.split('/').filter(p => p).pop()?.replace('@', '').toLowerCase();
+            const username = url.split('/').filter(p => p).pop()?.replace('@', '').toLowerCase();
             if (!username) return res.status(400).json({ error: 'Invalid Twitch URL' });
-
             const cacheKey = `twitch:${username}`;
+            
             const cached = twitchCache.get(cacheKey);
-            
-            // Bypass cache if avatar is missing to force a retry
-            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) {
-                return res.json(cached.data);
-            }
+            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) return res.json(cached.data);
 
-            console.log(`[Twitch] Starting fetch for: ${username}`);
-            
-            let name = '';
-            let avatarUrl = '';
-            let followers = '';
-            
-            try {
-                console.log(`[Twitch] Requesting: https://www.twitch.tv/${username}`);
-                // Strategy: Googlebot (Twitch serves full metadata to indexers)
-                const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
-                    timeout: 8000,
-                    headers: { 
-                        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-                        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
-                    },
-                });
+            console.log(`[Twitch] Resilient fetch for: ${username}`);
 
-                console.log(`[Twitch] Response status: ${pageRes.status}`);
+            let name = '', avatarUrl = '', followers = '';
 
-                if (pageRes.ok) {
-                    const html = await pageRes.text();
-                    const $ = cheerio.load(html);
-
-                    name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || 
-                           $('meta[name="twitter:title"]').attr('content')?.split(' - ')[0] || username;
-                    
-                    avatarUrl = $('meta[property="og:image"]').attr('content') || 
-                                $('meta[name="twitter:image"]').attr('content') || '';
-                    
-                    const metaDesc = $('meta[property="og:description"]').attr('content') || 
-                                     $('meta[name="description"]').attr('content') || '';
-                    
-                    console.log(`[Twitch] Meta - Avatar: ${!!avatarUrl}, Desc: ${metaDesc.substring(0, 30)}...`);
-
-                    // 1. Regex para capturar seguidores
-                    const fMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) || 
-                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:k\s*)?followers/i) ||
-                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) ||
-                                   metaDesc.match(/([\d,.]+)\s*(?:followers|seguidores)/i);
-                    
-                    if (fMatch) {
-                        let val = fMatch[1].replace(',', '.');
-                        if (fMatch[0].toLowerCase().includes('mil') || fMatch[0].toLowerCase().includes('k')) {
-                            followers = val + 'K';
-                        } else {
-                            followers = val;
-                        }
+            const strategies = [
+                async () => {
+                    const res = await safeFetch(`https://www.twitch.tv/${username}`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+                        timeout: 7000
+                    });
+                    if (res.ok) {
+                        const html = await res.text();
+                        const $ = cheerio.load(html);
+                        name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
+                        avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        const desc = $('meta[property="og:description"]').attr('content') || '';
+                        const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
+                                       html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
+                        if (fMatch) followers = fMatch[1].includes(',') ? fMatch[1].replace(',', '.') + 'K' : fMatch[1];
+                        return !!avatarUrl;
                     }
-
-                    // Fallback: Busca profunda no código caso as etiquetas falhem
-                    if (!avatarUrl || !followers) {
-                        const scriptContent = $('script').text();
-                        const imgMatch = scriptContent.match(/"profile_image_url":"([^"]+)"/) || 
-                                         scriptContent.match(/"avatar_url":"([^"]+)"/);
-                        if (imgMatch && !avatarUrl) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
-
-                        const followMatch = scriptContent.match(/"followerCount":(\d+)/) || 
-                                            scriptContent.match(/"followers":\s*{\s*"total":\s*(\d+)/i);
-                        if (followMatch && !followers) {
-                            const count = parseInt(followMatch[1]);
-                            if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
-                            else followers = count.toString();
-                        }
+                    return false;
+                },
+                async () => {
+                    const res = await safeFetch(`https://www.twitch.tv/${username}`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)' },
+                        timeout: 7000
+                    });
+                    if (res.ok) {
+                        const html = await res.text();
+                        const $ = cheerio.load(html);
+                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        return !!avatarUrl;
                     }
-
-                    console.log(`[Twitch] Result - Name: ${name}, Followers: ${followers}`);
-                    if (avatarUrl) avatarUrl = avatarUrl.replace(/\\u002f/g, '/');
+                    return false;
                 }
-            } catch (e) {
-                console.log('[Twitch] Error:', (e as any).message);
-            }
+            ];
 
-            const platformName = 'Twitch';
-            const followersText = followers ? `${followers} Seguidores` : '';
+            for (const strategy of strategies) {
+                try { if (await strategy()) break; } catch (e) {}
+            }
+            
+
+
             const result = {
                 name: name || username,
                 username,
                 avatarUrl,
-                followers: followersText,
-                subscribers: followersText,
+                followers: followers ? `${followers} Seguidores` : '',
+                subscribers: followers ? `${followers} Seguidores` : '',
                 platform: 'twitch',
-                profileUrl: url
+                profileUrl: `https://www.twitch.tv/${username}`
             };
 
-            if (avatarUrl || followersText) twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            if (avatarUrl) twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
             res.status(500).json({ error: 'Twitch server error' });
