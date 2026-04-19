@@ -174,6 +174,7 @@ export const linkService = {
         if (updates.platform !== undefined) dbUpdates.platform = updates.platform;
         if (updates.scheduleStart !== undefined) dbUpdates.schedule_start = updates.scheduleStart;
         if (updates.scheduleEnd !== undefined) dbUpdates.schedule_end = updates.scheduleEnd;
+        if (updates.icon !== undefined) dbUpdates.icon_name = updates.icon;
         if (updates.showCountdown !== undefined) dbUpdates.show_countdown = updates.showCountdown;
 
         const { data, error } = await supabase

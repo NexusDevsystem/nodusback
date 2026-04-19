@@ -65,6 +65,7 @@ export interface LinkItemDB {
     title: string;
     url: string;
     icon?: string;
+    icon_name?: string | null;
     is_active: boolean;
     clicks?: number;
     layout?: string;
@@ -224,6 +225,7 @@ export interface LinkItem {
     title: string;
     url: string;
     image?: string;
+    icon?: string;
     isActive: boolean;
     clicks?: number;
     layout?: 'classic' | 'social' | 'card' | 'icon' | 'grid' | 'carousel' | 'stacked';
@@ -427,6 +429,7 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         title: db.title,
         url: db.url,
         image: db.icon, // Map icon to image
+        icon: db.icon_name || undefined, // Map icon_name to icon
         isActive: db.is_active,
         clicks: db.clicks || 0, // Map clicks
         layout: db.layout as any,
@@ -453,6 +456,7 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         title: api.title,
         url: api.url,
         icon: api.image, // Map image to icon
+        icon_name: api.icon || null, // Map icon to icon_name
         is_active: api.isActive ?? true, // Default to true if not specified
         layout: api.layout,
         type: api.type,

@@ -13,6 +13,18 @@ const twitchCache = new Map<string, { data: any; expiresAt: number }>();
 const kickCache = new Map<string, { data: any; expiresAt: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
 
+function parseFollowerCount(str: string): number {
+    if (!str) return 0;
+    const cleanStr = str.toLowerCase().replace(/,/g, '.').replace(/\s+/g, '');
+    const numMatch = cleanStr.match(/([\d.]+)/);
+    if (!numMatch) return 0;
+    let val = parseFloat(numMatch[1]);
+    if (cleanStr.includes('k')) val *= 1000;
+    if (cleanStr.includes('m')) val *= 1000000;
+    if (cleanStr.includes('b')) val *= 1000000000;
+    return Math.floor(val);
+}
+
 export const socialController = {
 
     /**
@@ -279,9 +291,12 @@ export const socialController = {
 
             const result = {
                 name: name || username || 'Instagram',
+                display_name: name || username || 'Instagram',
                 username,
                 avatarUrl,
+                avatar_url: avatarUrl,
                 followers: followers ? `${followers} Seguidores` : '',
+                follower_count: parseFollowerCount(followers),
                 subscribers: followers ? `${followers} Seguidores` : '',
                 platform: 'instagram',
                 profileUrl: cleanUrl
@@ -342,9 +357,12 @@ export const socialController = {
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: `@${handle.replace('@', '')}`,
+                display_name: `@${handle.replace('@', '')}`,
                 username: handle,
                 avatarUrl,
+                avatar_url: avatarUrl,
                 followers: followersText,
+                follower_count: parseFollowerCount(followersText),
                 subscribers: followersText,
                 platform: 'tiktok',
                 profileUrl: url
@@ -485,9 +503,12 @@ export const socialController = {
 
             const result = {
                 name: name || username,
+                display_name: name || username,
                 username,
                 avatarUrl,
+                avatar_url: avatarUrl,
                 followers: followers ? `${followers} Seguidores` : '',
+                follower_count: parseFollowerCount(followers),
                 platform: 'twitch',
                 profileUrl: `https://www.twitch.tv/${username}`
             };
@@ -605,9 +626,12 @@ export const socialController = {
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
                 name: name || username,
+                display_name: name || username,
                 username,
                 avatarUrl: avatarUrl || '',
+                avatar_url: avatarUrl || '',
                 followers: followersText,
+                follower_count: parseFollowerCount(followersText),
                 subscribers: followersText,
                 platform: 'kick',
                 profileUrl: url
@@ -666,7 +690,17 @@ export const socialController = {
             }
 
             console.log(`[SocialMetadata] Generic result: platform=${platform}, followers=${followers}, avatar=${avatarUrl ? 'yes' : 'no'}`);
-            return res.json({ followers: followers || null, subscribers: followers || null, platform, name, avatarUrl, url });
+            return res.json({ 
+                followers: followers || null, 
+                follower_count: parseFollowerCount(followers),
+                subscribers: followers || null, 
+                platform, 
+                name, 
+                display_name: name,
+                avatarUrl, 
+                avatar_url: avatarUrl,
+                url 
+            });
         } catch (e) {
             console.error('[SocialMetadata] Scrape failed:', (e as any).message);
             res.status(500).json({ error: 'Scrape failed' });
