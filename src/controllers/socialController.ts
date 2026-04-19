@@ -388,30 +388,41 @@ export const socialController = {
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                     
-                    // 1. Exact match from the user's screenshot: <p>...mil seguidores</p>
-                    const pMatch = html.match(/>([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores<\/p>/i) ||
-                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i);
+                    // 1. Optimized match for the user's provided pattern: <p>...mil seguidores</p>
+                    // Handles &nbsp;, \u00A0, and literal spaces
+                    const pMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i) ||
+                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i);
                     
                     if (pMatch) {
-                        followers = pMatch[1].replace(',', '.') + 'K';
+                        const rawNum = pMatch[1].replace(',', '.');
+                        followers = rawNum + 'K';
                     } else {
-                        // 2. Fallback: Search in all meta tags and raw HTML for standard formats
+                        // 2. Standard followers/seguidores patterns
                         const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
                                        html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                         if (fMatch) followers = fMatch[1].trim();
                     }
 
-                    // Fallback: search for various follower count patterns in JSON state
+                    // 3. Robust JSON/State scan (Twitch hydrates from JSON)
                     if (!followers) {
-                        const jsonMatch = html.match(/"follower[Cc]ount":\s*(\d+)/) || 
-                                         html.match(/"total":\s*(\d+)[^}]*followers/i) ||
-                                         html.match(/followers[^}]*"total":\s*(\d+)/i) ||
-                                         html.match(/"followers":\s*(\d+)/i);
-                        if (jsonMatch) {
-                            const count = parseInt(jsonMatch[1]);
-                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                            else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                            else followers = count.toString();
+                        // Look for followerCount in various possible state locations
+                        const patterns = [
+                            /"followerCount":\s*(\d+)/,
+                            /"total":\s*(\d+)[^}]*followers/i,
+                            /followers[^}]*"total":\s*(\d+)/i,
+                            /"followers":\s*{\s*"total":\s*(\d+)/i,
+                            /"followers":\s*(\d+)/i
+                        ];
+                        
+                        for (const pattern of patterns) {
+                            const match = html.match(pattern);
+                            if (match) {
+                                const count = parseInt(match[1]);
+                                if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                else followers = count.toString();
+                                break;
+                            }
                         }
                     }
                 }

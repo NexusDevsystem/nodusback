@@ -503,7 +503,7 @@ export function productApiToDb(api: Partial<Product>, userId: string): Partial<P
     } else {
         dbName = api.name || api.collection || 'Product';
     }
-    
+
     // Safety truncation for combined name
     dbName = dbName.substring(0, 450);
 
@@ -688,7 +688,7 @@ export function announcementApiToDb(api: Partial<Announcement>): Partial<Announc
     if (api.imageUrl !== undefined) db.image_url = api.imageUrl;
     if (api.imageUrls !== undefined) db.image_urls = api.imageUrls;
     if (api.blogPostId !== undefined) db.blog_post_id = api.blogPostId || null;
-    
+
     // Crucial: ensure empty string becomes null for global announcements
     if (api.targetUserEmail !== undefined) {
         if (api.targetUserEmail && typeof api.targetUserEmail === 'string') {
@@ -698,7 +698,7 @@ export function announcementApiToDb(api: Partial<Announcement>): Partial<Announc
             db.target_user_email = null;
         }
     }
-    
+
     if (api.isActive !== undefined) db.is_active = api.isActive;
     return db;
 }
