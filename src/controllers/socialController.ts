@@ -217,25 +217,51 @@ export const socialController = {
                 console.log('[SocialController] IG API error:', (e as any).message);
             }
 
-            // Strategy 1: HTML Fallback
+            // Strategy 1: HTML Fallback with Mobile UA (Better for Instagram)
             if (!name || !avatarUrl || !followers) {
                 try {
                     const pageRes = await safeFetch(cleanUrl, {
                         timeout: 8000,
-                        headers: { 'User-Agent': 'facebookexternalhit/1.1' },
+                        headers: { 
+                            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1',
+                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                        },
                     });
 
                     if (pageRes.ok) {
                         const html = await pageRes.text();
                         const $ = cheerio.load(html);
+                        
+                        // 1. Try Meta Tags
                         const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
                         
                         if (!followers && metaDesc) {
                             const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || metaDesc.match(/^([\d.,]+)/);
                             if (match) followers = match[1];
                         }
-                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
+
+                        // 2. Try Deep Scan for JSON state
+                        if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
+                            const scriptContent = $('script').text();
+                            
+                            // Avatar fallback
+                            const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
+                                             scriptContent.match(/"profile_pic_url":"([^"]+)"/);
+                            if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
+
+                            // Followers fallback
+                            const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
+                                                scriptContent.match(/"user_followers":(\d+)/);
+                            if (followMatch && !followers) {
+                                const count = parseInt(followMatch[1]);
+                                if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
+                                else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
+                                else followers = count.toString();
+                            }
+                        }
+
                         if (!name) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
                     }
                 } catch (e) {
@@ -418,20 +444,21 @@ export const socialController = {
                     }
 
                     // 3. Deep Script Scan (Twitch embeds GQL/State in scripts)
-                    if (!followers || !avatarUrl || avatarUrl.includes('user-default')) {
+                    if (!followers || !avatarUrl || avatarUrl.includes('user-default') || avatarUrl.includes('static-cdn.jtvnw.net/images/xarth/')) {
                         const scriptPatterns = [
                             { key: 'followers', regex: /"followerCount":\s*(\d+)/ },
                             { key: 'followers', regex: /"total":\s*(\d+)[^}]*followers/i },
                             { key: 'followers', regex: /"followers":\s*{\s*"total":\s*(\d+)/i },
                             { key: 'avatar', regex: /"(?:profile_image_url|avatarUrl|profileImageUrl)":\s*"([^"]+)"/i },
-                            { key: 'avatar', regex: /(https:\/\/static-cdn\.jtvnw.net\/jtv_user_pictures\/[a-zA-Z0-9_-]+-profile_image-[a-z0-9]+-[0-9]+x[0-9]+\.(?:png|jpg|jpeg))/i }
+                            { key: 'avatar', regex: /(https:\/\/static-cdn\.jtvnw.net\/jtv_user_pictures\/[a-zA-Z0-9_-]+-profile_image-[a-z0-9]+-[0-9]+x[0-9]+\.(?:png|jpg|jpeg))/i },
+                            { key: 'avatar', regex: /"profile_image_url":"([^"]+)"/ }
                         ];
 
                         $('script').each((_, el) => {
                             const scriptContent = $(el).text();
                             for (const p of scriptPatterns) {
                                 if (p.key === 'followers' && followers) continue;
-                                if (p.key === 'avatar' && avatarUrl && !avatarUrl.includes('user-default')) continue;
+                                if (p.key === 'avatar' && avatarUrl && !avatarUrl.includes('user-default') && !avatarUrl.includes('xarth')) continue;
 
                                 const match = scriptContent.match(p.regex);
                                 if (match) {
