@@ -371,11 +371,11 @@ export const socialController = {
             let followers = '';
 
             try {
-                // Using a more "official" crawler user agent
+                // Using Facebook's bot User-Agent often forces Twitch to serve OGP meta tags reliably
                 const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
                     headers: { 
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                        'User-Agent': 'facebookexternalhit/1.1',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
                 });
@@ -389,7 +389,6 @@ export const socialController = {
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                     
                     // 1. Optimized match for the user's provided pattern: <p>...mil seguidores</p>
-                    // Handles &nbsp;, \u00A0, and literal spaces
                     const pMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i) ||
                                    html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i);
                     
@@ -404,24 +403,30 @@ export const socialController = {
                     }
 
                     // 3. Robust JSON/State scan (Twitch hydrates from JSON)
-                    if (!followers) {
-                        // Look for followerCount in various possible state locations
+                    if (!followers || !avatarUrl) {
+                        // Look for metadata in various possible state locations
                         const patterns = [
-                            /"followerCount":\s*(\d+)/,
-                            /"total":\s*(\d+)[^}]*followers/i,
-                            /followers[^}]*"total":\s*(\d+)/i,
-                            /"followers":\s*{\s*"total":\s*(\d+)/i,
-                            /"followers":\s*(\d+)/i
+                            { key: 'followers', regex: /"followerCount":\s*(\d+)/ },
+                            { key: 'followers', regex: /"total":\s*(\d+)[^}]*followers/i },
+                            { key: 'followers', regex: /followers[^}]*"total":\s*(\d+)/i },
+                            { key: 'followers', regex: /"followers":\s*{\s*"total":\s*(\d+)/i },
+                            { key: 'followers', regex: /"followers":\s*(\d+)/i },
+                            { key: 'followers', regex: /"total":\s*(\d+)/ }, // Ultra-broad fallback
+                            { key: 'avatar', regex: /"(?:profile_image_url|avatarUrl|profileImageUrl)":\s*"([^"]+)"/i },
+                            { key: 'avatar', regex: /(https:\/\/static-cdn\.jtvnw\.net\/jtv_user_pictures\/[a-zA-Z0-9_-]+-profile_image-[a-z0-9]+-[0-9]+x[0-9]+\.(?:png|jpg|jpeg))/i } // CDN pattern
                         ];
                         
-                        for (const pattern of patterns) {
-                            const match = html.match(pattern);
+                        for (const p of patterns) {
+                            const match = html.match(p.regex);
                             if (match) {
-                                const count = parseInt(match[1]);
-                                if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                                else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                                else followers = count.toString();
-                                break;
+                                if (p.key === 'followers' && !followers) {
+                                    const count = parseInt(match[1]);
+                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                    else followers = count.toString();
+                                } else if (p.key === 'avatar' && !avatarUrl) {
+                                    avatarUrl = match[1].replace(/\\u002F/g, '/');
+                                }
                             }
                         }
                     }
