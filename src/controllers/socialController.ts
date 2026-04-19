@@ -352,21 +352,26 @@ export const socialController = {
             const { url } = req.query;
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
-            const username = url.split('/').filter(p => p).pop()?.toLowerCase();
+            // Remove @ and trailing slashes
+            let username = url.split('/').filter(p => p).pop()?.replace('@', '').toLowerCase();
             if (!username) return res.status(400).json({ error: 'Invalid Twitch URL' });
 
             const cacheKey = `twitch:${username}`;
             const cached = twitchCache.get(cacheKey);
-            if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+            
+            // Bypass cache if avatar is missing to force a retry
+            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) {
+                return res.json(cached.data);
+            }
 
-            console.log(`[SocialController] Fetching Twitch info for: ${username}`);
-
+            console.log(`[Twitch] Starting fetch for: ${username}`);
+            
             let name = '';
             let avatarUrl = '';
             let followers = '';
             
             try {
-                console.log(`[Twitch] Fetching: ${username}`);
+                console.log(`[Twitch] Requesting: https://www.twitch.tv/${username}`);
                 // Strategy: Googlebot (Twitch serves full metadata to indexers)
                 const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
