@@ -363,6 +363,8 @@ export const socialController = {
 
             let name = '';
             let avatarUrl = '';
+            let followers = '';
+            
             try {
                 console.log(`[Twitch] Fetching: ${username}`);
                 // Strategy: Googlebot (Twitch serves full metadata to indexers)
