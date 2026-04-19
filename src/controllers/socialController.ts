@@ -389,84 +389,117 @@ export const socialController = {
             const { url } = req.query;
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
-            // Remove @ and trailing slashes
-            const username = url.split('/').filter(p => p).pop()?.replace('@', '').toLowerCase();
-            if (!username) return res.status(400).json({ error: 'Invalid Twitch URL' });
-            const cacheKey = `twitch:${username}`;
+            // More robust username extraction
+            const match = url.match(/twitch\.tv\/([^/?#\s]+)/i);
+            const username = match ? match[1].replace('@', '').toLowerCase() : null;
             
-            const cached = twitchCache.get(cacheKey);
-            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) return res.json(cached.data);
+            if (!username || username === 'directory' || username === 'search') {
+                return res.status(400).json({ error: 'Invalid Twitch channel URL' });
+            }
 
-            console.log(`[Twitch] Resilient fetch for: ${username}`);
+            const cacheKey = `twitch:${username}`;
+            const cached = twitchCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) {
+                return res.json(cached.data);
+            }
+
+            console.log(`[Twitch] Fetching metadata for: ${username}`);
 
             let name = '', avatarUrl = '', followers = '';
 
             const strategies = [
+                // Strategy 1: GraphQL (Internal API) - Preferred
                 async () => {
-                    const res = await safeFetch(`https://www.twitch.tv/${username}`, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-                        timeout: 7000
-                    });
-                    if (res.ok) {
-                        const html = await res.text();
-                        const $ = cheerio.load(html);
-                        name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
-                        avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        const desc = $('meta[property="og:description"]').attr('content') || '';
-                        
-                        // Robust follower parsing for Twitch
-                        const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
-                                       html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) ||
-                                       html.match(/"followers":\s*(\d+)/i) ||
-                                       desc.match(/([\d.,]+[KMB]?)\s*(?:Seguidores)/);
-                        
-                        if (fMatch) {
-                            let rawValue = fMatch[1];
-                            if (rawValue.includes(',') && !rawValue.includes('.')) {
-                                followers = rawValue.replace(',', '.') + 'K';
-                            } else {
-                                followers = rawValue;
+                    try {
+                        const gqlRes = await safeFetch('https://gql.twitch.tv/gql', {
+                            method: 'POST',
+                            headers: {
+                                'Client-Id': 'kimne78kx3ncx6brs4gm76y394zkx',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify([{
+                                operationName: 'ChannelShell',
+                                variables: { login: username },
+                                query: `query ChannelShell($login: String!) {
+                                    user(login: $login) {
+                                        displayName
+                                        profileImageURL(width: 300)
+                                        followers { totalCount }
+                                    }
+                                }`
+                            }])
+                        });
+
+                        if (gqlRes.ok) {
+                            const data: any = await gqlRes.json();
+                            const user = data[0]?.data?.user;
+                            if (user) {
+                                name = user.displayName || username;
+                                avatarUrl = user.profileImageURL || '';
+                                const count = user.followers?.totalCount;
+                                if (count !== undefined) {
+                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                    else followers = count.toString();
+                                }
+                                return !!avatarUrl;
                             }
                         }
-                        return !!avatarUrl;
+                    } catch (e) {
+                        console.error(`[Twitch] GQL Error for ${username}:`, (e as any).message);
                     }
                     return false;
                 },
+                // Strategy 2: Scrape via Googlebot (SSR)
                 async () => {
-                    const res = await safeFetch(`https://www.twitch.tv/${username}`, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)' },
-                        timeout: 7000
-                    });
-                    if (res.ok) {
-                        const html = await res.text();
-                        const $ = cheerio.load(html);
-                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        return !!avatarUrl;
+                    try {
+                        const scrapeRes = await safeFetch(`https://www.twitch.tv/${username}`, {
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+                            timeout: 8000
+                        });
+                        if (scrapeRes.ok) {
+                            const html = await scrapeRes.text();
+                            const $ = cheerio.load(html);
+                            name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || name;
+                            avatarUrl = $('meta[property="og:image"]').attr('content') || avatarUrl;
+                            
+                            const desc = $('meta[property="og:description"]').attr('content') || '';
+                            const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
+                                           html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
+                            
+                            if (fMatch && !followers) {
+                                followers = fMatch[1].replace(',', '.');
+                            }
+                            return !!avatarUrl;
+                        }
+                    } catch (e) {
+                        console.error(`[Twitch] Scrape Error for ${username}:`, (e as any).message);
                     }
                     return false;
                 }
             ];
 
             for (const strategy of strategies) {
-                try { if (await strategy()) break; } catch (e) {}
+                if (await strategy()) break;
             }
-            
-
 
             const result = {
                 name: name || username,
                 username,
                 avatarUrl,
                 followers: followers ? `${followers} Seguidores` : '',
-                subscribers: followers ? `${followers} Seguidores` : '',
                 platform: 'twitch',
                 profileUrl: `https://www.twitch.tv/${username}`
             };
 
-            if (avatarUrl) twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            if (avatarUrl) {
+                twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            }
+            
             return res.json(result);
         } catch (e) {
-            res.status(500).json({ error: 'Twitch server error' });
+            console.error(`[Twitch] Fatal controller error:`, e);
+            res.status(500).json({ error: 'Twitch integration error' });
         }
     },
 
