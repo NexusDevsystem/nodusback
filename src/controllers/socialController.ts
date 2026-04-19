@@ -227,7 +227,26 @@ export const socialController = {
                         if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                         if (!followers) {
                             const desc = $('meta[property="og:description"]').attr('content') || '';
-                            const match = desc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
+                            const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i) || desc.match(/([\d.,]+[KMB]?)\s*(?:seguindo|following)/i);
+                            if (match) followers = match[1];
+                        }
+                        return !!avatarUrl;
+                    }
+                    return false;
+                },
+                // 4. Googlebot (Desktop View)
+                async () => {
+                    const res = await safeFetch(cleanUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+                        timeout: 7000
+                    });
+                    if (res.ok) {
+                        const html = await res.text();
+                        const $ = cheerio.load(html);
+                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        if (!followers) {
+                            const desc = $('meta[property="og:description"]').attr('content') || '';
+                            const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
                             if (match) followers = match[1];
                         }
                         return !!avatarUrl;
@@ -238,6 +257,24 @@ export const socialController = {
 
             for (const strategy of strategies) {
                 try { if (await strategy()) break; } catch (e) {}
+            }
+
+            if (!avatarUrl || !followers) {
+                // Final fallback: Scan for JSON-like patterns in HTML
+                const html = await (await safeFetch(cleanUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' } })).text();
+                if (!avatarUrl) {
+                    const picMatch = html.match(/"profile_pic_url":"([^"]+)"/);
+                    if (picMatch) avatarUrl = picMatch[1].replace(/\\u0026/g, '&');
+                }
+                if (!followers) {
+                    const folMatch = html.match(/"edge_followed_by":\{"count":(\d+)\}/);
+                    if (folMatch) {
+                        const count = parseInt(folMatch[1]);
+                        if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                        else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                        else followers = count.toString();
+                    }
+                }
             }
 
             const result = {
@@ -376,9 +413,21 @@ export const socialController = {
                         name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
                         avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                         const desc = $('meta[property="og:description"]').attr('content') || '';
+                        
+                        // Robust follower parsing for Twitch
                         const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
-                                       html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
-                        if (fMatch) followers = fMatch[1].includes(',') ? fMatch[1].replace(',', '.') + 'K' : fMatch[1];
+                                       html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) ||
+                                       html.match(/"followers":\s*(\d+)/i) ||
+                                       desc.match(/([\d.,]+[KMB]?)\s*(?:Seguidores)/);
+                        
+                        if (fMatch) {
+                            let rawValue = fMatch[1];
+                            if (rawValue.includes(',') && !rawValue.includes('.')) {
+                                followers = rawValue.replace(',', '.') + 'K';
+                            } else {
+                                followers = rawValue;
+                            }
+                        }
                         return !!avatarUrl;
                     }
                     return false;
