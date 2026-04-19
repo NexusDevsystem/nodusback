@@ -363,10 +363,9 @@ export const socialController = {
 
             let name = '';
             let avatarUrl = '';
-            let followers = '';
-            
             try {
-                // Strategy: Googlebot (Twitch always serves full metadata to Google)
+                console.log(`[Twitch] Fetching: ${username}`);
+                // Strategy: Googlebot (Twitch serves full metadata to indexers)
                 const pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
                     headers: { 
@@ -375,11 +374,12 @@ export const socialController = {
                     },
                 });
 
+                console.log(`[Twitch] Response status: ${pageRes.status}`);
+
                 if (pageRes.ok) {
                     const html = await pageRes.text();
                     const $ = cheerio.load(html);
 
-                    // Puxando o nome e a foto das etiquetas que a Twitch usa para compartilhamento
                     name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || 
                            $('meta[name="twitter:title"]').attr('content')?.split(' - ')[0] || username;
                     
@@ -389,10 +389,13 @@ export const socialController = {
                     const metaDesc = $('meta[property="og:description"]').attr('content') || 
                                      $('meta[name="description"]').attr('content') || '';
                     
-                    // Regex para capturar seguidores em qualquer formato (mil, K, etc)
+                    console.log(`[Twitch] Meta - Avatar: ${!!avatarUrl}, Desc: ${metaDesc.substring(0, 30)}...`);
+
+                    // 1. Regex para capturar seguidores
                     const fMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) || 
                                    html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:k\s*)?followers/i) ||
-                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
+                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) ||
+                                   metaDesc.match(/([\d,.]+)\s*(?:followers|seguidores)/i);
                     
                     if (fMatch) {
                         let val = fMatch[1].replace(',', '.');
@@ -406,10 +409,12 @@ export const socialController = {
                     // Fallback: Busca profunda no código caso as etiquetas falhem
                     if (!avatarUrl || !followers) {
                         const scriptContent = $('script').text();
-                        const imgMatch = scriptContent.match(/"profile_image_url":"([^"]+)"/);
+                        const imgMatch = scriptContent.match(/"profile_image_url":"([^"]+)"/) || 
+                                         scriptContent.match(/"avatar_url":"([^"]+)"/);
                         if (imgMatch && !avatarUrl) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
 
-                        const followMatch = scriptContent.match(/"followerCount":(\d+)/);
+                        const followMatch = scriptContent.match(/"followerCount":(\d+)/) || 
+                                            scriptContent.match(/"followers":\s*{\s*"total":\s*(\d+)/i);
                         if (followMatch && !followers) {
                             const count = parseInt(followMatch[1]);
                             if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
@@ -417,10 +422,11 @@ export const socialController = {
                         }
                     }
 
+                    console.log(`[Twitch] Result - Name: ${name}, Followers: ${followers}`);
                     if (avatarUrl) avatarUrl = avatarUrl.replace(/\\u002f/g, '/');
                 }
             } catch (e) {
-                console.log('[SocialController] Twitch error:', (e as any).message);
+                console.log('[Twitch] Error:', (e as any).message);
             }
 
             const platformName = 'Twitch';
