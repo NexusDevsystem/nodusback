@@ -217,13 +217,13 @@ export const socialController = {
                 console.log('[SocialController] IG API error:', (e as any).message);
             }
 
-            // Strategy 1: HTML Fallback with Mobile UA (Better for Instagram)
+            // Strategy 1: HTML Fallback with Link-Preview UA (Often bypassed from IG rate limits)
             if (!name || !avatarUrl || !followers) {
                 try {
                     const pageRes = await safeFetch(cleanUrl, {
                         timeout: 8000,
                         headers: { 
-                            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1',
+                            'User-Agent': 'WhatsApp/2.21.12.21 A',
                             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                         },
                     });
@@ -232,17 +232,19 @@ export const socialController = {
                         const html = await pageRes.text();
                         const $ = cheerio.load(html);
                         
-                        // 1. Try Meta Tags
+                        // 1. Try Meta Tags (WhatsApp UA often gets these)
                         const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
                         avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
                         
                         if (!followers && metaDesc) {
-                            const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || metaDesc.match(/^([\d.,]+)/);
+                            // Match: "123 Followers, 456 Following..."
+                            const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
+                                          metaDesc.match(/^([\d.,]+)/);
                             if (match) followers = match[1];
                         }
 
-                        // 2. Try Deep Scan for JSON state
+                        // 2. Try Deep Scan for JSON state (window._sharedData)
                         if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
                             const scriptContent = $('script').text();
                             
@@ -253,7 +255,8 @@ export const socialController = {
 
                             // Followers fallback
                             const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
-                                                scriptContent.match(/"user_followers":(\d+)/);
+                                                scriptContent.match(/"user_followers":(\d+)/) ||
+                                                scriptContent.match(/"follower_count":(\d+)/);
                             if (followMatch && !followers) {
                                 const count = parseInt(followMatch[1]);
                                 if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
@@ -262,7 +265,7 @@ export const socialController = {
                             }
                         }
 
-                        if (!name) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
+                        if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
                     }
                 } catch (e) {
                     console.log('[SocialController] IG HTML error:', (e as any).message);
