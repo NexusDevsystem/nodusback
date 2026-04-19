@@ -205,6 +205,7 @@ export const socialController = {
                                 'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                             },
                         });
+                        console.log(`[SocialController] IG strategy ${strategy.name} status: ${pageRes.status}`);
 
                         if (pageRes.ok) {
                             const html = await pageRes.text();
@@ -384,6 +385,7 @@ export const socialController = {
 
             try {
                 // Strategy 1: WhatsApp UA (Often bypassed from crawler blocks)
+                console.log(`[SocialController] Twitch strategy WhatsApp attempt...`);
                 let pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
                     headers: { 
@@ -391,12 +393,14 @@ export const socialController = {
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
                 });
+                console.log(`[SocialController] Twitch strategy WhatsApp status: ${pageRes.status}`);
 
                 let html = '';
                 if (pageRes.ok) {
                     html = await pageRes.text();
                 } else {
                     // Strategy 2: Facebook Crawler UA
+                    console.log(`[SocialController] Twitch strategy Facebook attempt...`);
                     pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                         timeout: 8000,
                         headers: { 
@@ -404,10 +408,12 @@ export const socialController = {
                             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                         },
                     });
+                    console.log(`[SocialController] Twitch strategy Facebook status: ${pageRes.status}`);
                     if (pageRes.ok) html = await pageRes.text();
                     
                     if (!html || !pageRes.ok) {
                         // Strategy 3: Real Browser UA
+                        console.log(`[SocialController] Twitch strategy Chrome attempt...`);
                         pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                             timeout: 8000,
                             headers: { 
@@ -416,6 +422,7 @@ export const socialController = {
                                 'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                             },
                         });
+                        console.log(`[SocialController] Twitch strategy Chrome status: ${pageRes.status}`);
                         if (pageRes.ok) html = await pageRes.text();
                     }
                 }
