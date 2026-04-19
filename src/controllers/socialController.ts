@@ -95,7 +95,7 @@ export const socialController = {
                     if (innerTubeRes.ok) {
                         const data: any = await innerTubeRes.json();
                         const header = data?.header?.c4TabbedHeaderRenderer || data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
-                        
+
                         if (data?.header?.c4TabbedHeaderRenderer) {
                             const hdr = data.header.c4TabbedHeaderRenderer;
                             name = hdr.title || '';
@@ -140,7 +140,7 @@ export const socialController = {
                         const $ = cheerio.load(html);
                         if (!name) name = $('meta[property="og:title"]').attr('content') || $('title').text().replace(/ - YouTube$/, '').trim() || '';
                         if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        
+
                         if (!subscribers) {
                             const metaDesc = $('meta[name="description"]').attr('content') || '';
                             const descMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões|thousand|million|billion)?)\s*(inscritos|subscribers)/i);
@@ -191,15 +191,17 @@ export const socialController = {
             // Strategy 1: HTML Fallback with Rotating UAs (Avoids 429 API blocks)
             if (!name || !avatarUrl || !followers) {
                 const strategies = [
-                    { name: 'WhatsApp', ua: 'WhatsApp/2.21.12.21 A' },
-                    { name: 'Facebook', ua: 'facebookexternalhit/1.1' },
-                    { name: 'iPhone', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1' }
+                    { name: 'Embed', path: '/embed/', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    { name: 'WhatsApp', path: '/', ua: 'WhatsApp/2.21.12.21 A' },
+                    { name: 'Facebook', path: '/', ua: 'facebookexternalhit/1.1' },
+                    { name: 'iPhone', path: '/', ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1' }
                 ];
 
                 for (const strategy of strategies) {
                     try {
-                        const pageRes = await safeFetch(cleanUrl, {
-                            timeout: 6000,
+                        const targetUrl = strategy.path === '/' ? cleanUrl : `${cleanUrl}${strategy.path}`;
+                        const pageRes = await safeFetch(targetUrl, {
+                            timeout: strategy.name === 'Embed' ? 4000 : 6000,
                             headers: { 
                                 'User-Agent': strategy.ua,
                                 'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -211,43 +213,51 @@ export const socialController = {
                             const html = await pageRes.text();
                             const $ = cheerio.load(html);
                             
-                            // 1. Try Meta Tags
-                            const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                            const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                            const ogImage = $('meta[property="og:image"]').attr('content') || '';
-                            
-                            if (ogImage && !ogImage.includes('placeholder')) avatarUrl = ogImage;
-                            
-                            if (!followers && metaDesc) {
-                                const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
-                                              metaDesc.match(/^([\d.,]+)/);
-                                if (match) followers = match[1];
-                            }
-
-                            // 2. Try Deep Scan for JSON state
-                            if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
-                                const scriptContent = $('script').text();
-                                
-                                // Avatar fallback
-                                const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
-                                                 scriptContent.match(/"profile_pic_url":"([^"]+)"/);
-                                if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
-
-                                // Followers fallback
-                                const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
-                                                    scriptContent.match(/"user_followers":(\d+)/) ||
-                                                    scriptContent.match(/"follower_count":(\d+)/);
-                                if (followMatch && !followers) {
-                                    const count = parseInt(followMatch[1]);
-                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
-                                    else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
-                                    else followers = count.toString();
+                            if (strategy.name === 'Embed') {
+                                // Extract from embed layout
+                                avatarUrl = $('.Avatar').attr('src') || $('.profile-image').attr('src') || '';
+                                name = $('.UsernameText').text() || name;
+                                // Embed doesn't show followers, so we continue to next strategy for metrics if needed
+                                if (avatarUrl) {
+                                    avatarUrl = avatarUrl.replace(/\\u002f/g, '/');
+                                    // If we got the avatar, we're halfway there
                                 }
-                            }
+                            } else {
+                                // Standard HTML extraction
+                                const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+                                const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                                const ogImage = $('meta[property="og:image"]').attr('content') || '';
+                                
+                                if (ogImage && !ogImage.includes('placeholder')) avatarUrl = ogImage;
+                                
+                                if (!followers && metaDesc) {
+                                    const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
+                                                  metaDesc.match(/^([\d.,]+)/);
+                                    if (match) followers = match[1];
+                                }
 
-                            if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
+                                // Deep Scan for JSON state
+                                if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
+                                    const scriptContent = $('script').text();
+                                    const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
+                                                     scriptContent.match(/"profile_pic_url":"([^"]+)"/);
+                                    if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
+
+                                    const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
+                                                        scriptContent.match(/"user_followers":(\d+)/) ||
+                                                        scriptContent.match(/"follower_count":(\d+)/);
+                                    if (followMatch && !followers) {
+                                        const count = parseInt(followMatch[1]);
+                                        if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
+                                        else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
+                                        else followers = count.toString();
+                                    }
+                                }
+
+                                if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
+                            }
                             
-                            // If we found the main data, stop rotating
+                            // If we have both, stop. If we have only avatar from embed, keep going for followers.
                             if (avatarUrl && followers) break;
                         }
                     } catch (e) {
@@ -309,7 +319,7 @@ export const socialController = {
                     const $ = cheerio.load(html);
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                     const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                    
+
                     const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
                     if (fMatch) followers = fMatch[1].trim();
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
@@ -388,7 +398,7 @@ export const socialController = {
                 console.log(`[SocialController] Twitch strategy WhatsApp attempt...`);
                 let pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
-                    headers: { 
+                    headers: {
                         'User-Agent': 'WhatsApp/2.21.12.21 A',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
@@ -403,20 +413,20 @@ export const socialController = {
                     console.log(`[SocialController] Twitch strategy Facebook attempt...`);
                     pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                         timeout: 8000,
-                        headers: { 
+                        headers: {
                             'User-Agent': 'facebookexternalhit/1.1',
                             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                         },
                     });
                     console.log(`[SocialController] Twitch strategy Facebook status: ${pageRes.status}`);
                     if (pageRes.ok) html = await pageRes.text();
-                    
+
                     if (!html || !pageRes.ok) {
                         // Strategy 3: Real Browser UA
                         console.log(`[SocialController] Twitch strategy Chrome attempt...`);
                         pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                             timeout: 8000,
-                            headers: { 
+                            headers: {
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                                 'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
@@ -429,23 +439,23 @@ export const socialController = {
 
                 if (html) {
                     const $ = cheerio.load(html);
-                    
+
                     name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || username;
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                    
+
                     // 1. Regex for "mil seguidores" / "mil followers"
                     const pMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i) ||
-                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i) ||
-                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i);
-                    
+                        html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i) ||
+                        metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i);
+
                     if (pMatch) {
                         const rawNum = pMatch[1].replace(',', '.');
                         followers = rawNum + 'K';
                     } else {
                         // 2. Standard meta patterns
                         const fMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
-                                       html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                            html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                         if (fMatch) followers = fMatch[1].trim();
                     }
 
@@ -534,12 +544,12 @@ export const socialController = {
                         'Accept': 'application/json'
                     }
                 });
-                
+
                 if (apiRes.ok) {
                     const data: any = await apiRes.json();
                     name = data.user?.username || data.name || username;
                     avatarUrl = data.user?.profile_pic || data.user?.profile_image || data.profile_pic || '';
-                    
+
                     const count = data.followersCount ?? data.followers_count ?? data.subscriber_count;
                     if (count !== undefined) {
                         if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
@@ -555,7 +565,7 @@ export const socialController = {
                 try {
                     const pageRes = await safeFetch(`https://kick.com/${username}`, {
                         timeout: 8000,
-                        headers: { 
+                        headers: {
                             'User-Agent': 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
                             'Accept': 'text/html',
                         },
@@ -564,7 +574,7 @@ export const socialController = {
                     if (pageRes.ok) {
                         const html = await pageRes.text();
                         const $ = cheerio.load(html);
-                        
+
                         name = name || $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
                         avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
 
@@ -576,16 +586,16 @@ export const socialController = {
                                 if (profileImg) avatarUrl = profileImg.replace(/\\/g, '');
                             }
                         }
-                        
+
                         const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                         const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
                         if (fMatch) followers = fMatch[1].trim();
 
                         // JSON-LD or internal state scan for followers if meta fails
                         if (!followers) {
-                            const folMatch = html.match(/"followers_count":\s*(\d+)/i) || 
-                                             html.match(/"followers":\s*(\d+)/i) ||
-                                             html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
+                            const folMatch = html.match(/"followers_count":\s*(\d+)/i) ||
+                                html.match(/"followers":\s*(\d+)/i) ||
+                                html.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i);
                             if (folMatch) {
                                 if (folMatch[1].match(/^\d+$/)) {
                                     const count = parseInt(folMatch[1]);
@@ -627,7 +637,7 @@ export const socialController = {
     async getSocialMetadata(req: Request, res: Response) {
         const { url } = req.query;
         if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL required' });
-        
+
         const lowerUrl = url.toLowerCase();
         console.log(`[SocialMetadata] Unified fetch for: ${url}`);
 
@@ -647,13 +657,13 @@ export const socialController = {
             console.log('[SocialMetadata] Routing to Kick handler');
             return socialController.getKickProfileInfo(req, res);
         }
-        
+
         try {
             console.log('[SocialMetadata] Falling back to generic/youtube scraper');
             const safeRes = await safeFetch(url, { timeout: 5000, headers: { 'User-Agent': 'facebookexternalhit/1.1' } });
             const html = await safeRes.text();
             const $ = cheerio.load(html);
-            
+
             let followers = '';
             let platform = 'unknown';
             let avatarUrl = $('meta[property="og:image"]').attr('content') || '';
