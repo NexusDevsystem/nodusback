@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
 import { blogService } from '../services/blogService.js';
+import { linkService } from '../services/linkService.js';
 import axios from 'axios';
 import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 
@@ -165,6 +166,18 @@ export const socialController = {
             }
 
             const subscribersText = subscribers ? `${subscribers} inscritos` : '';
+
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string' && subscribersText) {
+                try {
+                    await linkService.updateLink(linkId, { subtitle: subscribersText });
+                    console.log(`[YouTube] Auto-saved subscribers for link ${linkId}: ${subscribersText}`);
+                } catch (saveErr) {
+                    console.error(`[YouTube] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                }
+            }
+
             return res.json({
                 name: name || '',
                 avatarUrl,
@@ -173,6 +186,7 @@ export const socialController = {
                 channelUrl: url
             });
         } catch (error: any) {
+            console.error('[SocialController] getYoutubeChannelInfo error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     },
@@ -302,6 +316,20 @@ export const socialController = {
                 profileUrl: cleanUrl
             };
 
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+                try {
+                    const updates: any = {};
+                    if (followers) updates.subtitle = `${followers} Seguidores`;
+                    if (avatarUrl) updates.image = avatarUrl;
+                    await linkService.updateLink(linkId, updates);
+                    console.log(`[Instagram] Auto-saved metadata for link ${linkId}: ${followers} Seguidores`);
+                } catch (saveErr) {
+                    console.error(`[Instagram] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                }
+            }
+
             if (avatarUrl) igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
@@ -367,6 +395,20 @@ export const socialController = {
                 platform: 'tiktok',
                 profileUrl: url
             };
+
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string' && (followersText || avatarUrl)) {
+                try {
+                    const updates: any = {};
+                    if (followersText) updates.subtitle = followersText;
+                    if (avatarUrl) updates.image = avatarUrl;
+                    await linkService.updateLink(linkId, updates);
+                    console.log(`[TikTok] Auto-saved metadata for link ${linkId}: ${followersText}`);
+                } catch (saveErr) {
+                    console.error(`[TikTok] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                }
+            }
 
             if (avatarUrl || followersText) tiktokCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
@@ -513,6 +555,21 @@ export const socialController = {
                 profileUrl: `https://www.twitch.tv/${username}`
             };
 
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+                try {
+                    const updates: any = {};
+                    const fText = followers ? `${followers} Seguidores` : '';
+                    if (fText) updates.subtitle = fText;
+                    if (avatarUrl) updates.image = avatarUrl;
+                    await linkService.updateLink(linkId, updates);
+                    console.log(`[Twitch] Auto-saved metadata for link ${linkId}: ${fText}`);
+                } catch (saveErr) {
+                    console.error(`[Twitch] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                }
+            }
+
             if (avatarUrl) {
                 twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             }
@@ -637,9 +694,24 @@ export const socialController = {
                 profileUrl: url
             };
 
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string' && (followersText || avatarUrl)) {
+                try {
+                    const updates: any = {};
+                    if (followersText) updates.subtitle = followersText;
+                    if (avatarUrl) updates.image = avatarUrl;
+                    await linkService.updateLink(linkId, updates);
+                    console.log(`[Kick] Auto-saved metadata for link ${linkId}: ${followersText}`);
+                } catch (saveErr) {
+                    console.error(`[Kick] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                }
+            }
+
             if (avatarUrl) kickCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
-        } catch (e) {
+        } catch (e: any) {
+            console.error('[SocialController] getKickProfileInfo error:', e);
             res.status(500).json({ error: 'Kick server error' });
         }
     },
