@@ -400,11 +400,11 @@ export const socialController = {
             let followers = '';
 
             try {
-                // Strategy 1: Crawler UA (Best for OG tags)
+                // Strategy 1: WhatsApp UA (Often bypassed from crawler blocks)
                 let pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                     timeout: 8000,
                     headers: { 
-                        'User-Agent': 'facebookexternalhit/1.1',
+                        'User-Agent': 'WhatsApp/2.21.12.21 A',
                         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
                 });
@@ -413,16 +413,28 @@ export const socialController = {
                 if (pageRes.ok) {
                     html = await pageRes.text();
                 } else {
-                    // Strategy 2: Real Browser UA (Fallback if crawler is blocked)
+                    // Strategy 2: Facebook Crawler UA
                     pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
                         timeout: 8000,
                         headers: { 
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                            'User-Agent': 'facebookexternalhit/1.1',
                             'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                         },
                     });
                     if (pageRes.ok) html = await pageRes.text();
+                    
+                    if (!html || !pageRes.ok) {
+                        // Strategy 3: Real Browser UA
+                        pageRes = await safeFetch(`https://www.twitch.tv/${username}`, {
+                            timeout: 8000,
+                            headers: { 
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                            },
+                        });
+                        if (pageRes.ok) html = await pageRes.text();
+                    }
                 }
 
                 if (html) {
@@ -434,7 +446,8 @@ export const socialController = {
                     
                     // 1. Regex for "mil seguidores" / "mil followers"
                     const pMatch = html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i) ||
-                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i);
+                                   html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*followers/i) ||
+                                   metaDesc.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*mil\s*seguidores/i);
                     
                     if (pMatch) {
                         const rawNum = pMatch[1].replace(',', '.');
