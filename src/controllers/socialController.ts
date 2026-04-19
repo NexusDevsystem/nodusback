@@ -171,150 +171,88 @@ export const socialController = {
     async getInstagramProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
-            if (!url || typeof url !== 'string') 
-                return res.status(400).json({ error: 'URL is required' });
+            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             const cleanUrl = url.split('?')[0].split('#')[0];
             const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/i);
-            const username = handleMatch ? handleMatch[1].replace('@', '').toLowerCase() : '';
+            let username = handleMatch ? handleMatch[1].replace('@', '') : '';
 
-            if (!username || ['p', 'reel', 'stories', 'explore'].includes(username)) {
-                return res.status(400).json({ error: 'Invalid Instagram profile URL' });
-            }
-
-            // Cache check
-            const cacheKey = `ig:${username}`;
+            // Check cache
+            const cacheKey = `ig:${username.toLowerCase()}`;
             const cached = igCache.get(cacheKey);
             if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
 
-            console.log(`[Instagram] Fetching: ${username}`);
+            console.log(`[SocialController] Fetching IG info (Stable HTML) for: ${username}`);
 
             let name = '';
             let avatarUrl = '';
             let followers = '';
 
-            // ─── Estratégia 1: oEmbed público (não precisa de API key) ───────────
-            // Retorna nome e avatar de forma oficial e estável.
-            // NÃO retorna seguidores — isso é separado.
-            try {
-                const oembedUrl = `https://graph.facebook.com/v22.0/instagram_oembed?url=${encodeURIComponent(`https://www.instagram.com/${username}/`)}&fields=author_name,thumbnail_url&omitscript=true`;
-                const oembedRes = await safeFetch(oembedUrl, { timeout: 6000 });
-
-                if (oembedRes.ok) {
-                    const data: any = await oembedRes.json();
-                    if (data?.author_name) name = data.author_name;
-                    if (data?.thumbnail_url) avatarUrl = data.thumbnail_url;
-                    console.log(`[Instagram] oEmbed ok: name=${name}, avatar=${!!avatarUrl}`);
-                }
-            } catch (e) {
-                console.log('[Instagram] oEmbed failed:', (e as any).message);
-            }
-
-            // ─── Estratégia 2: WhatsApp UA → og:description para seguidores ──────
-            // O Instagram serve uma versão mais rica do HTML para bots de preview.
-            // A og:description costuma ter "X Followers, Y Following, Z Posts"
-            if (!followers || !avatarUrl) {
+            // Strategy 1: HTML Fallback with WhatsApp UA (The most stable one)
+            if (!name || !avatarUrl || !followers) {
                 try {
-                    const pageRes = await safeFetch(`https://www.instagram.com/${username}/`, {
+                    const pageRes = await safeFetch(cleanUrl, {
                         timeout: 8000,
-                        headers: {
-                            'User-Agent': 'WhatsApp/2.23.20.0 A',
-                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-                            'Accept': 'text/html,application/xhtml+xml',
+                        headers: { 
+                            'User-Agent': 'WhatsApp/2.21.12.21 A',
+                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
                         },
                     });
 
                     if (pageRes.ok) {
                         const html = await pageRes.text();
                         const $ = cheerio.load(html);
-
-                        const metaDesc = $('meta[property="og:description"]').attr('content') || 
-                                         $('meta[name="description"]').attr('content') || '';
+                        
+                        const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                        const ogImage = $('meta[property="og:image"]').attr('content') || '';
-
-                        // og:description pattern: "1.2M Followers, 500 Following, 300 Posts"
+                        avatarUrl = avatarUrl || $('meta[property="og:image"]').attr('content') || '';
+                        
                         if (!followers && metaDesc) {
-                            const fMatch = metaDesc.match(/([\d.,]+\s*[KMBkmb]?)\s*(Followers|Seguidores)/i);
-                            if (fMatch) followers = fMatch[1].trim();
+                            const match = metaDesc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i) || 
+                                          metaDesc.match(/^([\d.,]+)/);
+                            if (match) followers = match[1];
                         }
 
-                        if (!avatarUrl && ogImage && !ogImage.includes('placeholder')) {
-                            avatarUrl = ogImage;
+                        // Deep Scan fallback
+                        if (!avatarUrl || !followers || avatarUrl.includes('placeholder')) {
+                            const scriptContent = $('script').text();
+                            const imgMatch = scriptContent.match(/"profile_pic_url_hd":"([^"]+)"/) || 
+                                             scriptContent.match(/"profile_pic_url":"([^"]+)"/);
+                            if (imgMatch) avatarUrl = imgMatch[1].replace(/\\u002f/g, '/');
+
+                            const followMatch = scriptContent.match(/"edge_followed_by":{"count":(\d+)}/) ||
+                                                scriptContent.match(/"user_followers":(\d+)/) ||
+                                                scriptContent.match(/"follower_count":(\d+)/);
+                            if (followMatch && !followers) {
+                                const count = parseInt(followMatch[1]);
+                                if (count >= 1000000) followers = (count / 1000000).toFixed(1) + 'M';
+                                else if (count >= 1000) followers = (count / 1000).toFixed(1) + 'K';
+                                else followers = count.toString();
+                            }
                         }
 
-                        // Parse name from og:title: "Username (@handle) • Instagram"
-                        if (!name && ogTitle) {
-                            const nameMatch = ogTitle.match(/^(.+?)\s*[•·(]/);
-                            name = nameMatch ? nameMatch[1].trim() : ogTitle.split(' (@')[0].trim();
-                        }
-
-                        console.log(`[Instagram] WhatsApp UA: followers=${followers}, avatar=${!!avatarUrl}`);
+                        if (!name && ogTitle) name = ogTitle.split(' (@')[0].replace('Instagram', '').trim();
                     }
                 } catch (e) {
-                    console.log('[Instagram] WhatsApp UA failed:', (e as any).message);
+                    console.log('[SocialController] IG error:', (e as any).message);
                 }
             }
 
-            // ─── Estratégia 3: facebookexternalhit UA como fallback ──────────────
-            if (!followers || !avatarUrl) {
-                try {
-                    const pageRes = await safeFetch(`https://www.instagram.com/${username}/`, {
-                        timeout: 8000,
-                        headers: {
-                            'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-                            'Accept-Language': 'pt-BR,pt;q=0.9',
-                        },
-                    });
-
-                    if (pageRes.ok) {
-                        const html = await pageRes.text();
-                        const $ = cheerio.load(html);
-
-                        if (!avatarUrl) {
-                            avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        }
-
-                        if (!followers) {
-                            const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                            const fMatch = metaDesc.match(/([\d.,]+\s*[KMBkmb]?)\s*(Followers|Seguidores)/i);
-                            if (fMatch) followers = fMatch[1].trim();
-                        }
-
-                        console.log(`[Instagram] facebookexternalhit: followers=${followers}`);
-                    }
-                } catch (e) {
-                    console.log('[Instagram] facebookexternalhit failed:', (e as any).message);
-                }
-            }
-
-            // ─── Normaliza contagem de seguidores ─────────────────────────────────
-            // Se vier como número puro (ex: "1234567"), formata para legível
-            if (followers && /^\d+$/.test(followers.replace(/[.,]/g, ''))) {
-                const count = parseInt(followers.replace(/[.,]/g, ''));
-                if (count >= 1_000_000) followers = (count / 1_000_000).toFixed(1).replace('.0', '') + 'M';
-                else if (count >= 1_000) followers = (count / 1_000).toFixed(1).replace('.0', '') + 'K';
-            }
-
+            const platformName = 'Instagram';
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
-                name: name || `@${username}`,
+                name: name || username || 'Instagram',
                 username,
-                avatarUrl: avatarUrl || '',
+                avatarUrl,
                 followers: followersText,
                 subscribers: followersText,
                 platform: 'instagram',
-                profileUrl: `https://www.instagram.com/${username}/`,
+                profileUrl: cleanUrl
             };
 
-            // Só cacheia se tiver dados úteis
-            if (avatarUrl || followersText) {
-                igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
-            }
-
+            if (avatarUrl || followersText) igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
-            console.error('[Instagram] Unexpected error:', (e as any).message);
             res.status(500).json({ error: 'Server error' });
         }
     },
