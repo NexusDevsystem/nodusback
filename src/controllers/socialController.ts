@@ -189,7 +189,7 @@ export const socialController = {
             const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/i);
             let username = handleMatch ? handleMatch[1].replace('@', '') : '';
             const cacheKey = `ig:${username.toLowerCase()}`;
-            
+
             const cached = igCache.get(cacheKey);
             if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) return res.json(cached.data);
 
@@ -268,7 +268,7 @@ export const socialController = {
             ];
 
             for (const strategy of strategies) {
-                try { if (await strategy()) break; } catch (e) {}
+                try { if (await strategy()) break; } catch (e) { }
             }
 
             if (!avatarUrl || !followers) {
@@ -410,7 +410,7 @@ export const socialController = {
             // More robust username extraction
             const match = url.match(/twitch\.tv\/([^/?#\s]+)/i);
             const username = match ? match[1].replace('@', '').toLowerCase() : null;
-            
+
             if (!username || username === 'directory' || username === 'search') {
                 return res.status(400).json({ error: 'Invalid Twitch channel URL' });
             }
@@ -480,11 +480,11 @@ export const socialController = {
                             const $ = cheerio.load(html);
                             name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || name;
                             avatarUrl = $('meta[property="og:image"]').attr('content') || avatarUrl;
-                            
+
                             const desc = $('meta[property="og:description"]').attr('content') || '';
-                            const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) || 
-                                           html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
-                            
+                            const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
+                                html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
+
                             if (fMatch && !followers) {
                                 followers = fMatch[1].replace(',', '.');
                             }
@@ -516,7 +516,7 @@ export const socialController = {
             if (avatarUrl) {
                 twitchCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             }
-            
+
             return res.json(result);
         } catch (e) {
             console.error(`[Twitch] Fatal controller error:`, e);
@@ -690,16 +690,16 @@ export const socialController = {
             }
 
             console.log(`[SocialMetadata] Generic result: platform=${platform}, followers=${followers}, avatar=${avatarUrl ? 'yes' : 'no'}`);
-            return res.json({ 
-                followers: followers || null, 
+            return res.json({
+                followers: followers || null,
                 follower_count: parseFollowerCount(followers),
-                subscribers: followers || null, 
-                platform, 
-                name, 
+                subscribers: followers || null,
+                platform,
+                name,
                 display_name: name,
-                avatarUrl, 
+                avatarUrl,
                 avatar_url: avatarUrl,
-                url 
+                url
             });
         } catch (e) {
             console.error('[SocialMetadata] Scrape failed:', (e as any).message);
