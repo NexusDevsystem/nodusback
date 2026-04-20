@@ -372,7 +372,7 @@ export const socialController = {
                     const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                     const ogTitle = $('meta[property="og:title"]').attr('content') || '';
 
-                    const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                    const fMatch = metaDesc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i);
                     if (fMatch) followers = fMatch[1].trim();
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                     name = ogTitle.split(' | TikTok')[0].trim();
@@ -655,7 +655,7 @@ export const socialController = {
                         }
 
                         const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                        const fMatch = metaDesc.match(/([\d.,km\s]+)\s*(?:Followers|Seguidores)/i);
+                        const fMatch = metaDesc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i);
                         if (fMatch) followers = fMatch[1].trim();
 
                         // JSON-LD or internal state scan for followers if meta fails
@@ -757,7 +757,7 @@ export const socialController = {
             if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) {
                 platform = 'youtube';
                 const metaDesc = $('meta[name="description"]').attr('content') || '';
-                const dMatch = metaDesc.match(/([\d.,]+\s*(?:K|M|B|mil|mi|milhão|milhões)?) (inscritos|subscribers)/i);
+                const dMatch = metaDesc.match(/([\d.,]+(?:K|M|B|mil|mi|milhão|milhões|thousand|million|billion)?)\s*(inscritos|subscribers)/i);
                 if (dMatch) followers = dMatch[1].trim() + ' inscritos';
             }
 
