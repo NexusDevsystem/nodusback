@@ -31,7 +31,7 @@ function parseFollowerCount(str: string): number {
  */
 async function extractMetadataWithAI(html: string, platform: string): Promise<any> {
     try {
-        console.log(`[AI-Extraction] Attempting to extract ${platform} data using Qwen...`);
+        console.log(`\x1b[35m[AI-Extraction] Starting extraction for ${platform}...\x1b[0m`);
         
         const $ = cheerio.load(html);
         
@@ -54,6 +54,8 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
         const title = $('title').text();
         const bodyText = $('body').text().replace(/\s+/g, ' ').slice(0, 3000); // Grab first 3k chars of text
 
+        console.log(`[AI-Extraction] Metadata found - Title: "${title}", Meta Tags Count: ${Object.keys(metaTags).length}`);
+
         const prompt = `
             Extract social media profile metadata from the following HTML/Context for ${platform}.
             Return ONLY a valid JSON object with these fields:
@@ -68,12 +70,14 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             Page Text Sample: ${bodyText}
         `;
 
+        console.log(`[AI-Extraction] Sending request to OpenRouter (Model: qwen/qwen-2.5-coder-32b-instruct:free)...`);
+
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
             model: 'qwen/qwen-2.5-coder-32b-instruct:free',
             messages: [
                 {
                     role: 'system',
-                    content: 'You are a precise web data extractor. You return ONLY raw JSON without any markdown formatting or explanation.'
+                    content: 'You are a precise web data extractor. You return ONLY raw JSON without any markdown formatting or explanation. If a field is not found, use null.'
                 },
                 {
                     role: 'user',
@@ -91,13 +95,21 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
         });
 
         const aiContent = response.data.choices[0]?.message?.content;
-        if (!aiContent) return null;
+        console.log(`[AI-Extraction] Raw AI Response:`, aiContent);
+
+        if (!aiContent) {
+            console.log(`\x1b[31m[AI-Extraction] Empty response from AI.\x1b[0m`);
+            return null;
+        }
 
         // Clean any potential markdown wrapping
         const cleanJson = aiContent.replace(/```json|```/g, '').trim();
-        return JSON.parse(cleanJson);
+        const result = JSON.parse(cleanJson);
+        
+        console.log(`\x1b[32m[AI-Extraction] Success! Extracted: name="${result.name}", followers="${result.followers}"\x1b[0m`);
+        return result;
     } catch (err: any) {
-        console.error('[AI-Extraction] Error:', err.response?.data || err.message);
+        console.error('\x1b[31m[AI-Extraction] Error:\x1b[0m', err.response?.data || err.message);
         return null;
     }
 }
@@ -273,6 +285,7 @@ export const socialController = {
     async getInstagramProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
+            console.log(`\x1b[36m[Instagram] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             const cleanUrl = url.split('?')[0].split('#')[0];
@@ -455,6 +468,7 @@ export const socialController = {
     async getTiktokProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
+            console.log(`\x1b[36m[TikTok] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             const lowerUrl = url.toLowerCase();
@@ -573,6 +587,7 @@ export const socialController = {
     async getTwitchProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
+            console.log(`\x1b[36m[Twitch] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             // More robust username extraction
@@ -735,6 +750,7 @@ export const socialController = {
     async getKickProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
+            console.log(`\x1b[36m[Kick] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             const username = url.split('/').filter(p => p).pop();
@@ -777,6 +793,7 @@ export const socialController = {
             }
 
             if (!avatarUrl || !followers) {
+                console.log(`[Kick] Standard API failed to get all data. Triggering AI/HTML Fallback for ${username}...`);
                 // Try AI Strategy as a primary fallback
                 try {
                     const pageRes = await safeFetch(`https://kick.com/${username}`, {
