@@ -212,10 +212,10 @@ export const socialController = {
             let name = '', avatarUrl = '', followers = '';
 
             const strategies = [
-                // 1. oEmbed (Official & Fast)
+                // 1. oEmbed (Official-ish)
                 async () => {
                     const oEmbedUrl = `https://graph.facebook.com/v12.0/instagram_oembed?url=${encodeURIComponent(cleanUrl)}&omitscript=true`;
-                    const res = await safeFetch(oEmbedUrl, { timeout: 5000 });
+                    const res = await safeFetch(oEmbedUrl, { timeout: 4000 });
                     if (res.ok) {
                         const data: any = await res.json();
                         name = data.author_name || name;
@@ -224,19 +224,20 @@ export const socialController = {
                     }
                     return false;
                 },
-                // 2. Facebook Crawler (Privileged)
+                // 2. Twitterbot (High privilege for previews)
                 async () => {
                     const res = await safeFetch(cleanUrl, {
-                        headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' },
-                        timeout: 7000
+                        headers: { 'User-Agent': 'Twitterbot/1.0' },
+                        timeout: 6000
                     });
                     if (res.ok) {
                         const html = await res.text();
                         const $ = cheerio.load(html);
                         if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                         const desc = $('meta[property="og:description"]').attr('content') || '';
-                        const match = desc.match(/([\d.,]+[KMB]?) (?:Followers|Seguidores)/i);
+                        const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
                         if (match) followers = match[1];
+                        if (!name) name = $('meta[property="og:title"]').attr('content')?.split(' (')[0] || '';
                         return !!avatarUrl;
                     }
                     return false;
@@ -245,7 +246,7 @@ export const socialController = {
                 async () => {
                     const res = await safeFetch(cleanUrl, {
                         headers: { 'User-Agent': 'WhatsApp/2.23.20.0 A' },
-                        timeout: 7000
+                        timeout: 6000
                     });
                     if (res.ok) {
                         const html = await res.text();
@@ -253,18 +254,18 @@ export const socialController = {
                         if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
                         if (!followers) {
                             const desc = $('meta[property="og:description"]').attr('content') || '';
-                            const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i) || desc.match(/([\d.,]+[KMB]?)\s*(?:seguindo|following)/i);
+                            const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
                             if (match) followers = match[1];
                         }
                         return !!avatarUrl;
                     }
                     return false;
                 },
-                // 4. Googlebot (Desktop View)
+                // 4. LinkedInBot (Professional Crawler)
                 async () => {
                     const res = await safeFetch(cleanUrl, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-                        timeout: 7000
+                        headers: { 'User-Agent': 'LinkedInBot/1.0 (at customer-request)' },
+                        timeout: 6000
                     });
                     if (res.ok) {
                         const html = await res.text();
@@ -281,26 +282,39 @@ export const socialController = {
                 }
             ];
 
-            for (const strategy of strategies) {
-                try { if (await strategy()) break; } catch (e) { }
+            for (const [index, strategy] of strategies.entries()) {
+                try { 
+                    if (await strategy()) {
+                        console.log(`[Instagram] Strategy ${index + 1} succeeded for ${username}`);
+                        break; 
+                    } 
+                } catch (e) { 
+                    console.log(`[Instagram] Strategy ${index + 1} failed for ${username}:`, (e as any).message);
+                }
             }
 
             if (!avatarUrl || !followers) {
                 // Final fallback: Scan for JSON-like patterns in HTML
-                const html = await (await safeFetch(cleanUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' } })).text();
-                if (!avatarUrl) {
-                    const picMatch = html.match(/"profile_pic_url":"([^"]+)"/);
-                    if (picMatch) avatarUrl = picMatch[1].replace(/\\u0026/g, '&');
-                }
-                if (!followers) {
-                    const folMatch = html.match(/"edge_followed_by":\{"count":(\d+)\}/);
-                    if (folMatch) {
-                        const count = parseInt(folMatch[1]);
-                        if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                        else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                        else followers = count.toString();
+                try {
+                    const html = await (await safeFetch(cleanUrl, { 
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
+                        timeout: 5000
+                    })).text();
+                    
+                    if (!avatarUrl) {
+                        const picMatch = html.match(/"profile_pic_url":"([^"]+)"/) || html.match(/"og:image" content="([^"]+)"/);
+                        if (picMatch) avatarUrl = picMatch[1].replace(/\\u0026/g, '&');
                     }
-                }
+                    if (!followers) {
+                        const folMatch = html.match(/"edge_followed_by":\{"count":(\d+)\}/) || html.match(/"followers_count":(\d+)/);
+                        if (folMatch) {
+                            const count = parseInt(folMatch[1]);
+                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                            else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                            else followers = count.toString();
+                        }
+                    }
+                } catch (e) {}
             }
 
             const result = {
