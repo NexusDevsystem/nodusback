@@ -26,6 +26,82 @@ function parseFollowerCount(str: string): number {
     return Math.floor(val);
 }
 
+/**
+ * AI-powered data extraction using OpenRouter
+ */
+async function extractMetadataWithAI(html: string, platform: string): Promise<any> {
+    try {
+        console.log(`[AI-Extraction] Attempting to extract ${platform} data using Qwen...`);
+        
+        const $ = cheerio.load(html);
+        
+        // Clean HTML to save tokens and focus on content
+        $('script').remove();
+        $('style').remove();
+        $('svg').remove();
+        $('path').remove();
+        $('nav').remove();
+        $('footer').remove();
+        
+        // Extract meta tags and title as they are most relevant
+        const metaTags: any = {};
+        $('meta').each((i, el) => {
+            const name = $(el).attr('name') || $(el).attr('property');
+            const content = $(el).attr('content');
+            if (name && content) metaTags[name] = content;
+        });
+
+        const title = $('title').text();
+        const bodyText = $('body').text().replace(/\s+/g, ' ').slice(0, 3000); // Grab first 3k chars of text
+
+        const prompt = `
+            Extract social media profile metadata from the following HTML/Context for ${platform}.
+            Return ONLY a valid JSON object with these fields:
+            - name (full display name)
+            - username (handle)
+            - avatarUrl (profile picture URL)
+            - followers (formatted string like "10K" or "1.5M")
+            - followersRaw (numeric count if found)
+
+            Context Title: ${title}
+            Meta Tags: ${JSON.stringify(metaTags)}
+            Page Text Sample: ${bodyText}
+        `;
+
+        const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+            model: 'qwen/qwen-2.5-coder-32b-instruct:free',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a precise web data extractor. You return ONLY raw JSON without any markdown formatting or explanation.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            temperature: 0.1
+        }, {
+            headers: {
+                'Authorization': `Bearer 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`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://nodus.link',
+                'X-Title': 'Nodus App'
+            }
+        });
+
+        const aiContent = response.data.choices[0]?.message?.content;
+        if (!aiContent) return null;
+
+        // Clean any potential markdown wrapping
+        const cleanJson = aiContent.replace(/```json|```/g, '').trim();
+        return JSON.parse(cleanJson);
+    } catch (err: any) {
+        console.error('[AI-Extraction] Error:', err.response?.data || err.message);
+        return null;
+    }
+}
+
 export const socialController = {
 
     /**
@@ -279,6 +355,28 @@ export const socialController = {
                         return !!avatarUrl;
                     }
                     return false;
+                },
+                // 5. AI Brain Strategy (Smart Extraction)
+                async () => {
+                    try {
+                        const res = await safeFetch(cleanUrl, {
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+                            timeout: 8000
+                        });
+                        if (res.ok) {
+                            const html = await res.text();
+                            const aiData = await extractMetadataWithAI(html, 'Instagram');
+                            if (aiData) {
+                                if (aiData.name) name = aiData.name;
+                                if (aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
+                                if (aiData.followers) followers = aiData.followers;
+                                return !!avatarUrl || !!followers;
+                            }
+                        }
+                    } catch (e) {
+                        console.log('[Instagram] AI Strategy failed:', (e as any).message);
+                    }
+                    return false;
                 }
             ];
 
@@ -382,17 +480,31 @@ export const socialController = {
 
                 if (pageRes.ok) {
                     const html = await pageRes.text();
-                    const $ = cheerio.load(html);
-                    const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+                    
+                    // Try AI Strategy first for TikTok as it's very reliable
+                    const aiData = await extractMetadataWithAI(html, 'TikTok');
+                    if (aiData) {
+                        if (aiData.name) name = aiData.name;
+                        if (aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
+                        if (aiData.followers) followers = aiData.followers;
+                    }
 
-                    const fMatch = metaDesc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i);
-                    if (fMatch) followers = fMatch[1].trim();
-                    avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                    name = ogTitle.split(' | TikTok')[0].trim();
+                    // Fallback to Cheerio if AI misses something
+                    if (!name || !avatarUrl || !followers) {
+                        const $ = cheerio.load(html);
+                        const metaDesc = $('meta[property="og:description"]').attr('content') || '';
+                        const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+
+                        if (!followers) {
+                            const fMatch = metaDesc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i);
+                            if (fMatch) followers = fMatch[1].trim();
+                        }
+                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        if (!name) name = ogTitle.split(' | TikTok')[0].trim();
+                    }
                 }
             } catch (e) {
-                console.log('[SocialController] TikTok error:', (e as any).message);
+                console.log('[SocialController] TikTok AI/HTML error:', (e as any).message);
             }
 
             const platformName = 'TikTok';
@@ -524,7 +636,29 @@ export const socialController = {
                     }
                     return false;
                 },
-                // Strategy 2: Scrape via Googlebot (SSR)
+                // Strategy 2: AI Brain Strategy (Smart Extraction)
+                async () => {
+                    try {
+                        const scrapeRes = await safeFetch(`https://www.twitch.tv/${username}`, {
+                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+                            timeout: 8000
+                        });
+                        if (scrapeRes.ok) {
+                            const html = await scrapeRes.text();
+                            const aiData = await extractMetadataWithAI(html, 'Twitch');
+                            if (aiData) {
+                                if (aiData.name) name = aiData.name;
+                                if (aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
+                                if (aiData.followers) followers = aiData.followers;
+                                return !!avatarUrl || !!followers;
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[Twitch] AI Strategy Error for ${username}:`, (e as any).message);
+                    }
+                    return false;
+                },
+                // Strategy 3: Scrape via Googlebot (SSR)
                 async () => {
                     try {
                         const scrapeRes = await safeFetch(`https://www.twitch.tv/${username}`, {
@@ -534,8 +668,8 @@ export const socialController = {
                         if (scrapeRes.ok) {
                             const html = await scrapeRes.text();
                             const $ = cheerio.load(html);
-                            name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || name;
-                            avatarUrl = $('meta[property="og:image"]').attr('content') || avatarUrl;
+                            if (!name) name = $('meta[property="og:title"]').attr('content')?.split(' - ')[0] || name;
+                            if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || avatarUrl;
 
                             const desc = $('meta[property="og:description"]').attr('content') || '';
                             const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
@@ -643,6 +777,7 @@ export const socialController = {
             }
 
             if (!avatarUrl || !followers) {
+                // Try AI Strategy as a primary fallback
                 try {
                     const pageRes = await safeFetch(`https://kick.com/${username}`, {
                         timeout: 8000,
@@ -654,6 +789,14 @@ export const socialController = {
 
                     if (pageRes.ok) {
                         const html = await pageRes.text();
+                        const aiData = await extractMetadataWithAI(html, 'Kick.com');
+                        if (aiData) {
+                            if (!name && aiData.name) name = aiData.name;
+                            if (!avatarUrl && aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
+                            if (!followers && aiData.followers) followers = aiData.followers;
+                        }
+
+                        // Also run standard scraping logic on the same HTML just in case
                         const $ = cheerio.load(html);
 
                         name = name || $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || username;
@@ -670,7 +813,7 @@ export const socialController = {
 
                         const metaDesc = $('meta[property="og:description"]').attr('content') || '';
                         const fMatch = metaDesc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i);
-                        if (fMatch) followers = fMatch[1].trim();
+                        if (fMatch && !followers) followers = fMatch[1].trim();
 
                         // JSON-LD or internal state scan for followers if meta fails
                         if (!followers) {
@@ -690,7 +833,7 @@ export const socialController = {
                         }
                     }
                 } catch (e) {
-                    console.log('[SocialController] Kick HTML error:', (e as any).message);
+                    console.log('[SocialController] Kick AI/HTML error:', (e as any).message);
                 }
             }
 
@@ -761,18 +904,24 @@ export const socialController = {
             console.log('[SocialMetadata] Falling back to generic/youtube scraper');
             const safeRes = await safeFetch(url, { timeout: 5000, headers: { 'User-Agent': 'facebookexternalhit/1.1' } });
             const html = await safeRes.text();
+            
+            // Try AI extraction for generic links first
+            const aiData = await extractMetadataWithAI(html, 'Social Media Profile');
+            
             const $ = cheerio.load(html);
 
-            let followers = '';
-            let platform = 'unknown';
-            let avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-            let name = $('meta[property="og:title"]').attr('content') || '';
+            let followers = aiData?.followers || '';
+            let platform = aiData?.platform || 'unknown';
+            let avatarUrl = aiData?.avatarUrl || $('meta[property="og:image"]').attr('content') || '';
+            let name = aiData?.name || $('meta[property="og:title"]').attr('content') || '';
 
             if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) {
                 platform = 'youtube';
-                const metaDesc = $('meta[name="description"]').attr('content') || '';
-                const dMatch = metaDesc.match(/([\d.,]+(?:K|M|B|mil|mi|milhão|milhões|thousand|million|billion)?)\s*(inscritos|subscribers)/i);
-                if (dMatch) followers = dMatch[1].trim() + ' inscritos';
+                if (!followers) {
+                    const metaDesc = $('meta[name="description"]').attr('content') || '';
+                    const dMatch = metaDesc.match(/([\d.,]+(?:K|M|B|mil|mi|milhão|milhões|thousand|million|billion)?)\s*(inscritos|subscribers)/i);
+                    if (dMatch) followers = dMatch[1].trim() + ' inscritos';
+                }
             }
 
             console.log(`[SocialMetadata] Generic result: platform=${platform}, followers=${followers}, avatar=${avatarUrl ? 'yes' : 'no'}`);
