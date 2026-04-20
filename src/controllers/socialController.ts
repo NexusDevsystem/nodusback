@@ -70,27 +70,46 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             Page Text Sample: ${bodyText}
         `;
 
-        console.log(`[AI-Extraction] Sending request to OpenRouter (Model: qwen/qwen-2.5-coder-32b-instruct:free)...`);
+        console.log(`[AI-Extraction] Sending request to OpenRouter (Model: qwen/qwen3-coder:free) with Structured Output...`);
 
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-            model: 'qwen/qwen-2.5-coder-32b-instruct:free',
+            model: 'qwen/qwen3-coder:free',
             messages: [
                 {
                     role: 'system',
-                    content: 'You are a precise web data extractor. You return ONLY raw JSON without any markdown formatting or explanation. If a field is not found, use null.'
+                    content: 'You are a precise web data extractor. Extract the requested social media profile metadata from the provided context.'
                 },
                 {
                     role: 'user',
                     content: prompt
                 }
             ],
+            response_format: {
+                type: 'json_schema',
+                json_schema: {
+                    name: 'social_metadata',
+                    strict: true,
+                    schema: {
+                        type: 'object',
+                        properties: {
+                            name: { type: 'string', description: 'Full display name of the profile' },
+                            username: { type: 'string', description: 'Profile handle/username' },
+                            avatarUrl: { type: 'string', description: 'Direct URL to the profile avatar image' },
+                            followers: { type: 'string', description: 'Formatted follower count (e.g., 10K, 1.5M, 500)' },
+                            followersRaw: { type: ['integer', 'null'], description: 'Numeric follower count if available' }
+                        },
+                        required: ['name', 'username', 'avatarUrl', 'followers'],
+                        additionalProperties: false
+                    }
+                }
+            },
             temperature: 0.1
         }, {
             headers: {
                 'Authorization': `Bearer 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`,
                 'Content-Type': 'application/json',
                 'HTTP-Referer': 'https://nodus.link',
-                'X-Title': 'Nodus App'
+                'X-OpenRouter-Title': 'Nodus App'
             }
         });
 
@@ -102,12 +121,14 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             return null;
         }
 
-        // Clean any potential markdown wrapping
-        const cleanJson = aiContent.replace(/```json|```/g, '').trim();
-        const result = JSON.parse(cleanJson);
-        
-        console.log(`\x1b[32m[AI-Extraction] Success! Extracted: name="${result.name}", followers="${result.followers}"\x1b[0m`);
-        return result;
+        try {
+            const result = JSON.parse(aiContent);
+            console.log(`\x1b[32m[AI-Extraction] Success! Extracted: name="${result.name}", followers="${result.followers}"\x1b[0m`);
+            return result;
+        } catch (parseErr) {
+            console.error(`\x1b[31m[AI-Extraction] JSON Parse Error:\x1b[0m`, aiContent);
+            return null;
+        }
     } catch (err: any) {
         console.error('\x1b[31m[AI-Extraction] Error:\x1b[0m', err.response?.data || err.message);
         return null;
