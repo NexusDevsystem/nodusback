@@ -60,16 +60,17 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
 
         const prompt = `
             Extract social media profile metadata from the following HTML/Context for ${platform}.
-            Return ONLY a valid JSON object with these fields:
-            - name (full display name)
-            - username (handle)
-            - avatarUrl (profile picture URL)
-            - followers (formatted string like "10K" or "1.5M")
-            - followersRaw (numeric count if found)
-
-            Context Title: ${title}
+            Return ONLY a valid JSON object.
+            
+            Platform: ${platform}
+            Title: ${title}
             Meta Tags: ${JSON.stringify(metaTags)}
-            Page Text Sample: ${bodyText}
+            Page Text Snippet: ${bodyText}
+
+            IMPORTANT:
+            - Look for follower counts like "10K", "1,5M" or "500 followers".
+            - Look for the profile image URL in og:image or similar tags.
+            - If you see a login screen, try to extract whatever handle is mentioned.
         `;
 
         const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free';
@@ -407,11 +408,35 @@ export const socialController = {
                         console.log(`[Instagram] AI Strategy response status: ${res.status} for ${username}`);
                         if (res.ok) {
                             const html = await res.text();
+                            console.log(`[Instagram] AI Strategy HTML length: ${html.length} chars`);
+                            
+                            // 🕵️ HARDCORE REGEX FALLBACK (Before AI)
+                            // Instagram often hides data in JSON strings inside the HTML
+                            if (!avatarUrl) {
+                                const picMatch = html.match(/"profile_pic_url":"([^"]+)"/) || 
+                                               html.match(/"og:image"\s*content="([^"]+)"/) ||
+                                               html.match(/"profile_pic_url_hd":"([^"]+)"/);
+                                if (picMatch) {
+                                    avatarUrl = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                                    console.log(`[Instagram] Found avatar via Regex: ${avatarUrl.substring(0, 30)}...`);
+                                }
+                            }
+                            
+                            if (!followers) {
+                                const folMatch = html.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) || 
+                                               html.match(/"followers_count":\s*(\d+)/) ||
+                                               html.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                                if (folMatch) {
+                                    followers = folMatch[1];
+                                    console.log(`[Instagram] Found followers via Regex: ${followers}`);
+                                }
+                            }
+
                             const aiData = await extractMetadataWithAI(html, 'Instagram');
                             if (aiData) {
-                                if (aiData.name) name = aiData.name;
-                                if (aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
-                                if (aiData.followers) followers = aiData.followers;
+                                if (aiData.name && !name) name = aiData.name;
+                                if (aiData.avatarUrl && !avatarUrl) avatarUrl = aiData.avatarUrl;
+                                if (aiData.followers && !followers) followers = aiData.followers;
                                 return !!avatarUrl || !!followers;
                             }
                         }
