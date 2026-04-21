@@ -182,12 +182,14 @@ export const linkService = {
             .update(dbUpdates)
             .eq('id', linkId)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('Error updating link:', error);
             return null;
         }
+
+        if (!data) return null;
 
         return linkDbToApi(data as LinkItemDB);
     },

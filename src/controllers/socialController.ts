@@ -68,9 +68,10 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             Page Text Snippet: ${bodyText}
 
             IMPORTANT:
-            - Look for follower counts like "10K", "1,5M" or "500 followers".
-            - Look for the profile image URL in og:image or similar tags.
-            - If you see a login screen, try to extract whatever handle is mentioned.
+            - Look for follower counts like "10K", "1.5M" or "500 followers".
+            - Look for the profile image URL in og:image or script tags (look for 'profile_pic_url').
+            - If you see a login screen, generic "Instagram" title, or "Redirecting..." page, set name to "LOGIN_REQUIRED".
+            - Check for JSON data in script tags if provided.
         `;
         const model = process.env.OPENROUTER_MODEL || "z-ai/glm-4.5-air:free";
         console.log(`[AI-Extraction] Sending request to OpenRouter (Model: ${model}, Platform: ${platform}) with Structured Output...`);
@@ -476,9 +477,13 @@ export const socialController = {
                     console.log(`[Instagram] Sending to AI for remaining data...`);
                     const aiData = await extractMetadataWithAI(bestHtml, 'Instagram');
                     if (aiData) {
-                        if (!name && aiData.name) name = aiData.name;
-                        if (!avatarUrl && aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
-                        if (!followers && aiData.followers) followers = aiData.followers;
+                        if (aiData.name === 'LOGIN_REQUIRED') {
+                            console.log(`[Instagram] AI detected login wall. Skipping metadata extraction.`);
+                        } else {
+                            if (!name && aiData.name) name = aiData.name;
+                            if (!avatarUrl && aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
+                            if (!followers && aiData.followers) followers = aiData.followers;
+                        }
                     }
                 }
             }
@@ -502,17 +507,20 @@ export const socialController = {
             };
 
             // 💾 STEP 3: Persist to DB so this never needs to run again
-            if (linkId && typeof linkId === 'string' && (avatarUrl || followersText)) {
+            // ONLY save if we actually found something useful (followers or non-generic avatar)
+            if (linkId && typeof linkId === 'string' && (followersText || (avatarUrl && !avatarUrl.includes('static.cdninstagram.com')))) {
                 try {
                     const updates: any = {};
                     if (followersText) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
                     const updatedLink = await linkService.updateLink(linkId, updates);
-                    console.log(`[Instagram] Saved to DB for link ${linkId}`);
-
-                    if (updatedLink?.userId) {
-                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
-                        if (user?.username) realtimeManager.notifyUpdate(user.username);
+                    
+                    if (updatedLink) {
+                        console.log(`[Instagram] Saved to DB for link ${linkId}`);
+                        if (updatedLink.userId) {
+                            const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                            if (user?.username) realtimeManager.notifyUpdate(user.username);
+                        }
                     }
                 } catch (saveErr) {
                     console.error(`[Instagram] Failed to save to DB:`, saveErr);
