@@ -167,6 +167,26 @@ export const socialController = {
             let avatarUrl = '';
             let subscribers = '';
 
+            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string') {
+                try {
+                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                    if (currentLink?.subtitle && currentLink?.image) {
+                        console.log(`[YouTube] Link ${linkId} already has metadata. Skipping.`);
+                        return res.json({
+                            name: 'YouTube Channel',
+                            avatarUrl: currentLink.image,
+                            subscribers: currentLink.subtitle,
+                            platform: 'youtube',
+                            channelUrl: url
+                        });
+                    }
+                } catch (err) {
+                    console.error('[YouTube] Pre-check failed:', err);
+                }
+            }
+
             // Strategy 0: InnerTube
             try {
                 const handleMatch = url.match(/\/(@[^/?#]+)/);
@@ -281,7 +301,6 @@ export const socialController = {
             const subscribersText = subscribers ? `${subscribers} inscritos` : '';
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            const { linkId } = req.query;
             if (linkId && typeof linkId === 'string' && (subscribersText || avatarUrl)) {
                 try {
                     const updates: any = {};
@@ -330,6 +349,27 @@ export const socialController = {
 
             const cached = igCache.get(cacheKey);
             if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) return res.json(cached.data);
+
+            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string') {
+                try {
+                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                    if (currentLink?.subtitle && currentLink?.image && !currentLink.image.includes('static.cdninstagram.com')) {
+                        console.log(`[Instagram] Link ${linkId} already has full metadata. Skipping scrape.`);
+                        return res.json({
+                            name: username,
+                            username,
+                            avatarUrl: currentLink.image,
+                            followers: currentLink.subtitle,
+                            platform: 'instagram',
+                            profileUrl: cleanUrl
+                        });
+                    }
+                } catch (err) {
+                    console.error('[Instagram] Pre-check failed:', err);
+                }
+            }
 
             console.log(`[Instagram] Resilient fetch for: ${username}`);
 
@@ -580,7 +620,6 @@ export const socialController = {
             };
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            const { linkId } = req.query;
             if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
@@ -746,6 +785,27 @@ export const socialController = {
 
             let name = '', avatarUrl = '', followers = '';
 
+            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string') {
+                try {
+                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                    if (currentLink?.subtitle && currentLink?.image) {
+                        console.log(`[Twitch] Link ${linkId} already has metadata. Skipping.`);
+                        return res.json({
+                            name: username,
+                            username,
+                            avatarUrl: currentLink.image,
+                            followers: currentLink.subtitle,
+                            platform: 'twitch',
+                            profileUrl: `https://www.twitch.tv/${username}`
+                        });
+                    }
+                } catch (err) {
+                    console.error('[Twitch] Pre-check failed:', err);
+                }
+            }
+
             const strategies = [
                 // Strategy 1: GraphQL (Internal API) - Preferred
                 async () => {
@@ -859,7 +919,6 @@ export const socialController = {
             };
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata
-            const { linkId } = req.query;
             if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
@@ -906,6 +965,27 @@ export const socialController = {
             const cacheKey = `kick:${username.toLowerCase()}`;
             const cached = kickCache.get(cacheKey);
             if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+
+            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
+            const { linkId } = req.query;
+            if (linkId && typeof linkId === 'string') {
+                try {
+                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                    if (currentLink?.subtitle && currentLink?.image) {
+                        console.log(`[Kick] Link ${linkId} already has metadata. Skipping.`);
+                        return res.json({
+                            name: username,
+                            username,
+                            avatarUrl: currentLink.image,
+                            followers: currentLink.subtitle,
+                            platform: 'kick',
+                            profileUrl: url
+                        });
+                    }
+                } catch (err) {
+                    console.error('[Kick] Pre-check failed:', err);
+                }
+            }
 
             console.log(`[SocialController] Fetching Kick info for: ${username}`);
 
@@ -1019,7 +1099,6 @@ export const socialController = {
             };
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            const { linkId } = req.query;
             if (linkId && typeof linkId === 'string' && (followersText || avatarUrl)) {
                 try {
                     const updates: any = {};
