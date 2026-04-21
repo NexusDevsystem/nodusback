@@ -115,7 +115,7 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             }
         });
 
-        const aiContent = response.data.choices[0]?.message?.content;
+        let aiContent = response.data.choices[0]?.message?.content;
         console.log(`[AI-Extraction] Raw AI Response:`, aiContent);
 
         if (!aiContent) {
@@ -123,10 +123,25 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             return null;
         }
 
+        // Clean markdown code blocks if present
+        let cleanedContent = aiContent.trim();
+        if (cleanedContent.includes('```')) {
+            cleanedContent = cleanedContent.replace(/```json/g, '').replace(/```/g, '').trim();
+        }
+
         try {
-            const result = JSON.parse(aiContent);
-            console.log(`\x1b[32m[AI-Extraction] Success! Extracted: name="${result.name}", followers="${result.followers}"\x1b[0m`);
-            return result;
+            const result = JSON.parse(cleanedContent);
+            
+            // Normalize fields if model ignored schema
+            const normalized = {
+                name: result.name || result.full_name || result.title || '',
+                username: result.username || result.handle || result.profile_handle || '',
+                avatarUrl: result.avatarUrl || result.profile_image || result.profile_image_url || result.avatar_url || '',
+                followers: result.followers || result.follower_count || result.subscribers || ''
+            };
+
+            console.log(`\x1b[32m[AI-Extraction] Success! Extracted: name="${normalized.name}", followers="${normalized.followers}"\x1b[0m`);
+            return normalized;
         } catch (parseErr) {
             console.error(`\x1b[31m[AI-Extraction] JSON Parse Error:\x1b[0m`, aiContent);
             return null;
@@ -1043,7 +1058,7 @@ export const socialController = {
                 platform = 'youtube';
                 if (!followers) {
                     const metaDesc = $('meta[name="description"]').attr('content') || '';
-                    const dMatch = metaDesc.match(/([\d.,]+(?:K|M|B|mil|mi|milhão|milhões|thousand|million|billion)?)\s*(inscritos|subscribers)/i);
+                    const dMatch = metaDesc.match(/([\d.,]+[KMB]?)\s*(?:inscritos|subscribers)/i);
                     if (dMatch) followers = dMatch[1].trim() + ' inscritos';
                 }
             }
@@ -1087,6 +1102,3 @@ export const socialController = {
         } catch (e) { res.status(500).send('Error'); }
     }
 };
-
-
-
