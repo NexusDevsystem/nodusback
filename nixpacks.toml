@@ -1,5 +1,6 @@
 # Nixpacks config for Railway
 # System libraries required by Puppeteer's bundled Chromium
+# Ubuntu 24.04 (Noble) uses libasound2t64 instead of libasound2
 
 [phases.setup]
 aptPkgs = [
@@ -8,7 +9,7 @@ aptPkgs = [
     "libdrm2",
     "libxkbcommon0",
     "libgbm1",
-    "libasound2",
+    "libasound2t64",
     "libatspi2.0-0",
     "libxshmfence1",
     "libx11-xcb1",
