@@ -465,24 +465,32 @@ export const socialController = {
                             
                             // 🕵️ HARDCORE REGEX FALLBACK (Before AI)
                             // Instagram often hides data in JSON strings inside the HTML
-                            if (!avatarUrl) {
-                                const picMatch = html.match(/"profile_pic_url":"([^"]+)"/) || 
-                                               html.match(/"og:image"\s*content="([^"]+)"/) ||
-                                               html.match(/"profile_pic_url_hd":"([^"]+)"/);
-                                if (picMatch) {
-                                    avatarUrl = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
-                                    console.log(`[Instagram] Found avatar via Regex: ${avatarUrl.substring(0, 30)}...`);
+                            if (!followers) {
+                                // Deep JSON scan for followers count in large HTML blobs
+                                const folMatch = html.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) || 
+                                               html.match(/"followers_count":\s*(\d+)/) ||
+                                               html.match(/"user_followers":\s*"([\d.,]+[KMB]?)"/);
+                                if (folMatch) {
+                                    followers = folMatch[1];
+                                    console.log(`[Instagram] Found followers via Deep Scan: ${followers}`);
                                 }
                             }
                             
-                            if (!followers) {
-                                const folMatch = html.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) || 
-                                               html.match(/"followers_count":\s*(\d+)/) ||
-                                               html.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                                if (folMatch) {
-                                    followers = folMatch[1];
-                                    console.log(`[Instagram] Found followers via Regex: ${followers}`);
+                            if (!avatarUrl) {
+                                // Deep JSON scan for profile pic
+                                const picMatch = html.match(/"profile_pic_url_hd":"([^"]+)"/) || 
+                                               html.match(/"profile_pic_url":"([^"]+)"/);
+                                if (picMatch) {
+                                    const candidate = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                                    if (!candidate.includes('static.cdninstagram.com')) {
+                                        avatarUrl = candidate;
+                                        console.log(`[Instagram] Found HD avatar via Deep Scan`);
+                                    }
                                 }
+                            }
+
+                            if (!name || name.includes('Entrar') || name.includes('Login')) {
+                                name = username; // Fallback to username if title is generic login text
                             }
 
                             const aiData = await extractMetadataWithAI(html, 'Instagram');
