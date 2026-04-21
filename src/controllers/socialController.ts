@@ -329,9 +329,10 @@ export const socialController = {
             if (bestHtml) {
                 // Quick regex extraction (catches data in JSON blobs)
                 const folMatch = bestHtml.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) ||
+                                bestHtml.match(/followers_count\\*":\s*(\d+)/) ||
                                 bestHtml.match(/"followers_count":\s*(\d+)/) ||
                                 bestHtml.match(/"edge_followed_by":\s*(\d+)/) ||
-                                bestHtml.match(/([\d.,KMB]+)\s*Followers/i); // Common in meta
+                                bestHtml.match(/([\d.,KMB]+)\s*(?:Followers|Seguidores)/i); // Common in meta or embed span
                 if (folMatch) {
                     const rawStr = folMatch[1];
                     const rawCount = parseInt(rawStr.replace(/[,.]/g, ''));
@@ -347,14 +348,33 @@ export const socialController = {
 
                 const picMatch = bestHtml.match(/"profile_pic_url_hd":"([^"]+)"/) ||
                                 bestHtml.match(/"profile_pic_url":"([^"]+)"/) ||
-                                bestHtml.match(/profile_pic_url\\":\\"(https:[^"]+)\\"/) ||
+                                bestHtml.match(/profile_pic_url\\*":\s*\\*"([^"]+)\\*"/i) || 
                                 bestHtml.match(/src="([^"]+)"[^>]*class="[^"]*Avatar/i) ||
-                                bestHtml.match(/https:\/\/scontent[^"']+\.jpg/i); // Very aggressive scontent match
+                                bestHtml.match(/https:\/\/scontent[^"'\s)]+\.jpg/i); // Very aggressive scontent match
                 if (picMatch) {
                     const candidate = picMatch[1]?.replace(/\\u0026/g, '&').replace(/\\/g, '') || picMatch[0];
                     if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
                         avatarUrl = candidate;
                         console.log(`[Instagram] Regex found avatar: ${avatarUrl.substring(0, 50)}...`);
+                    }
+                }
+
+                // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON (found in embeds)
+                const contextMatch = bestHtml.match(/"contextJSON"\s*:\s*"({.+?})"/);
+                if (contextMatch) {
+                    try {
+                        // Unescape the JSON string inside the HTML
+                        const rawJson = contextMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\\/ /g, '/');
+                        const context = JSON.parse(rawJson);
+                        const user = context.context || context;
+                        if (user) {
+                            if (!name && user.full_name) name = user.full_name;
+                            if (!avatarUrl && user.profile_pic_url) avatarUrl = user.profile_pic_url;
+                            if (!followers && user.followers_count) followers = user.followers_count.toString();
+                            console.log(`[Instagram] Deep scan success: name="${name}", followers="${followers}"`);
+                        }
+                    } catch (e) {
+                        console.log(`[Instagram] Deep scan failed: ${(e as any).message}`);
                     }
                 }
 
@@ -394,10 +414,20 @@ export const socialController = {
                     const searchRes = await safeFetch(`https://s.jina.ai/instagram%20profile%20picture%20${username}`, { timeout: 8000 });
                     if (searchRes.ok) {
                         const searchContent = await searchRes.text();
-                        const imgMatch = searchContent.match(/https:\/\/scontent[^"'\s)]+\.jpg/i);
+                        
+                        // Look for image in raw text or markdown format
+                        const imgMatch = searchContent.match(/https:\/\/scontent[^"'\s)]+\.jpg/i) || 
+                                         searchContent.match(/!\[.*?\]\((https:\/\/scontent[^)]+)\)/);
                         if (imgMatch) {
-                            avatarUrl = imgMatch[0];
+                            avatarUrl = imgMatch[1] || imgMatch[0];
                             console.log(`[Instagram] Found avatar via Jina Search fallback!`);
+                        }
+
+                        // Also look for followers in search results snippet
+                        const folMatch = searchContent.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                        if (folMatch && !followers) {
+                            followers = folMatch[1];
+                            console.log(`[Instagram] Found followers via Jina Search fallback: ${followers}`);
                         }
                     }
                 } catch (e) {
