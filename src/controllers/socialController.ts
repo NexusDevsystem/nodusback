@@ -1,4 +1,4 @@
-﻿// Backend Social Metadata Scraper - Updated Profile Logic
+// Backend Social Metadata Scraper - Updated Profile Logic
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
@@ -334,8 +334,8 @@ export const socialController = {
     },
 
     /**
-     * Fetches metadata for Instagram profiles (username, name, avatar, follower count).
-     * Uses AI for first-time extraction, then saves to DB and never re-scrapes.
+     * Fetches metadata for Instagram profiles using a real headless browser (Puppeteer).
+     * Opens Chrome like a human, visits the profile, extracts data before login modal, saves to DB once.
      */
     async getInstagramProfileInfo(req: Request, res: Response) {
         try {
@@ -347,58 +347,149 @@ export const socialController = {
             const username = handleMatch ? handleMatch[1].replace('@', '') : '';
             const { linkId } = req.query;
 
-            // ✅ STEP 1: If we already saved this data in DB, return it immediately — no scraping
+            // ✅ STEP 1: If we already saved this data in DB, return immediately
             if (linkId && typeof linkId === 'string') {
                 const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
                 if (currentLink?.image && !currentLink.image.includes('static.cdninstagram.com')) {
                     console.log(`[Instagram] Returning saved data for link ${linkId}`);
                     return res.json({
-                        name: username,
-                        username,
-                        avatarUrl: currentLink.image,
-                        avatar_url: currentLink.image,
-                        followers: currentLink.subtitle || '',
-                        subscribers: currentLink.subtitle || '',
+                        name: username, username,
+                        avatarUrl: currentLink.image, avatar_url: currentLink.image,
+                        followers: currentLink.subtitle || '', subscribers: currentLink.subtitle || '',
                         follower_count: parseFollowerCount(currentLink.subtitle || ''),
-                        platform: 'instagram',
-                        profileUrl: cleanUrl
+                        platform: 'instagram', profileUrl: cleanUrl
                     });
                 }
             }
 
-            // 🤖 STEP 2: Fetch the page and send to AI — only runs ONCE (when data is missing)
-            console.log(`[Instagram] No saved data. Fetching page for AI extraction: ${username}`);
+            // 🌐 STEP 2: Open a REAL browser and visit the profile like a human
+            console.log(`[Instagram] Launching headless browser for: ${username}`);
             let name = '', avatarUrl = '', followers = '';
 
+            let browser;
             try {
-                const pageRes = await safeFetch(cleanUrl, {
-                    headers: {
-                        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                    },
-                    timeout: 12000
+                const puppeteer = await import('puppeteer');
+                browser = await puppeteer.default.launch({
+                    headless: true,
+                    args: [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--no-first-run',
+                        '--no-zygote',
+                        '--single-process',
+                        '--disable-extensions',
+                    ],
+                    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+                    timeout: 15000,
                 });
 
-                if (pageRes.ok) {
-                    const html = await pageRes.text();
-                    console.log(`[Instagram] Page fetched: ${html.length} bytes — sending to AI`);
+                const page = await browser.newPage();
 
-                    const aiData = await extractMetadataWithAI(html, 'Instagram');
-                    if (aiData) {
-                        name = aiData.name || username;
-                        avatarUrl = aiData.avatarUrl || '';
-                        followers = aiData.followers || '';
-                        console.log(`[Instagram] AI extracted: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
-                    } else {
-                        console.warn(`[Instagram] AI returned nothing. Will return partial data.`);
-                        name = username;
+                // Mimic a real user's browser
+                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+                await page.setViewport({ width: 1280, height: 800 });
+                await page.setExtraHTTPHeaders({
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                });
+
+                // Navigate to the profile
+                await page.goto(cleanUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+                console.log(`[Instagram] Page loaded for ${username}`);
+
+                // Wait a moment for the profile data to render (before login modal blocks it)
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Extract data from the rendered page (runs inside Chrome, not Node.js)
+                // @ts-ignore — this code runs in browser context via Puppeteer
+                const pageData = await page.evaluate(`(function() {
+                    var result = { name: '', avatarUrl: '', followers: '' };
+
+                    // 1. Avatar from profile header
+                    var headerImg = document.querySelector('header img[alt]');
+                    if (headerImg && headerImg.src && headerImg.src.indexOf('static.cdninstagram.com') === -1) {
+                        result.avatarUrl = headerImg.src;
+                    }
+
+                    // 2. og:image fallback
+                    if (!result.avatarUrl) {
+                        var ogImage = document.querySelector('meta[property="og:image"]');
+                        if (ogImage && ogImage.content && ogImage.content.indexOf('static.cdninstagram.com/rsrc') === -1) {
+                            result.avatarUrl = ogImage.content;
+                        }
+                    }
+
+                    // 3. Followers from og:description
+                    var ogDesc = document.querySelector('meta[property="og:description"]');
+                    if (ogDesc && ogDesc.content) {
+                        var m = ogDesc.content.match(/([\\d.,]+[KMB]?)\\s*(?:Followers|Seguidores)/i);
+                        if (m) result.followers = m[1];
+                    }
+
+                    // 4. Name from og:title
+                    var ogTitle = document.querySelector('meta[property="og:title"]');
+                    if (ogTitle && ogTitle.content) {
+                        result.name = ogTitle.content.split(' (')[0].split('•')[0].replace('Instagram photos and videos', '').trim();
+                    }
+
+                    return result;
+                })()`) as { name: string; avatarUrl: string; followers: string };
+
+                // 5. Also scan the full page source for JSON data hidden in scripts
+                const pageSource = await page.content();
+                
+                if (!pageData.followers) {
+                    const folMatch = pageSource.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) ||
+                                    pageSource.match(/"followers_count":\s*(\d+)/);
+                    if (folMatch) {
+                        const rawCount = parseInt(folMatch[1]);
+                        if (rawCount >= 1000000) pageData.followers = (rawCount / 1000000).toFixed(1).replace('.0', '') + 'M';
+                        else if (rawCount >= 1000) pageData.followers = (rawCount / 1000).toFixed(1).replace('.0', '') + 'K';
+                        else pageData.followers = rawCount.toString();
+                        console.log(`[Instagram] Source scan found followers: ${pageData.followers}`);
                     }
                 }
-            } catch (fetchErr) {
-                console.error(`[Instagram] Page fetch failed:`, (fetchErr as any).message);
+
+                if (!pageData.avatarUrl) {
+                    const picMatch = pageSource.match(/"profile_pic_url_hd":"([^"]+)"/) ||
+                                    pageSource.match(/"profile_pic_url":"([^"]+)"/);
+                    if (picMatch) {
+                        const candidate = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                        if (!candidate.includes('static.cdninstagram.com')) {
+                            pageData.avatarUrl = candidate;
+                            console.log(`[Instagram] Source scan found avatar`);
+                        }
+                    }
+                }
+
+                name = pageData.name || '';
+                avatarUrl = pageData.avatarUrl || '';
+                followers = pageData.followers || '';
+
+                console.log(`[Instagram] Browser extracted: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
+
+                // 🤖 If browser didn't find everything, send page source to AI as last resort
+                if (!avatarUrl || !followers) {
+                    console.log(`[Instagram] Browser missed some data. Sending to AI...`);
+                    const aiData = await extractMetadataWithAI(pageSource, 'Instagram');
+                    if (aiData) {
+                        if (!name && aiData.name) name = aiData.name;
+                        if (!avatarUrl && aiData.avatarUrl) avatarUrl = aiData.avatarUrl;
+                        if (!followers && aiData.followers) followers = aiData.followers;
+                    }
+                }
+
+                await browser.close();
+                browser = null;
+            } catch (browserErr) {
+                console.error(`[Instagram] Browser error:`, (browserErr as any).message);
+                if (browser) { try { await browser.close(); } catch {} }
                 name = username;
             }
+
+            if (!name) name = username;
 
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
@@ -423,7 +514,6 @@ export const socialController = {
                     const updatedLink = await linkService.updateLink(linkId, updates);
                     console.log(`[Instagram] Saved to DB for link ${linkId}`);
 
-                    // 📢 Notify frontend via Realtime
                     if (updatedLink?.userId) {
                         const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
                         if (user?.username) realtimeManager.notifyUpdate(user.username);
@@ -436,6 +526,7 @@ export const socialController = {
             if (avatarUrl) igCache.set(`ig:${username.toLowerCase()}`, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
+            console.error(`[Instagram] Fatal error:`, (e as any).message);
             res.status(500).json({ error: 'Server error' });
         }
     },
