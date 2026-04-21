@@ -360,7 +360,7 @@ export const socialController = {
                 }
 
                 // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON (found in embeds)
-                const contextMatch = bestHtml.match(/"contextJSON"\s*:\s*"({.+?})"/);
+                const contextMatch = bestHtml.match(/"contextJSON"\s*:\s*"(.+?)"/);
                 if (contextMatch) {
                     try {
                         // Unescape the JSON string inside the HTML
@@ -368,9 +368,9 @@ export const socialController = {
                         const context = JSON.parse(rawJson);
                         const user = context.context || context;
                         if (user) {
-                            if (!name && user.full_name) name = user.full_name;
-                            if (!avatarUrl && user.profile_pic_url) avatarUrl = user.profile_pic_url;
-                            if (!followers && user.followers_count) followers = user.followers_count.toString();
+                            if (!name && (user.full_name || user.name)) name = user.full_name || user.name;
+                            if (!avatarUrl && (user.profile_pic_url || user.profile_image)) avatarUrl = user.profile_pic_url || user.profile_image;
+                            if (!followers && (user.followers_count || user.follower_count)) followers = (user.followers_count || user.follower_count).toString();
                             console.log(`[Instagram] Deep scan success: name="${name}", followers="${followers}"`);
                         }
                     } catch (e) {
@@ -389,6 +389,11 @@ export const socialController = {
                         // Embed selector fallback
                         const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src') || $('header img').attr('src');
                         avatarUrl = (ogImage && !ogImage.includes('static.cdninstagram.com')) ? ogImage : (embedPic || avatarUrl);
+                        
+                        // Last resort Cheerio: any image from cdninstagram
+                        if (!avatarUrl) {
+                            avatarUrl = $('img[src*="scontent.cdninstagram.com"]').first().attr('src') || '';
+                        }
                     }
                     if (!followers) {
                         const desc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
@@ -396,6 +401,13 @@ export const socialController = {
                         const embedFollowers = $('.EmbedAccountFollowers').text() || $('.FollowersCount').text() || $('.followed-by').text();
                         const m = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
                         followers = m ? m[1] : (embedFollowers.match(/([\d.,]+[KMB]?)/i)?.[1] || followers);
+
+                        // Portuguese span fallback
+                        if (!followers) {
+                            const ptSpan = $('span:contains("seguidores")').first().text() || $('span:contains("Seguidores")').first().text();
+                            const ptMatch = ptSpan.match(/([\d.,]+[KMB]?)/);
+                            if (ptMatch) followers = ptMatch[1];
+                        }
                     }
                     if (!name) {
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
