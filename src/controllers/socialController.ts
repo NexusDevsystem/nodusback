@@ -381,8 +381,7 @@ export const socialController = {
                         '--single-process',
                         '--disable-extensions',
                     ],
-                    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-                    timeout: 15000,
+                    timeout: 20000,
                 });
 
                 const page = await browser.newPage();
