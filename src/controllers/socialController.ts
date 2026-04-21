@@ -1,4 +1,4 @@
-﻿// Backend Social Metadata Scraper - Updated Profile Logic
+// Backend Social Metadata Scraper - Updated Profile Logic
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
@@ -374,8 +374,9 @@ export const socialController = {
                     headers: {
                         'Accept': 'text/html',
                         'X-Return-Format': 'html',
+                        'X-Wait-For-Selector': 'header img',
                     },
-                    timeout: 15000
+                    timeout: 20000
                 });
                 if (jinaRes.ok) {
                     bestHtml = await jinaRes.text();
@@ -440,7 +441,7 @@ export const socialController = {
                     const $ = cheerio.load(bestHtml);
                     if (!avatarUrl) {
                         const ogImage = $('meta[property="og:image"]').attr('content');
-                        if (ogImage && !ogImage.includes('static.cdninstagram.com/rsrc')) avatarUrl = ogImage;
+                        if (ogImage && !ogImage.includes('static.cdninstagram.com')) avatarUrl = ogImage;
                     }
                     if (!followers) {
                         const desc = $('meta[property="og:description"]').attr('content') || '';
@@ -449,7 +450,11 @@ export const socialController = {
                     }
                     if (!name) {
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                        name = ogTitle.split(' (')[0].split('•')[0].replace('Instagram photos and videos', '').trim();
+                        const candidate = ogTitle.split(' (')[0].split('•')[0].replace('Instagram photos and videos', '').trim();
+                        // Reject generic page titles (login page returns just "Instagram")
+                        if (candidate && candidate.toLowerCase() !== 'instagram' && candidate.toLowerCase() !== 'login') {
+                            name = candidate;
+                        }
                     }
                 }
 
@@ -465,7 +470,8 @@ export const socialController = {
                 }
             }
 
-            if (!name) name = username;
+            // Sanitize: reject names that are just the platform name (means login page was scraped)
+            if (!name || name.toLowerCase() === 'instagram' || name.toLowerCase() === 'login') name = username;
             console.log(`[Instagram] Final: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
 
             const followersText = followers ? `${followers} Seguidores` : '';
