@@ -533,25 +533,26 @@ export const socialController = {
                 const picMatch = bestHtml.match(/"profile_pic_url_hd":"([^"]+)"/) ||
                                 bestHtml.match(/"profile_pic_url":"([^"]+)"/) ||
                                 bestHtml.match(/profile_pic_url\\":\\"(https:[^"]+)\\"/) ||
-                                bestHtml.match(/src="([^"]+)"[^>]*class="[^"]*Avatar/i);
+                                bestHtml.match(/src="([^"]+)"[^>]*class="[^"]*Avatar/i) ||
+                                bestHtml.match(/https:\/\/scontent[^"']+\.jpg/i); // Very aggressive scontent match
                 if (picMatch) {
-                    const candidate = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                    const candidate = picMatch[1]?.replace(/\\u0026/g, '&').replace(/\\/g, '') || picMatch[0];
                     if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
                         avatarUrl = candidate;
-                        console.log(`[Instagram] Regex found avatar`);
+                        console.log(`[Instagram] Regex found avatar: ${avatarUrl.substring(0, 50)}...`);
                     }
                 }
 
                 // og:meta tags via cheerio
                 const $ = cheerio.load(bestHtml);
                 const pageTitle = $('title').text() || '';
-                console.log(`[Instagram] Page title: "${pageTitle}", HTML Preview: ${bestHtml.substring(0, 100).replace(/\n/g, ' ')}`);
+                console.log(`[Instagram] Page title: "${pageTitle}", HTML Size: ${bestHtml.length}`);
 
                 if (!avatarUrl || !followers) {
                     if (!avatarUrl) {
                         const ogImage = $('meta[property="og:image"]').attr('content');
                         // Embed selector fallback
-                        const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src');
+                        const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src') || $('header img').attr('src');
                         avatarUrl = (ogImage && !ogImage.includes('static.cdninstagram.com')) ? ogImage : (embedPic || avatarUrl);
                     }
                     if (!followers) {
@@ -588,6 +589,24 @@ export const socialController = {
                             }
                         }
                     }
+                }
+            }
+
+            // 🆘 LAST RESORT: If no image found, try a quick search for the profile pic
+            if (!avatarUrl) {
+                try {
+                    console.log(`[Instagram] Last resort: Searching for profile picture of ${username}`);
+                    const searchRes = await safeFetch(`https://s.jina.ai/instagram%20profile%20picture%20${username}`, { timeout: 8000 });
+                    if (searchRes.ok) {
+                        const searchContent = await searchRes.text();
+                        const imgMatch = searchContent.match(/https:\/\/scontent[^"'\s)]+\.jpg/i);
+                        if (imgMatch) {
+                            avatarUrl = imgMatch[0];
+                            console.log(`[Instagram] Found avatar via Jina Search fallback!`);
+                        }
+                    }
+                } catch (e) {
+                    console.log(`[Instagram] Last resort failed: ${(e as any).message}`);
                 }
             }
 
