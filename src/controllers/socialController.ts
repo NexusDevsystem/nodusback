@@ -352,21 +352,41 @@ export const socialController = {
                     }
                     return false;
                 },
-                // 2. Twitterbot (High privilege for previews)
+                // 2. WhatsApp/Telegram Preview Strategy (Very high privilege)
                 async () => {
                     const res = await safeFetch(cleanUrl, {
-                        headers: { 'User-Agent': 'Twitterbot/1.0' },
-                        timeout: 6000
+                        headers: { 
+                            'User-Agent': 'WhatsApp/2.23.20.0 A',
+                            'Accept': '*/*',
+                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                        },
+                        timeout: 7000
                     });
                     if (res.ok) {
                         const html = await res.text();
                         const $ = cheerio.load(html);
-                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        const desc = $('meta[property="og:description"]').attr('content') || '';
-                        const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                        
+                        // Instagram MUST send og:image for previews to work in WhatsApp
+                        const ogImage = $('meta[property="og:image"]').attr('content') || 
+                                       $('meta[name="twitter:image"]').attr('content');
+                                       
+                        if (ogImage && !ogImage.includes('static.cdninstagram.com')) {
+                            avatarUrl = ogImage;
+                        }
+                        
+                        // The description usually contains "X Followers, Y Following..."
+                        const ogDesc = $('meta[property="og:description"]').attr('content') || 
+                                      $('meta[name="description"]').attr('content') || '';
+                                      
+                        const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
                         if (match) followers = match[1];
-                        if (!name) name = $('meta[property="og:title"]').attr('content')?.split(' (')[0] || '';
-                        return !!avatarUrl;
+                        
+                        if (!name) {
+                            const ogTitle = $('meta[property="og:title"]').attr('content') || $('title').text();
+                            name = ogTitle.split(' (')[0].replace('Instagram photos and videos', '').trim();
+                        }
+
+                        return !!avatarUrl || !!followers;
                     }
                     return false;
                 },
@@ -398,13 +418,13 @@ export const socialController = {
                     if (res.ok) {
                         const html = await res.text();
                         const $ = cheerio.load(html);
-                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        if (!followers) {
-                            const desc = $('meta[property="og:description"]').attr('content') || '';
-                            const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                            if (match) followers = match[1];
-                        }
-                        return !!avatarUrl;
+                        const ogImage = $('meta[property="og:image"]').attr('content');
+                        if (ogImage && !ogImage.includes('static.cdninstagram.com')) avatarUrl = ogImage;
+                        
+                        const ogDesc = $('meta[property="og:description"]').attr('content') || '';
+                        const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                        if (match) followers = match[1];
+                        return !!avatarUrl || !!followers;
                     }
                     return false;
                 },
@@ -470,8 +490,21 @@ export const socialController = {
                                 if (aiData.name && !name) name = aiData.name;
                                 if (aiData.avatarUrl && !avatarUrl) avatarUrl = aiData.avatarUrl;
                                 if (aiData.followers && !followers) followers = aiData.followers;
-                                return !!avatarUrl || !!followers;
+                            } else {
+                                // 🚨 EMERGENCY LOCAL FALLBACK (If AI fails/401)
+                                console.log('[Instagram] AI failed. Running local DOM scraper fallback...');
+                                const $local = cheerio.load(html);
+                                if (!avatarUrl) {
+                                    const ogImage = $local('meta[property="og:image"]').attr('content');
+                                    if (ogImage && !ogImage.includes('static.cdninstagram.com')) avatarUrl = ogImage;
+                                }
+                                if (!followers) {
+                                    const ogDesc = $local('meta[property="og:description"]').attr('content') || '';
+                                    const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                                    if (match) followers = match[1];
+                                }
                             }
+                            return !!avatarUrl || !!followers;
                         }
                     } catch (e) {
                         console.log('[Instagram] AI Strategy failed:', (e as any).message);
