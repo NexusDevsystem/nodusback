@@ -282,10 +282,20 @@ export const socialController = {
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
             const { linkId } = req.query;
-            if (linkId && typeof linkId === 'string' && subscribersText) {
+            if (linkId && typeof linkId === 'string' && (subscribersText || avatarUrl)) {
                 try {
-                    await linkService.updateLink(linkId, { subtitle: subscribersText });
-                    console.log(`[YouTube] Auto-saved subscribers for link ${linkId}: ${subscribersText}`);
+                    const updates: any = {};
+                    if (subscribersText) updates.subtitle = subscribersText;
+                    if (avatarUrl) updates.image = avatarUrl;
+                    
+                    const updatedLink = await linkService.updateLink(linkId, updates);
+                    console.log(`[YouTube] Auto-saved metadata for link ${linkId}: ${subscribersText}`);
+
+                    // 📢 Notify Realtime Manager
+                    if (updatedLink && updatedLink.userId) {
+                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                        if (user?.username) realtimeManager.notifyUpdate(user.username);
+                    }
                 } catch (saveErr) {
                     console.error(`[YouTube] Failed to auto-save metadata for link ${linkId}:`, saveErr);
                 }
@@ -846,7 +856,7 @@ export const socialController = {
                 profileUrl: `https://www.twitch.tv/${username}`
             };
 
-            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata
             const { linkId } = req.query;
             if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
                 try {
@@ -854,8 +864,15 @@ export const socialController = {
                     const fText = followers ? `${followers} Seguidores` : '';
                     if (fText) updates.subtitle = fText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    await linkService.updateLink(linkId, updates);
+                    
+                    const updatedLink = await linkService.updateLink(linkId, updates);
                     console.log(`[Twitch] Auto-saved metadata for link ${linkId}: ${fText}`);
+
+                    // 📢 Notify Realtime Manager
+                    if (updatedLink && updatedLink.userId) {
+                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                        if (user?.username) realtimeManager.notifyUpdate(user.username);
+                    }
                 } catch (saveErr) {
                     console.error(`[Twitch] Failed to auto-save metadata for link ${linkId}:`, saveErr);
                 }
