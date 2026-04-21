@@ -37,8 +37,8 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
         
         const $ = cheerio.load(html);
         
-        // Clean HTML to save tokens and focus on content
-        $('script').remove();
+        // Clean HTML to save tokens but PRESERVE application/ld+json which contains profile data
+        $('script:not([type="application/ld+json"])').remove();
         $('style').remove();
         $('svg').remove();
         $('path').remove();
@@ -397,9 +397,14 @@ export const socialController = {
                 async () => {
                     try {
                         const res = await safeFetch(cleanUrl, {
-                            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-                            timeout: 8000
+                            headers: { 
+                                'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                            },
+                            timeout: 10000
                         });
+                        console.log(`[Instagram] AI Strategy response status: ${res.status} for ${username}`);
                         if (res.ok) {
                             const html = await res.text();
                             const aiData = await extractMetadataWithAI(html, 'Instagram');
