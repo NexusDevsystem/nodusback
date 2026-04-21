@@ -811,7 +811,7 @@ export const socialController = {
                     }
                     return false;
                 },
-                // Strategy 3: Scrape via Googlebot (SSR)
+                // Strategy 3: Scrape via Googlebot (SSR) + Deep Scan
                 async () => {
                     try {
                         const scrapeRes = await safeFetch(`https://www.twitch.tv/${username}`, {
@@ -826,12 +826,14 @@ export const socialController = {
 
                             const desc = $('meta[property="og:description"]').attr('content') || '';
                             const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores)/i) ||
-                                html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i);
+                                         html.match(/([\d,.]+)\s*(?:&nbsp;|\u00A0|\s)*(?:mil\s*)?seguidores/i) ||
+                                         html.match(/"followers":\s*\{\s*"total":\s*(\d+)/); // Deep JSON scan
 
                             if (fMatch && !followers) {
                                 followers = fMatch[1].replace(',', '.');
+                                console.log(`[Twitch] Found followers via Scrape/Deep Scan: ${followers}`);
                             }
-                            return !!avatarUrl;
+                            return !!avatarUrl || !!followers;
                         }
                     } catch (e) {
                         console.error(`[Twitch] Scrape Error for ${username}:`, (e as any).message);
