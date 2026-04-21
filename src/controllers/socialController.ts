@@ -70,10 +70,11 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             Page Text Sample: ${bodyText}
         `;
 
-        console.log(`[AI-Extraction] Sending request to OpenRouter (Model: qwen/qwen3-coder:free) with Structured Output...`);
+        const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+        console.log(`[AI-Extraction] Sending request to OpenRouter (Model: ${model}, Platform: ${platform}) with Structured Output...`);
 
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-            model: 'qwen/qwen3-coder:free',
+            model: model,
             messages: [
                 {
                     role: 'system',
@@ -106,9 +107,9 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             temperature: 0.1
         }, {
             headers: {
-                'Authorization': `Bearer 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`,
+                'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || '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'}`,
                 'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://nodus.link',
+                'HTTP-Referer': 'https://nodus.my',
                 'X-OpenRouter-Title': 'Nodus App'
             }
         });
