@@ -326,15 +326,29 @@ export const socialController = {
             let name = '', avatarUrl = '', followers = '';
 
             const strategies = [
-                // 1. oEmbed (Official-ish)
+                // 1. Direct Embed Page (Often less protected)
                 async () => {
-                    const oEmbedUrl = `https://graph.facebook.com/v12.0/instagram_oembed?url=${encodeURIComponent(cleanUrl)}&omitscript=true`;
-                    const res = await safeFetch(oEmbedUrl, { timeout: 4000 });
+                    const embedUrl = `${cleanUrl.endsWith('/') ? cleanUrl : cleanUrl + '/'}embed/`;
+                    const res = await safeFetch(embedUrl, { 
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
+                        timeout: 5000 
+                    });
                     if (res.ok) {
-                        const data: any = await res.json();
-                        name = data.author_name || name;
-                        avatarUrl = data.thumbnail_url || avatarUrl;
-                        return !!avatarUrl;
+                        const html = await res.text();
+                        const $ = cheerio.load(html);
+                        
+                        // Look for the profile picture in the embed
+                        if (!avatarUrl) avatarUrl = $('.Avatar').attr('src') || $('.ProfileHeaderInfo img').attr('src') || '';
+                        
+                        // Look for followers in the embed header
+                        if (!followers) {
+                            const statsText = $('.ProfileHeaderInfo').text();
+                            const match = statsText.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                            if (match) followers = match[1];
+                        }
+                        
+                        // If we got either, success!
+                        return !!avatarUrl || !!followers;
                     }
                     return false;
                 },
