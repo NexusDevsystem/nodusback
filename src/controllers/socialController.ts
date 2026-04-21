@@ -397,18 +397,37 @@ export const socialController = {
                 // 5. AI Brain Strategy (Smart Extraction)
                 async () => {
                     try {
+                        // Try a more realistic browser fetch
                         const res = await safeFetch(cleanUrl, {
                             headers: { 
-                                'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                                'Accept-Language': 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
+                                'Cache-Control': 'no-cache',
+                                'Pragma': 'no-cache',
+                                'Sec-Fetch-Dest': 'document',
+                                'Sec-Fetch-Mode': 'navigate',
+                                'Sec-Fetch-Site': 'none',
+                                'Sec-Fetch-User': '?1',
+                                'Upgrade-Insecure-Requests': '1'
                             },
-                            timeout: 10000
+                            timeout: 12000
                         });
-                        console.log(`[Instagram] AI Strategy response status: ${res.status} for ${username}`);
+                        
+                        console.log(`[Instagram] AI Strategy status: ${res.status}, length: ${res.ok ? (await res.clone().text()).length : 0}`);
+                        
                         if (res.ok) {
                             const html = await res.text();
-                            console.log(`[Instagram] AI Strategy HTML length: ${html.length} chars`);
+                            
+                            // 🕵️ EXTRA: Try to find data in the <title> tag as a last resort
+                            // Example: "v1xenbeast (@v1xenbeast) • Instagram photos and videos"
+                            // Sometimes it includes follower count in the description meta tag even if blocked
+                            const $ = cheerio.load(html);
+                            if (!followers) {
+                                const ogDesc = $('meta[property="og:description"]').attr('content') || '';
+                                const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                                if (match) followers = match[1];
+                            }
                             
                             // 🕵️ HARDCORE REGEX FALLBACK (Before AI)
                             // Instagram often hides data in JSON strings inside the HTML
