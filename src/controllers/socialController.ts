@@ -72,10 +72,8 @@ async function extractMetadataWithAI(html: string, platform: string): Promise<an
             - Look for the profile image URL in og:image or similar tags.
             - If you see a login screen, try to extract whatever handle is mentioned.
         `;
-
-        const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+        const model = process.env.OPENROUTER_MODEL || "google/gemma-4-26b-a4b-it:free";
         console.log(`[AI-Extraction] Sending request to OpenRouter (Model: ${model}, Platform: ${platform}) with Structured Output...`);
-
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
             model: model,
             messages: [
@@ -1089,3 +1087,5 @@ export const socialController = {
         } catch (e) { res.status(500).send('Error'); }
     }
 };
+
+
