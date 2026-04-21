@@ -195,15 +195,19 @@ function isLoginWall(html: string, title: string): boolean {
     const lowerHtml = html.toLowerCase();
     
     // Common login patterns
-    if (lowerTitle.includes('login') || lowerTitle.includes('entrar')) return true;
+    if (lowerTitle.includes('login') || lowerTitle.includes('entrar')) {
+        // If the HTML is large, it might just be a login link in a valid page
+        if (lowerHtml.length < 50000) return true;
+    }
+    
     if (lowerTitle === 'instagram' || lowerTitle === 'tiktok') {
-        // Generic title usually means login or splash
-        if (lowerHtml.includes('log in') || lowerHtml.includes('sign up') || lowerHtml.includes('create an account')) return true;
+        // Generic title + small HTML usually means login or splash
+        if (lowerHtml.length < 50000 && (lowerHtml.includes('log in') || lowerHtml.includes('sign up'))) return true;
     }
     
     // Platform specific redirects
     if (lowerHtml.includes('redirecting...') || lowerHtml.includes('window.location.replace')) {
-        if (lowerHtml.length < 2000) return true;
+        if (lowerHtml.length < 5000) return true;
     }
     
     return false;
@@ -511,21 +515,28 @@ export const socialController = {
                 // Quick regex extraction (catches data in JSON blobs)
                 const folMatch = bestHtml.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) ||
                                 bestHtml.match(/"followers_count":\s*(\d+)/) ||
-                                bestHtml.match(/"edge_followed_by":\s*(\d+)/); // Common in embed
+                                bestHtml.match(/"edge_followed_by":\s*(\d+)/) ||
+                                bestHtml.match(/([\d.,KMB]+)\s*Followers/i); // Common in meta
                 if (folMatch) {
-                    const rawCount = parseInt(folMatch[1]);
-                    if (rawCount >= 1000000) followers = (rawCount / 1000000).toFixed(1).replace('.0', '') + 'M';
-                    else if (rawCount >= 1000) followers = (rawCount / 1000).toFixed(1).replace('.0', '') + 'K';
-                    else followers = rawCount.toString();
+                    const rawStr = folMatch[1];
+                    const rawCount = parseInt(rawStr.replace(/[,.]/g, ''));
+                    if (!isNaN(rawCount)) {
+                        if (rawCount >= 1000000) followers = (rawCount / 1000000).toFixed(1).replace('.0', '') + 'M';
+                        else if (rawCount >= 1000) followers = (rawCount / 1000).toFixed(1).replace('.0', '') + 'K';
+                        else followers = rawCount.toString();
+                    } else if (rawStr.match(/[\dKMB]/i)) {
+                        followers = rawStr.toUpperCase();
+                    }
                     console.log(`[Instagram] Regex found followers: ${followers}`);
                 }
 
                 const picMatch = bestHtml.match(/"profile_pic_url_hd":"([^"]+)"/) ||
                                 bestHtml.match(/"profile_pic_url":"([^"]+)"/) ||
-                                bestHtml.match(/profile_pic_url\\":\\"(https:[^"]+)\\"/); // Escaped JSON
+                                bestHtml.match(/profile_pic_url\\":\\"(https:[^"]+)\\"/) ||
+                                bestHtml.match(/src="([^"]+)"[^>]*class="[^"]*Avatar/i);
                 if (picMatch) {
                     const candidate = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
-                    if (!candidate.includes('static.cdninstagram.com')) {
+                    if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
                         avatarUrl = candidate;
                         console.log(`[Instagram] Regex found avatar`);
                     }
@@ -534,18 +545,19 @@ export const socialController = {
                 // og:meta tags via cheerio
                 const $ = cheerio.load(bestHtml);
                 const pageTitle = $('title').text() || '';
+                console.log(`[Instagram] Page title: "${pageTitle}", HTML Preview: ${bestHtml.substring(0, 100).replace(/\n/g, ' ')}`);
 
                 if (!avatarUrl || !followers) {
                     if (!avatarUrl) {
                         const ogImage = $('meta[property="og:image"]').attr('content');
                         // Embed selector fallback
-                        const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src');
+                        const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src');
                         avatarUrl = (ogImage && !ogImage.includes('static.cdninstagram.com')) ? ogImage : (embedPic || avatarUrl);
                     }
                     if (!followers) {
-                        const desc = $('meta[property="og:description"]').attr('content') || '';
+                        const desc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                         // Embed selector fallback
-                        const embedFollowers = $('.EmbedAccountFollowers').text() || $('.FollowersCount').text();
+                        const embedFollowers = $('.EmbedAccountFollowers').text() || $('.FollowersCount').text() || $('.followed-by').text();
                         const m = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
                         followers = m ? m[1] : (embedFollowers.match(/([\d.,]+[KMB]?)/i)?.[1] || followers);
                     }
