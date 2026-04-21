@@ -221,6 +221,7 @@ export interface UserProfile {
 
 export interface LinkItem {
     id: string;
+    userId?: string;
     parentId?: string | null;
     title: string;
     url: string;
@@ -425,6 +426,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
 export function linkDbToApi(db: LinkItemDB): LinkItem {
     return {
         id: db.id || '',
+        userId: db.user_id,
         parentId: db.parent_id,
         title: db.title,
         url: db.url,

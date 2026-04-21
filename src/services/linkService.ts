@@ -377,7 +377,7 @@ export const linkService = {
                         .from('users')
                         .select('last_incomplete_notification_at')
                         .eq('id', userId)
-                        .single();
+                        .maybeSingle();
 
                     // If it's the first time we see incomplete links, set the timer to NOW
                     // This creates the 4-hour delay before the first email

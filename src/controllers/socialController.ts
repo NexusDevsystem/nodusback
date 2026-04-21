@@ -6,6 +6,8 @@ import { blogService } from '../services/blogService.js';
 import { linkService } from '../services/linkService.js';
 import axios from 'axios';
 import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
+import { realtimeManager } from '../realtime/RealtimeManager.js';
+import { supabase } from '../config/supabaseClient.js';
 
 // In-memory cache for social profiles (avoids hitting rate limits)
 const igCache = new Map<string, { data: any; expiresAt: number }>();
@@ -810,8 +812,8 @@ export const socialController = {
                         else followers = count.toString();
                     }
                 }
-            } catch (e) {
-                console.log('[SocialController] Kick API attempt failed, trying HTML...');
+            } catch (e: any) {
+                console.log(`[Kick] API attempt failed: ${e.message}. Trying HTML...`);
             }
 
             if (!avatarUrl || !followers) {
@@ -826,8 +828,11 @@ export const socialController = {
                         },
                     });
 
-                    if (pageRes.ok) {
+                    console.log(`[Kick] HTML Page Attempt status: ${pageRes.status}`);
+
+                    if (pageRes.ok || pageRes.status === 403) {
                         const html = await pageRes.text();
+                        console.log(`[Kick] HTML Length: ${html?.length || 0}`);
                         const aiData = await extractMetadataWithAI(html, 'Kick.com');
                         if (aiData) {
                             if (!name && aiData.name) name = aiData.name;
@@ -897,8 +902,16 @@ export const socialController = {
                     const updates: any = {};
                     if (followersText) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    await linkService.updateLink(linkId, updates);
+                    const updatedLink = await linkService.updateLink(linkId, updates);
                     console.log(`[Kick] Auto-saved metadata for link ${linkId}: ${followersText}`);
+
+                    // 📢 Notify Realtime Manager to refresh clients
+                    if (updatedLink && updatedLink.userId) {
+                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                        if (user?.username) {
+                            realtimeManager.notifyUpdate(user.username);
+                        }
+                    }
                 } catch (saveErr) {
                     console.error(`[Kick] Failed to auto-save metadata for link ${linkId}:`, saveErr);
                 }
