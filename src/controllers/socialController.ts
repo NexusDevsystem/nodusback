@@ -1,4 +1,4 @@
-// Backend Social Metadata Scraper - Updated Profile Logic
+﻿// Backend Social Metadata Scraper - Updated Profile Logic
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { profileService } from '../services/profileService.js';
@@ -335,313 +335,110 @@ export const socialController = {
 
     /**
      * Fetches metadata for Instagram profiles (username, name, avatar, follower count).
+     * Uses AI for first-time extraction, then saves to DB and never re-scrapes.
      */
     async getInstagramProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
-            console.log(`\x1b[36m[Instagram] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             const cleanUrl = url.split('?')[0].split('#')[0];
             const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/i);
-            let username = handleMatch ? handleMatch[1].replace('@', '') : '';
-            const cacheKey = `ig:${username.toLowerCase()}`;
-
-            const cached = igCache.get(cacheKey);
-            if (cached && cached.expiresAt > Date.now() && cached.data.avatarUrl) return res.json(cached.data);
-
-            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
+            const username = handleMatch ? handleMatch[1].replace('@', '') : '';
             const { linkId } = req.query;
+
+            // ✅ STEP 1: If we already saved this data in DB, return it immediately — no scraping
             if (linkId && typeof linkId === 'string') {
-                try {
-                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
-                    if (currentLink?.subtitle && currentLink?.image && !currentLink.image.includes('static.cdninstagram.com')) {
-                        console.log(`[Instagram] Link ${linkId} already has full metadata. Skipping scrape.`);
-                        return res.json({
-                            name: username,
-                            username,
-                            avatarUrl: currentLink.image,
-                            followers: currentLink.subtitle,
-                            platform: 'instagram',
-                            profileUrl: cleanUrl
-                        });
-                    }
-                } catch (err) {
-                    console.error('[Instagram] Pre-check failed:', err);
+                const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                if (currentLink?.image && !currentLink.image.includes('static.cdninstagram.com')) {
+                    console.log(`[Instagram] Returning saved data for link ${linkId}`);
+                    return res.json({
+                        name: username,
+                        username,
+                        avatarUrl: currentLink.image,
+                        avatar_url: currentLink.image,
+                        followers: currentLink.subtitle || '',
+                        subscribers: currentLink.subtitle || '',
+                        follower_count: parseFollowerCount(currentLink.subtitle || ''),
+                        platform: 'instagram',
+                        profileUrl: cleanUrl
+                    });
                 }
             }
 
-            console.log(`[Instagram] Resilient fetch for: ${username}`);
-
+            // 🤖 STEP 2: Fetch the page and send to AI — only runs ONCE (when data is missing)
+            console.log(`[Instagram] No saved data. Fetching page for AI extraction: ${username}`);
             let name = '', avatarUrl = '', followers = '';
 
-            const strategies = [
-                // 1. Direct Embed Page (Often less protected)
-                async () => {
-                    const embedUrl = `${cleanUrl.endsWith('/') ? cleanUrl : cleanUrl + '/'}embed/`;
-                    const res = await safeFetch(embedUrl, { 
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
-                        timeout: 5000 
-                    });
-                    if (res.ok) {
-                        const html = await res.text();
-                        const $ = cheerio.load(html);
-                        
-                        // Look for the profile picture in the embed
-                        if (!avatarUrl) avatarUrl = $('.Avatar').attr('src') || $('.ProfileHeaderInfo img').attr('src') || '';
-                        
-                        // Look for followers in the embed header
-                        if (!followers) {
-                            const statsText = $('.ProfileHeaderInfo').text();
-                            const match = statsText.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                            if (match) followers = match[1];
-                        }
-                        
-                        // If we got either, success!
-                        return !!avatarUrl || !!followers;
-                    }
-                    return false;
-                },
-                // 2. WhatsApp/Telegram Preview Strategy (Very high privilege)
-                async () => {
-                    const res = await safeFetch(cleanUrl, {
-                        headers: { 
-                            'User-Agent': 'WhatsApp/2.23.20.0 A',
-                            'Accept': '*/*',
-                            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
-                        },
-                        timeout: 7000
-                    });
-                    if (res.ok) {
-                        const html = await res.text();
-                        const $ = cheerio.load(html);
-                        
-                        // Instagram MUST send og:image for previews to work in WhatsApp
-                        const ogImage = $('meta[property="og:image"]').attr('content') || 
-                                       $('meta[name="twitter:image"]').attr('content');
-                                       
-                        if (ogImage && !ogImage.includes('static.cdninstagram.com')) {
-                            avatarUrl = ogImage;
-                        }
-                        
-                        // The description usually contains "X Followers, Y Following..."
-                        const ogDesc = $('meta[property="og:description"]').attr('content') || 
-                                      $('meta[name="description"]').attr('content') || '';
-                                      
-                        const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                        if (match) followers = match[1];
-                        
-                        if (!name) {
-                            const ogTitle = $('meta[property="og:title"]').attr('content') || $('title').text();
-                            name = ogTitle.split(' (')[0].replace('Instagram photos and videos', '').trim();
-                        }
+            try {
+                const pageRes = await safeFetch(cleanUrl, {
+                    headers: {
+                        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                    },
+                    timeout: 12000
+                });
 
-                        return !!avatarUrl || !!followers;
-                    }
-                    return false;
-                },
-                // 3. WhatsApp (Mobile View)
-                async () => {
-                    const res = await safeFetch(cleanUrl, {
-                        headers: { 'User-Agent': 'WhatsApp/2.23.20.0 A' },
-                        timeout: 6000
-                    });
-                    if (res.ok) {
-                        const html = await res.text();
-                        const $ = cheerio.load(html);
-                        if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                        if (!followers) {
-                            const desc = $('meta[property="og:description"]').attr('content') || '';
-                            const match = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                            if (match) followers = match[1];
-                        }
-                        return !!avatarUrl;
-                    }
-                    return false;
-                },
-                // 4. LinkedInBot (Professional Crawler)
-                async () => {
-                    const res = await safeFetch(cleanUrl, {
-                        headers: { 'User-Agent': 'LinkedInBot/1.0 (at customer-request)' },
-                        timeout: 6000
-                    });
-                    if (res.ok) {
-                        const html = await res.text();
-                        const $ = cheerio.load(html);
-                        const ogImage = $('meta[property="og:image"]').attr('content');
-                        if (ogImage && !ogImage.includes('static.cdninstagram.com')) avatarUrl = ogImage;
-                        
-                        const ogDesc = $('meta[property="og:description"]').attr('content') || '';
-                        const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                        if (match) followers = match[1];
-                        return !!avatarUrl || !!followers;
-                    }
-                    return false;
-                },
-                // 5. AI Brain Strategy (Smart Extraction)
-                async () => {
-                    try {
-                        // Try a more realistic browser fetch
-                        const res = await safeFetch(cleanUrl, {
-                            headers: { 
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                                'Accept-Language': 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
-                                'Cache-Control': 'no-cache',
-                                'Pragma': 'no-cache',
-                                'Sec-Fetch-Dest': 'document',
-                                'Sec-Fetch-Mode': 'navigate',
-                                'Sec-Fetch-Site': 'none',
-                                'Sec-Fetch-User': '?1',
-                                'Upgrade-Insecure-Requests': '1'
-                            },
-                            timeout: 12000
-                        });
-                        
-                        console.log(`[Instagram] AI Strategy status: ${res.status}, length: ${res.ok ? (await res.clone().text()).length : 0}`);
-                        
-                        if (res.ok) {
-                            const html = await res.text();
-                            
-                            // 🕵️ EXTRA: Try to find data in the <title> tag as a last resort
-                            // Example: "v1xenbeast (@v1xenbeast) • Instagram photos and videos"
-                            // Sometimes it includes follower count in the description meta tag even if blocked
-                            const $ = cheerio.load(html);
-                            if (!followers) {
-                                const ogDesc = $('meta[property="og:description"]').attr('content') || '';
-                                const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                                if (match) followers = match[1];
-                            }
-                            
-                            // 🕵️ HARDCORE REGEX FALLBACK (Before AI)
-                            // Instagram often hides data in JSON strings inside the HTML
-                            if (!followers) {
-                                // Deep JSON scan for followers count in large HTML blobs
-                                const folMatch = html.match(/"edge_followed_by":\s*\{"count":\s*(\d+)\}/) || 
-                                               html.match(/"followers_count":\s*(\d+)/) ||
-                                               html.match(/"user_followers":\s*"([\d.,]+[KMB]?)"/);
-                                if (folMatch) {
-                                    followers = folMatch[1];
-                                    console.log(`[Instagram] Found followers via Deep Scan: ${followers}`);
-                                }
-                            }
-                            
-                            if (!avatarUrl) {
-                                // Deep JSON scan for profile pic
-                                const picMatch = html.match(/"profile_pic_url_hd":"([^"]+)"/) || 
-                                               html.match(/"profile_pic_url":"([^"]+)"/);
-                                if (picMatch) {
-                                    const candidate = picMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
-                                    if (!candidate.includes('static.cdninstagram.com')) {
-                                        avatarUrl = candidate;
-                                        console.log(`[Instagram] Found HD avatar via Deep Scan`);
-                                    }
-                                }
-                            }
+                if (pageRes.ok) {
+                    const html = await pageRes.text();
+                    console.log(`[Instagram] Page fetched: ${html.length} bytes — sending to AI`);
 
-                            if (!name || name.includes('Entrar') || name.includes('Login')) {
-                                name = username; // Fallback to username if title is generic login text
-                            }
-
-                            const aiData = await extractMetadataWithAI(html, 'Instagram');
-                            if (aiData) {
-                                if (aiData.name && !name) name = aiData.name;
-                                if (aiData.avatarUrl && !avatarUrl) avatarUrl = aiData.avatarUrl;
-                                if (aiData.followers && !followers) followers = aiData.followers;
-                            } else {
-                                // 🚨 EMERGENCY LOCAL FALLBACK (If AI fails/401)
-                                console.log('[Instagram] AI failed. Running local DOM scraper fallback...');
-                                const $local = cheerio.load(html);
-                                if (!avatarUrl) {
-                                    const ogImage = $local('meta[property="og:image"]').attr('content');
-                                    if (ogImage && !ogImage.includes('static.cdninstagram.com')) avatarUrl = ogImage;
-                                }
-                                if (!followers) {
-                                    const ogDesc = $local('meta[property="og:description"]').attr('content') || '';
-                                    const match = ogDesc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                                    if (match) followers = match[1];
-                                }
-                            }
-                            return !!avatarUrl || !!followers;
-                        }
-                    } catch (e) {
-                        console.log('[Instagram] AI Strategy failed:', (e as any).message);
+                    const aiData = await extractMetadataWithAI(html, 'Instagram');
+                    if (aiData) {
+                        name = aiData.name || username;
+                        avatarUrl = aiData.avatarUrl || '';
+                        followers = aiData.followers || '';
+                        console.log(`[Instagram] AI extracted: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
+                    } else {
+                        console.warn(`[Instagram] AI returned nothing. Will return partial data.`);
+                        name = username;
                     }
-                    return false;
                 }
-            ];
-
-            for (const [index, strategy] of strategies.entries()) {
-                try { 
-                    if (await strategy()) {
-                        console.log(`[Instagram] Strategy ${index + 1} succeeded for ${username}`);
-                        break; 
-                    } 
-                } catch (e) { 
-                    console.log(`[Instagram] Strategy ${index + 1} failed for ${username}:`, (e as any).message);
-                }
+            } catch (fetchErr) {
+                console.error(`[Instagram] Page fetch failed:`, (fetchErr as any).message);
+                name = username;
             }
 
-            if (!avatarUrl || !followers) {
-                // Final fallback: Scan for JSON-like patterns in HTML
-                try {
-                    const html = await (await safeFetch(cleanUrl, { 
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
-                        timeout: 5000
-                    })).text();
-                    
-                    if (!avatarUrl) {
-                        const picMatch = html.match(/"profile_pic_url":"([^"]+)"/) || html.match(/"og:image" content="([^"]+)"/);
-                        if (picMatch) avatarUrl = picMatch[1].replace(/\\u0026/g, '&');
-                    }
-                    if (!followers) {
-                        const folMatch = html.match(/"edge_followed_by":\{"count":(\d+)\}/) || html.match(/"followers_count":(\d+)/);
-                        if (folMatch) {
-                            const count = parseInt(folMatch[1]);
-                            if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                            else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                            else followers = count.toString();
-                        }
-                    }
-                } catch (e) {}
-            }
-
+            const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
-                name: name || username || 'Instagram',
-                display_name: name || username || 'Instagram',
+                name: name || username,
+                display_name: name || username,
                 username,
                 avatarUrl,
                 avatar_url: avatarUrl,
-                followers: followers ? `${followers} Seguidores` : '',
+                followers: followersText,
+                subscribers: followersText,
                 follower_count: parseFollowerCount(followers),
-                subscribers: followers ? `${followers} Seguidores` : '',
                 platform: 'instagram',
                 profileUrl: cleanUrl
             };
 
-            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+            // 💾 STEP 3: Persist to DB so this never needs to run again
+            if (linkId && typeof linkId === 'string' && (avatarUrl || followersText)) {
                 try {
                     const updates: any = {};
-                    if (followers) updates.subtitle = `${followers} Seguidores`;
+                    if (followersText) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    await linkService.updateLink(linkId, updates);
-                    console.log(`[Instagram] Auto-saved metadata for link ${linkId}: ${followers} Seguidores`);
+                    const updatedLink = await linkService.updateLink(linkId, updates);
+                    console.log(`[Instagram] Saved to DB for link ${linkId}`);
+
+                    // 📢 Notify frontend via Realtime
+                    if (updatedLink?.userId) {
+                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                        if (user?.username) realtimeManager.notifyUpdate(user.username);
+                    }
                 } catch (saveErr) {
-                    console.error(`[Instagram] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                    console.error(`[Instagram] Failed to save to DB:`, saveErr);
                 }
             }
 
-            if (avatarUrl) igCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            if (avatarUrl) igCache.set(`ig:${username.toLowerCase()}`, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
             res.status(500).json({ error: 'Server error' });
         }
     },
-
-    /**
-     * Fetches metadata for TikTok profiles.
-     */
     async getTiktokProfileInfo(req: Request, res: Response) {
         try {
             const { url } = req.query;
