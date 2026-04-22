@@ -328,10 +328,9 @@ export const socialController = {
             // 🔍 Extract data from whatever HTML we got
             if (bestHtml) {
                 // Quick regex extraction (catches data in JSON blobs)
-                // Quick regex extraction (catches data in JSON blobs, handles escapes)
-                const folMatch = bestHtml.match(/[\\]*["']edge_followed_by[\\]*["']\s*:\s*\{[^}]*[\\]*["']count[\\]*["']\s*:\s*(\d+)/) ||
-                                bestHtml.match(/[\\]*["']followers_count[\\]*["']\s*:\s*(\d+)/) ||
-                                bestHtml.match(/[\\]*["']edge_followed_by[\\]*["']\s*:\s*(\d+)/) ||
+                // 🎯 Permissive regex (catches data even with weird escaping)
+                const folMatch = bestHtml.match(/followers_count["'\\]+\s*:\s*(\d+)/i) ||
+                                bestHtml.match(/edge_followed_by["'\\]+[^}]*count["'\\]+\s*:\s*(\d+)/i) ||
                                 bestHtml.match(/([\d.,KMB]+)\s*(?:Followers|Seguidores)/i);
                 if (folMatch) {
                     const rawStr = folMatch[1];
@@ -343,19 +342,17 @@ export const socialController = {
                     } else if (rawStr.match(/[\dKMB]/i)) {
                         followers = rawStr.toUpperCase();
                     }
-                    console.log(`[Instagram] Regex found followers: ${followers}`);
+                    console.log(`[Instagram] Found followers: ${followers}`);
                 }
 
-                const picMatch = bestHtml.match(/[\\]*["']profile_pic_url_hd[\\]*["']\s*:\s*[\\]*["']([^"'\\]+)[\\]*["']/) ||
-                                bestHtml.match(/[\\]*["']profile_pic_url[\\]*["']\s*:\s*[\\]*["']([^"'\\]+)[\\]*["']/) ||
-                                bestHtml.match(/src\s*=\s*[\\]*["']([^"'\\]+)[\\]*["'][^>]*class\s*=\s*[\\]*["'][^"']*Avatar/i) ||
+                const picMatch = bestHtml.match(/profile_pic_url(?:_hd)?["'\\]+\s*:\s*["'\\]+(https:[^"'\\]+)/i) ||
                                 bestHtml.match(/https:\\\/\\\/scontent[^"'\s\\]+\.jpg/i) ||
                                 bestHtml.match(/https:\/\/scontent[^"'\s\\]+\.jpg/i);
                 if (picMatch) {
                     const candidate = (picMatch[1] || picMatch[0]).replace(/\\u0026/g, '&').replace(/\\/g, '');
                     if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
                         avatarUrl = candidate;
-                        console.log(`[Instagram] Regex found avatar: ${avatarUrl.substring(0, 50)}...`);
+                        console.log(`[Instagram] Found avatar: ${avatarUrl.substring(0, 50)}...`);
                     }
                 }
 
