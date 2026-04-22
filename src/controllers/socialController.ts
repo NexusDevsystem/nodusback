@@ -327,9 +327,18 @@ export const socialController = {
 
             // 🔍 Extract data from whatever HTML we got
             if (bestHtml) {
+                // 🧹 CLEANUP: Instagram embeds are heavily escaped. Normalize everything first.
+                bestHtml = bestHtml
+                    .replace(/\\u0026/g, '&')
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\"/g, '"')
+                    .replace(/\\\\/g, '\\')
+                    .replace(/\\\//g, '/');
+
                 // 🎯 "JUST THE NUMBER" Strategy: Direct extraction without over-engineering
-                const simpleFol = bestHtml.match(/followers_count["'\\]+:\s*(\d+)/i) ||
-                                 bestHtml.match(/edge_followed_by["'\\]+[^}]*count["'\\]+:\s*(\d+)/i);
+                const simpleFol = bestHtml.match(/followers_count":\s*(\d+)/i) ||
+                                 bestHtml.match(/edge_followed_by":\s*\{"count":\s*(\d+)/i) ||
+                                 bestHtml.match(/edge_followed_by":\s*(\d+)/i);
                 
                 if (simpleFol) {
                     const rawCount = parseInt(simpleFol[1]);
