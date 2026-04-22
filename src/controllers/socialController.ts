@@ -327,27 +327,28 @@ export const socialController = {
 
             // 🔍 Extract data from whatever HTML we got
             if (bestHtml) {
-                // Quick regex extraction (catches data in JSON blobs)
-                // 🎯 Permissive regex (catches data even with weird escaping)
-                const folMatch = bestHtml.match(/followers_count["'\\]+\s*:\s*(\d+)/i) ||
-                                bestHtml.match(/edge_followed_by["'\\]+[^}]*count["'\\]+\s*:\s*(\d+)/i) ||
-                                bestHtml.match(/([\d.,KMB]+)\s*(?:Followers|Seguidores)/i);
-                if (folMatch) {
-                    const rawStr = folMatch[1];
-                    const rawCount = parseInt(rawStr.replace(/[,.]/g, ''));
+                // 🎯 "JUST THE NUMBER" Strategy: Direct extraction without over-engineering
+                const simpleFol = bestHtml.match(/followers_count["'\\]+:\s*(\d+)/i) ||
+                                 bestHtml.match(/edge_followed_by["'\\]+[^}]*count["'\\]+:\s*(\d+)/i);
+                
+                if (simpleFol) {
+                    const rawCount = parseInt(simpleFol[1]);
                     if (!isNaN(rawCount)) {
                         if (rawCount >= 1000000) followers = (rawCount / 1000000).toFixed(1).replace('.0', '') + 'M';
                         else if (rawCount >= 1000) followers = (rawCount / 1000).toFixed(1).replace('.0', '') + 'K';
                         else followers = rawCount.toString();
-                    } else if (rawStr.match(/[\dKMB]/i)) {
-                        followers = rawStr.toUpperCase();
+                        console.log(`[Instagram] Captured raw number: ${followers}`);
                     }
-                    console.log(`[Instagram] Found followers: ${followers}`);
                 }
 
-                const picMatch = bestHtml.match(/profile_pic_url(?:_hd)?["'\\]+\s*:\s*["'\\]+(https:[^"'\\]+)/i) ||
-                                bestHtml.match(/https:\\\/\\\/scontent[^"'\s\\]+\.jpg/i) ||
-                                bestHtml.match(/https:\/\/scontent[^"'\s\\]+\.jpg/i);
+                if (!followers) {
+                    const fallbackFol = bestHtml.match(/([\d.,KMB]+)\s*(?:Followers|Seguidores)/i);
+                    if (fallbackFol) followers = fallbackFol[1].toUpperCase();
+                }
+
+                const picMatch = bestHtml.match(/profile_pic_url(?:_hd)?["'\\]+\s*:\s*["'\\]+(https:[^"']+)/i) ||
+                                bestHtml.match(/https:\\\/\\\/scontent[^"'\s)]+\.jpg/i) ||
+                                bestHtml.match(/https:\/\/scontent[^"'\s)]+\.jpg/i);
                 if (picMatch) {
                     const candidate = (picMatch[1] || picMatch[0]).replace(/\\u0026/g, '&').replace(/\\/g, '');
                     if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
