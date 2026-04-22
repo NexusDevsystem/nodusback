@@ -329,9 +329,9 @@ export const socialController = {
             if (bestHtml) {
                 // Quick regex extraction (catches data in JSON blobs)
                 // Quick regex extraction (catches data in JSON blobs, handles escapes)
-                const folMatch = bestHtml.match(/\\*["']edge_followed_by\\*["']\s*:\s*\{[^}]*\\*["']count\\*["']\s*:\s*(\d+)/) ||
-                                bestHtml.match(/\\*["']followers_count\\*["']\s*:\s*(\d+)/) ||
-                                bestHtml.match(/\\*["']edge_followed_by\\*["']\s*:\s*(\d+)/) ||
+                const folMatch = bestHtml.match(/[\\]*["']edge_followed_by[\\]*["']\s*:\s*\{[^}]*[\\]*["']count[\\]*["']\s*:\s*(\d+)/) ||
+                                bestHtml.match(/[\\]*["']followers_count[\\]*["']\s*:\s*(\d+)/) ||
+                                bestHtml.match(/[\\]*["']edge_followed_by[\\]*["']\s*:\s*(\d+)/) ||
                                 bestHtml.match(/([\d.,KMB]+)\s*(?:Followers|Seguidores)/i);
                 if (folMatch) {
                     const rawStr = folMatch[1];
@@ -346,9 +346,9 @@ export const socialController = {
                     console.log(`[Instagram] Regex found followers: ${followers}`);
                 }
 
-                const picMatch = bestHtml.match(/\\*["']profile_pic_url_hd\\*["']\s*:\s*\\*["']([^"'\\]+)\\*["']/) ||
-                                bestHtml.match(/\\*["']profile_pic_url\\*["']\s*:\s*\\*["']([^"'\\]+)\\*["']/) ||
-                                bestHtml.match(/src\s*=\s*\\*["']([^"'\\]+)\\*["'][^>]*class\s*=\s*\\*["'][^"']*Avatar/i) ||
+                const picMatch = bestHtml.match(/[\\]*["']profile_pic_url_hd[\\]*["']\s*:\s*[\\]*["']([^"'\\]+)[\\]*["']/) ||
+                                bestHtml.match(/[\\]*["']profile_pic_url[\\]*["']\s*:\s*[\\]*["']([^"'\\]+)[\\]*["']/) ||
+                                bestHtml.match(/src\s*=\s*[\\]*["']([^"'\\]+)[\\]*["'][^>]*class\s*=\s*[\\]*["'][^"']*Avatar/i) ||
                                 bestHtml.match(/https:\\\/\\\/scontent[^"'\s\\]+\.jpg/i) ||
                                 bestHtml.match(/https:\/\/scontent[^"'\s\\]+\.jpg/i);
                 if (picMatch) {
@@ -361,7 +361,7 @@ export const socialController = {
 
                 // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON (found in embeds)
                 // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON
-                const contextMatch = bestHtml.match(/\\*["']contextJSON\\*["']\s*:\s*\\*["'](.+?)\\*["']\s*[,}]/);
+                const contextMatch = bestHtml.match(/[\\]*["']contextJSON[\\]*["']\s*:\s*[\\]*["'](.+?)[\\]*["']\s*[,}]/);
                 if (contextMatch) {
                     try {
                         // Unescape the JSON string inside the HTML
