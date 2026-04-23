@@ -404,24 +404,34 @@ export const socialController = {
                         const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src') || $('header img').attr('src');
                         avatarUrl = (ogImage && !ogImage.includes('static.cdninstagram.com')) ? ogImage : (embedPic || avatarUrl);
                         
-                        // Last resort Cheerio: any image from cdninstagram
+                        // Last resort Cheerio: Scan ALL images for scontent pattern
                         if (!avatarUrl) {
-                            avatarUrl = $('img[src*="scontent.cdninstagram.com"]').first().attr('src') || '';
+                            $('img').each((i, el) => {
+                                const src = $(el).attr('src');
+                                if (src && src.includes('scontent') && (src.includes('/t51.2885-19/') || src.includes('/v/t51.82787-19/'))) {
+                                    avatarUrl = src;
+                                    console.log(`[Instagram] Cheerio found avatar via img scan: ${avatarUrl.substring(0, 50)}...`);
+                                    return false; // break
+                                }
+                            });
                         }
                     }
                     if (!followers) {
                         const desc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
                         // Embed selector fallback
                         const embedFollowers = $('.EmbedAccountFollowers').text() || $('.FollowersCount').text() || $('.followed-by').text();
-                        const m = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                        followers = m ? m[1] : (embedFollowers.match(/([\d.,]+[KMB]?)/i)?.[1] || followers);
-
-                        // Portuguese span fallback
-                        if (!followers) {
-                            const ptSpan = $('span:contains("seguidores")').first().text() || $('span:contains("Seguidores")').first().text();
-                            const ptMatch = ptSpan.match(/([\d.,]+[KMB]?)/);
-                            if (ptMatch) followers = ptMatch[1];
-                        }
+                        // 🇧🇷 Deep Portuguese/English Fallback: Check for "seguidores" or "followers" in any tag
+                        $('*').each((i, el) => {
+                            const text = $(el).text().trim();
+                            if (text.toLowerCase().includes('seguidores') || text.toLowerCase().includes('followers')) {
+                                // Found the label, look for the number in the text or parent
+                                const numMatch = text.match(/([\d.,]+[KMB]?)/) || $(el).parent().text().match(/([\d.,]+[KMB]?)/);
+                                if (numMatch && !followers) {
+                                    followers = numMatch[1];
+                                    console.log(`[Instagram] Cheerio found followers via label: ${followers}`);
+                                }
+                            }
+                        });
                     }
                     if (!name) {
                         const ogTitle = $('meta[property="og:title"]').attr('content') || '';
