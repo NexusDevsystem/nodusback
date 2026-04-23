@@ -48,14 +48,14 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
         const defaultFrontendUrl = process.env.FRONTEND_URL;
         if (!defaultFrontendUrl) throw new Error('FRONTEND_URL missing');
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/admin?success=tiktok`);
+        res.redirect(`${redirectUrl}/editor?success=tiktok`);
     } catch (error: any) {
         console.error('TikTok Callback error:', error);
         const state = req.query.state as string;
         const originFromState = state?.split('_')[3];
         const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
         const redirectUrl = (originFromState && originFromState !== 'production') ? originFromState : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/admin?error=tiktok`);
+        res.redirect(`${redirectUrl}/editor?error=tiktok`);
     }
 };
 
@@ -97,14 +97,14 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
 
         const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/admin?success=instagram`);
+        res.redirect(`${redirectUrl}/editor?success=instagram`);
     } catch (error: any) {
         console.error('Instagram Callback error:', error);
         const state = req.query.state as string;
         const originFromState = state?.split('_')[2];
         const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
         const redirectUrl = (originFromState && originFromState !== 'production') ? originFromState : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/admin?error=instagram`);
+        res.redirect(`${redirectUrl}/editor?error=instagram`);
     }
 };
 
@@ -142,18 +142,18 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
 
         if (authError || !code) {
-            return res.redirect(`${redirectUrl}/admin?error=twitch_auth_denied`);
+            return res.redirect(`${redirectUrl}/editor?error=twitch_auth_denied`);
         }
 
         if (!userId) {
-            return res.redirect(`${redirectUrl}/admin?error=twitch_invalid_state`);
+            return res.redirect(`${redirectUrl}/editor?error=twitch_invalid_state`);
         }
 
         const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
         const backendBaseUrl = `${protocol}://${req.get('host')}`;
 
         await twitchService.handleCallback(code as string, userId, backendBaseUrl);
-        res.redirect(`${redirectUrl}/admin?success=twitch`);
+        res.redirect(`${redirectUrl}/editor?success=twitch`);
     } catch (error: any) {
         console.error('Twitch Callback error:', error);
         const state = req.query.state as string;
@@ -166,7 +166,7 @@ export const handleTwitchCallback = async (req: Request, res: Response) => {
             }
         } catch (e) { }
         const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/admin?error=twitch`);
+        res.redirect(`${redirectUrl}/editor?error=twitch`);
     }
 };
 
@@ -200,7 +200,7 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
         await youtubeService.handleCallback(code as string, userId, backendBaseUrl);
 
         const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/admin?success=youtube`);
+        res.redirect(`${redirectUrl}/editor?success=youtube`);
     } catch (error: any) {
         console.error('YouTube Callback error:', error);
         const state = req.query.state as string;
@@ -213,7 +213,7 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
             }
         } catch (e) { }
         const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/admin?error=youtube`);
+        res.redirect(`${redirectUrl}/editor?error=youtube`);
     }
 };
 
@@ -253,14 +253,14 @@ export const handleKickCallback = async (req: Request, res: Response) => {
         const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
 
         if (authError || !code) {
-            return res.redirect(`${redirectUrl}/admin?error=kick_auth_denied`);
+            return res.redirect(`${redirectUrl}/editor?error=kick_auth_denied`);
         }
 
         const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
         const backendBaseUrl = `${protocol}://${req.get('host')}`;
 
         await kickService.handleCallback(code as string, userId, verifier, backendBaseUrl);
-        res.redirect(`${redirectUrl}/admin?success=kick`);
+        res.redirect(`${redirectUrl}/editor?success=kick`);
     } catch (error: any) {
         console.error('Kick Callback error:', error);
         const state = req.query.state as string;
@@ -273,7 +273,7 @@ export const handleKickCallback = async (req: Request, res: Response) => {
             }
         } catch (e) { }
         const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/admin?error=kick`);
+        res.redirect(`${redirectUrl}/editor?error=kick`);
     }
 };
 
