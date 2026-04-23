@@ -10,7 +10,6 @@ import { supabase } from '../config/supabaseClient.js';
 
 // In-memory cache for social profiles (avoids hitting rate limits)
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const igCache = new Map<string, { data: any, expiresAt: number }>();
 const tiktokCache = new Map<string, { data: any, expiresAt: number }>();
 
 const twitchCache = new Map<string, { data: any; expiresAt: number }>();
@@ -226,200 +225,16 @@ export const socialController = {
     },
 
     /**
-     * Fetches metadata for Instagram profiles.
-     * Uses Jina AI Reader (renders page like a real browser in the cloud) + AI extraction.
-     * Saves to DB once and never re-fetches.
+     * Instagram scraping has been removed.
+     * Profile data is now fetched exclusively via the official
+     * Instagram API (instagramService) using OAuth tokens.
+     * This endpoint is intentionally disabled.
      */
     async getInstagramProfileInfo(req: Request, res: Response) {
-        try {
-            const { url, linkId } = req.query;
-            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
-
-            const cleanUrl = url.split('?')[0].split('#')[0];
-            const username = cleanUrl.match(/instagram\.com\/([^\/\?#]+)/i)?.[1]?.replace('@', '') || '';
-
-            // 1. DB Cache — se já temos dados, retorna direto
-            if (linkId && typeof linkId === 'string') {
-                const { data: link } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
-                if (link?.image && !link.image.includes('static.cdninstagram.com')) {
-                    return res.json({
-                        name: username, username, avatarUrl: link.image, avatar_url: link.image,
-                        followers: link.subtitle || '', platform: 'instagram', profileUrl: cleanUrl
-                    });
-                }
-            }
-
-            console.log(`[Instagram] Fetching: ${username}`);
-            let avatarUrl = '', followers = '', name = username;
-
-            // ─── ESTRATÉGIA 1: oEmbed oficial (nunca bloqueado, retorna thumbnail + nome) ───
-            try {
-                const oembedRes = await safeFetch(
-                    `https://graph.facebook.com/v18.0/instagram_oembed?url=${encodeURIComponent(`https://www.instagram.com/${username}/`)}&fields=author_name,thumbnail_url&access_token=application_access_token`,
-                    { timeout: 5000 }
-                );
-                // tenta sem token também — o endpoint sem token ainda responde para perfis públicos
-                const oembedPublic = await safeFetch(
-                    `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(`https://www.instagram.com/${username}/`)}`,
-                    { timeout: 5000, headers: { 'User-Agent': 'Mozilla/5.0' } }
-                );
-                if (oembedPublic.ok) {
-                    const data = await oembedPublic.json() as any;
-                    if (data.author_name) name = data.author_name;
-                    if (data.thumbnail_url) avatarUrl = data.thumbnail_url;
-                }
-            } catch (e) { }
-
-            // ─── ESTRATÉGIA 2: Jina Reader (renderiza JS, contorna bloqueio) ───
-            if (!avatarUrl || !followers) {
-                try {
-                    const jinaRes = await safeFetch(`https://r.jina.ai/https://www.instagram.com/${username}/`, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            'Accept': 'text/html',
-                            'X-Return-Format': 'html',
-                        },
-                        timeout: 12000
-                    });
-                    if (jinaRes.ok) {
-                        const raw = await jinaRes.text();
-                        // Desescapa múltiplas camadas
-                        let clean = raw;
-                        for (let i = 0; i < 3; i++) {
-                            clean = clean.replace(/\\u0026/g, '&').replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\\//g, '/');
-                        }
-
-                        // Seguidores: busca pelo padrão title="407" próximo de "seguidores"
-                        if (!followers) {
-                            // Padrão 1: title="407" ... seguidores
-                            const titleFol = clean.match(/title\s*=\s*["']([\d.,]+)["'][^<]{0,200}seguidores/i)
-                                          || clean.match(/seguidores[^<]{0,200}title\s*=\s*["']([\d.,]+)["']/i);
-                            if (titleFol) followers = titleFol[1];
-                        }
-                        if (!followers) {
-                            // Padrão 2: número bruto antes de "seguidores" ou "followers"
-                            const bruteFol = clean.match(/([\d.,]+[KMBkmb]?)(?:<[^>]+>|\s)*(?:seguidores|followers)/i);
-                            if (bruteFol) followers = bruteFol[1];
-                        }
-                        if (!followers) {
-                            // Padrão 3: JSON inline edge_followed_by
-                            const jsonFol = clean.match(/edge_followed_by[^}]{0,60}count["\s:]+(\d+)/i)
-                                         || clean.match(/followers_count["\s:]+(\d+)/i);
-                            if (jsonFol) {
-                                const n = parseInt(jsonFol[1]);
-                                if (n >= 1_000_000) followers = (n / 1_000_000).toFixed(1).replace('.0', '') + 'M';
-                                else if (n >= 1_000) followers = (n / 1_000).toFixed(1).replace('.0', '') + 'K';
-                                else followers = n.toString();
-                            }
-                        }
-
-                        // Avatar: CDN do Instagram tem assinatura t51
-                        if (!avatarUrl) {
-                            const cdnLinks = clean.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+\.jpg[^"'\s\\]*/gi);
-                            if (cdnLinks) {
-                                for (const link of cdnLinks) {
-                                    if (!link.includes('static')) { avatarUrl = link.replace(/&amp;/g, '&'); break; }
-                                }
-                            }
-                        }
-
-                        // Cheerio para og:image e og:description como fallback
-                        if (!avatarUrl || !followers) {
-                            const $ = cheerio.load(raw);
-                            if (!avatarUrl) {
-                                const og = $('meta[property="og:image"]').attr('content');
-                                if (og && !og.includes('static')) avatarUrl = og;
-                            }
-                            if (!followers) {
-                                const desc = $('meta[property="og:description"]').attr('content') || '';
-                                const m = desc.match(/([\d.,]+[KMBkmb]?)\s*(?:Followers|Seguidores)/i);
-                                if (m) followers = m[1];
-                            }
-                        }
-                    }
-                } catch (e) { console.log(`[Instagram] Jina failed: ${(e as any).message}`); }
-            }
-
-            // ─── ESTRATÉGIA 3: Embed page (fallback) ───
-            if (!avatarUrl || !followers) {
-                try {
-                    const embedRes = await safeFetch(`https://www.instagram.com/${username}/embed/`, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
-                        timeout: 8000
-                    });
-                    if (embedRes.ok) {
-                        const raw = await embedRes.text();
-                        let clean = raw;
-                        for (let i = 0; i < 3; i++) {
-                            clean = clean.replace(/\\u0026/g, '&').replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\\//g, '/');
-                        }
-                        const $ = cheerio.load(raw);
-
-                        if (!avatarUrl) {
-                            // Procura CDN t51 no embed
-                            const cdnLinks = clean.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+\.jpg[^"'\s\\]*/gi);
-                            if (cdnLinks) for (const l of cdnLinks) { if (!l.includes('static')) { avatarUrl = l.replace(/&amp;/g, '&'); break; } }
-                            // Fallback DOM
-                            if (!avatarUrl) {
-                                $('img').each((_i, el) => {
-                                    const src = $(el).attr('src') || '';
-                                    if (src.includes('scontent') && src.includes('t51')) { avatarUrl = src; return false; }
-                                });
-                            }
-                        }
-
-                        if (!followers) {
-                            const titleFol = clean.match(/title\s*=\s*["']([\d.,]+)["'][^<]{0,200}(?:seguidores|followers)/i);
-                            if (titleFol) followers = titleFol[1];
-                            if (!followers) {
-                                $('*').each((_i, el) => {
-                                    const t = $(el).attr('title') || '';
-                                    const txt = $(el).text();
-                                    if (/^\d+$/.test(t) && (txt.includes('seguidores') || txt.includes('followers'))) {
-                                        followers = t; return false;
-                                    }
-                                });
-                            }
-                        }
-                    }
-                } catch (e) { }
-            }
-
-            console.log(`[Instagram] Final: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
-
-            const followersText = followers ? `${followers} Seguidores` : '';
-
-            // Wrap avatar through backend proxy to avoid browser CORS errors with Instagram CDN
-            const backendBase = process.env.BACKEND_URL || 'https://api.nodus.my';
-            const proxiedAvatar = avatarUrl
-                ? `${backendBase}/api/social/proxy-image?url=${encodeURIComponent(avatarUrl)}`
-                : false;
-
-            const result = {
-                name, display_name: name, username, platform: 'instagram', profileUrl: cleanUrl,
-                avatarUrl: proxiedAvatar, avatar_url: proxiedAvatar,
-                followers: followersText,
-                follower_count: parseFollowerCount(followersText)
-            };
-
-            // 4. Persistência
-            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
-                try {
-                    const updates: any = {};
-                    if (followers) updates.subtitle = followersText;
-                    if (avatarUrl) updates.image = proxiedAvatar; // save proxied URL
-                    const { data: updatedLink } = await supabase.from('links').update(updates).eq('id', linkId).select('userId').single();
-                    if (updatedLink?.userId) {
-                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
-                        if (user?.username) realtimeManager.notifyUpdate(user.username);
-                    }
-                } catch (e) { }
-            }
-
-            return res.json(result);
-        } catch (e) {
-            return res.status(500).json({ error: 'Server error' });
-        }
+        return res.status(410).json({
+            error: 'Instagram scraping is no longer supported.',
+            message: 'Connect your Instagram account via Settings → Integrations to display your profile data.'
+        });
     },
 
     async getTiktokProfileInfo(req: Request, res: Response) {
@@ -921,42 +736,5 @@ export const socialController = {
             const html = `<html><head><title>${post.title}</title><meta property="og:image" content="${post.imageUrl}"><script>window.location.href = "https://nodus.my/blog/${slug}";</script></head><body>Redirecting...</body></html>`;
             res.send(html);
         } catch (e) { res.status(500).send('Error'); }
-    },
-
-    /**
-     * Image proxy — serves Instagram/CDN images through the server to bypass browser CORS.
-     * GET /api/social/proxy-image?url=<encoded_cdn_url>
-     */
-    async proxyImage(req: Request, res: Response) {
-        try {
-            const { url } = req.query;
-            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' });
-
-            // Only allow Instagram CDN and known safe origins
-            const allowed = ['scontent', 'cdninstagram.com', 'fbcdn.net', 'cdntiktok.com', 'tiktokcdn.com', 'static-cdn.jtvnw.net'];
-            const isAllowed = allowed.some(d => url.includes(d));
-            if (!isAllowed) return res.status(403).json({ error: 'Domain not allowed' });
-
-            const imgRes = await safeFetch(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.instagram.com/',
-                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-                },
-                timeout: 10000
-            });
-
-            if (!imgRes.ok) return res.status(502).json({ error: 'Upstream error' });
-
-            const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-            const buffer = await imgRes.arrayBuffer();
-
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('Cache-Control', 'public, max-age=86400'); // cache 24h no browser
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.send(Buffer.from(buffer));
-        } catch (e) {
-            res.status(500).json({ error: 'Proxy error' });
-        }
     }
 };

@@ -256,7 +256,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         console.log(`[InstagramService] Using App ID: ${APP_ID?.substring(0, 5)}***`);
         console.log(`[InstagramService] Callback Redirect URI: ${finalRedirectUri}`);
 
-        // 1. Exchange short-lived token
+        // 1. Exchange authorization code → short-lived token
         const params = new URLSearchParams();
         params.append('client_id', APP_ID || '');
         params.append('client_secret', APP_SECRET || '');
@@ -271,50 +271,60 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
 
         const tokenData = await tokenResponse.json() as any;
 
-        if (tokenData.error) {
-            throw new Error(`Instagram Token Error: ${tokenData.error.message || JSON.stringify(tokenData.error)}`);
+        if (tokenData.error_type || tokenData.error) {
+            throw new Error(`Instagram Token Error: ${tokenData.error_message || tokenData.error?.message || JSON.stringify(tokenData)}`);
         }
 
         let accessToken = tokenData.access_token;
-        const igUserId = tokenData.user_id || tokenData.id; // Capture user ID from response
+        const igUserId = tokenData.user_id || tokenData.id;
 
-        // 2. Exchange for Long-Lived Token (60 days)
+        // 2. Exchange short-lived → long-lived token (60 days)
+        // CORRECT endpoint for "Instagram API with Instagram Login":
+        // https://graph.instagram.com/access_token?grant_type=ig_exchange_token
         try {
-            const longLivedUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${APP_ID}&client_secret=${APP_SECRET}&fb_exchange_token=${accessToken}`;
+            const longLivedUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${APP_SECRET}&access_token=${accessToken}`;
             const longLivedRes = await fetch(longLivedUrl);
             const longLivedData = await longLivedRes.json() as any;
 
             if (longLivedData.access_token) {
                 accessToken = longLivedData.access_token;
-                console.log('[InstagramService] Long-lived token acquired via Facebook Graph');
+                const expiresInDays = Math.floor((longLivedData.expires_in || 5184000) / 86400);
+                console.log(`[InstagramService] ✅ Long-lived token acquired (valid for ~${expiresInDays} days)`);
+            } else {
+                console.warn('[InstagramService] Long-lived token exchange failed:', longLivedData);
             }
         } catch (err) {
             console.warn('[InstagramService] Long-lived token exchange failed:', err);
         }
 
-        // 3. Get User Profile via Instagram Graph API (Specific for Instagram Login tokens)
-        // Note: For Instagram Login, we use graph.instagram.com/me even for professional data
-        const profileFields = 'id,username,name,profile_picture_url,followers_count';
-        const profileUrl = `https://graph.instagram.com/me?fields=${profileFields}&access_token=${accessToken}`;
+        // 3. Fetch user profile via graph.instagram.com/me
+        // Requires instagram_business_basic scope
+        const profileFields = 'id,username,name,profile_picture_url,followers_count,follows_count,media_count,account_type';
+        const profileUrl = `https://graph.instagram.com/v25.0/me?fields=${profileFields}&access_token=${accessToken}`;
 
-        console.log('[InstagramService] Fetching profile from:', profileUrl.split('access_token=')[0] + 'access_token=***');
+        console.log('[InstagramService] Fetching profile from graph.instagram.com/me');
 
         const profileRes = await fetch(profileUrl);
         const profileDataRaw = await profileRes.json() as any;
 
         if (profileDataRaw.error) {
             console.error('[InstagramService] Profile API Error:', profileDataRaw.error);
-            // Don't throw here, try to use what we have or fallbacks to avoid blocking the integration
         }
 
         console.log('[InstagramService] Raw profile data received:', JSON.stringify(profileDataRaw));
 
         const profileData = {
             username: profileDataRaw.username || 'instagram_user',
+            display_name: profileDataRaw.name || profileDataRaw.username || 'instagram_user',
             avatar_url: profileDataRaw.profile_picture_url || null,
             follower_count: profileDataRaw.followers_count || null,
+            follows_count: profileDataRaw.follows_count || null,
+            media_count: profileDataRaw.media_count || null,
+            account_type: profileDataRaw.account_type || null,
             channel_id: profileDataRaw.id || igUserId,
         };
+
+        const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days
 
         const integrationData: SocialIntegrationDB = {
             user_id: userId,
@@ -322,7 +332,7 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
             provider_account_id: profileData.channel_id,
             access_token: accessToken,
             profile_data: profileData,
-            expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // ~60 days
+            expires_at: expiresAt
         };
 
         const { data, error } = await supabase
@@ -333,7 +343,16 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
 
         if (error) throw error;
 
-        // Run sync in background
+        // Sync users table so frontend sees it immediately
+        const { data: allIntegrations } = await supabase
+            .from('social_integrations')
+            .select('provider, provider_account_id, profile_data')
+            .eq('user_id', userId);
+        if (allIntegrations) {
+            await supabase.from('users').update({ integrations: allIntegrations }).eq('id', userId);
+        }
+
+        // Run media sync in background
         syncFeed(userId).catch(syncError => {
             console.error('[InstagramService] Initial sync failed:', syncError);
         });

@@ -24,8 +24,6 @@ router.get('/kick', socialController.getKickProfileInfo);
 // GET /api/social/metadata?url=<profile_url>
 router.get('/metadata', socialController.getSocialMetadata);
 
-// GET /api/social/proxy-image?url=<cdn_url> — proxies Instagram/CDN images to bypass CORS
-router.get('/proxy-image', socialController.proxyImage);
 
 // GET /api/social/share/:username (Bot-friendly OG redirector)
 router.get('/share/:username', socialController.shareProfile);
