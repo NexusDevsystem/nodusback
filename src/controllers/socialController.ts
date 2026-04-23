@@ -387,11 +387,10 @@ export const socialController = {
 
             // 🔍 Extract data from whatever HTML we got
             if (bestHtml) {
-                // 🧹 CLEANUP: Instagram embeds are heavily escaped. Normalize everything first.
-                // We do a multi-pass replace to handle double/triple escapes like \\\" or \\\/
-                let cleaned = bestHtml;
+                // 🧹 CLEANUP: Create a cleaned version for Regex matching, but PRESERVE original for Cheerio
+                let searchHtml = bestHtml;
                 for (let i = 0; i < 3; i++) {
-                    cleaned = cleaned
+                    searchHtml = searchHtml
                         .replace(/\\u0026/g, '&')
                         .replace(/\\n/g, '\n')
                         .replace(/\\"/g, '"')
@@ -400,7 +399,7 @@ export const socialController = {
                 }
                 
                 // Use the cleaned HTML for matching
-                const searchHtml = cleaned;
+                // ... (rest of the regex matching)
 
                 // 🎯 "JUST THE NUMBER" Strategy: Direct extraction without over-engineering
                 const simpleFol = searchHtml.match(/followers_count["']?\s*[:=]\s*(\\?["'])?(\d+)/i) ||
