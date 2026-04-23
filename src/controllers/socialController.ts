@@ -278,13 +278,77 @@ export const socialController = {
                 console.log(`[Instagram] Jina Reader failed: ${(e as any).message}`);
             }
 
-            // Strategy B: Instagram Embed (Powerful fallback)
-            if (!bestHtml || bestHtml.length < 5000 || bestHtml.toLowerCase().includes('login')) {
+            // 🔍 STRATEGY 1: Discovery via Search Engine Proxy (Very high success, bypasses bot detection)
+            try {
+                console.log(`[Instagram] Discovery Strategy (Jina Search) for: ${username}`);
+                // Search specifically for the profile metadata on a search engine proxy
+                const searchRes = await safeFetch(`https://s.jina.ai/instagram.com/${username}`, { timeout: 10000 });
+                if (searchRes.ok) {
+                    const searchHtml = await searchRes.text();
+                    console.log(`[Instagram] Discovery Success: ${searchHtml.length} bytes`);
+                    
+                    // Look for followers in search snippet patterns (e.g., "407 followers", "5.5K seguidores")
+                    const folMatch = searchHtml.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i) ||
+                                    searchHtml.match(/Followers:\s*([\d.,]+[KMB]?)/i) ||
+                                    searchHtml.match(/Seguidores:\s*([\d.,]+[KMB]?)/i);
+                    if (folMatch && !followers) {
+                        followers = folMatch[1];
+                        console.log(`[Instagram] Discovery found followers: ${followers}`);
+                    }
+
+                    // Look for profile pic in markdown or raw URLs
+                    const picMatch = searchHtml.match(/!\[.*?\]\((https:\/\/scontent[^)]+)\)/) ||
+                                    searchHtml.match(/https:\/\/scontent[^"'\s)]+t51[^"'\s)]+/i);
+                    if (picMatch && !avatarUrl) {
+                        avatarUrl = (picMatch[1] || picMatch[0]).replace(/&amp;/g, '&');
+                        console.log(`[Instagram] Discovery found avatar: ${avatarUrl.substring(0, 50)}...`);
+                    }
+                    
+                    if (followers && avatarUrl) {
+                        bestHtml = searchHtml; // Save for fallback parsing if needed
+                    }
+                }
+            } catch (e) {
+                console.log(`[Instagram] Discovery Strategy failed: ${(e as any).message}`);
+            }
+
+            // 🔍 STRATEGY 2: Official JSON Bridge (Hidden API)
+            if (!followers || !avatarUrl) {
+                try {
+                    console.log(`[Instagram] API Bridge Strategy for: ${username}`);
+                    const apiRes = await safeFetch(`https://www.instagram.com/${username}/?__a=1&__d=dis`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1' },
+                        timeout: 5000
+                    });
+                    if (apiRes.ok) {
+                        const json = await apiRes.json() as any;
+                        const user = json.graphql?.user || json.show_suggestions?.users?.[0];
+                        if (user) {
+                            if (!name) name = user.full_name || user.username;
+                            if (!avatarUrl) avatarUrl = user.profile_pic_url_hd || user.profile_pic_url;
+                            if (!followers) {
+                                const count = user.edge_followed_by?.count || user.follower_count;
+                                if (count) {
+                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
+                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
+                                    else followers = count.toString();
+                                }
+                            }
+                            console.log(`[Instagram] API Bridge success!`);
+                        }
+                    }
+                } catch (e) {
+                    console.log(`[Instagram] API Bridge failed (expected if no cookies)`);
+                }
+            }
+
+            // Strategy 3: Instagram Embed (Powerful fallback)
+            if (!followers || !avatarUrl) {
                 try {
                     console.log(`[Instagram] Trying Embed Strategy for: ${username}`);
                     const embedRes = await safeFetch(`https://www.instagram.com/${username}/embed/`, {
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
-                        timeout: 10000
+                        timeout: 8000
                     });
                     if (embedRes.ok) {
                         const embedHtml = await embedRes.text();
@@ -298,8 +362,8 @@ export const socialController = {
                 }
             }
 
-            // Strategy C: Direct HTTP with multiple User-Agents (fallback)
-            if (bestHtml.length < 5000) {
+            // Strategy 4: Direct HTTP with multiple User-Agents (fallback)
+            if (!followers || !avatarUrl) {
                 const userAgents = [
                     'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
                     'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
@@ -310,18 +374,14 @@ export const socialController = {
                     try {
                         const pageRes = await safeFetch(cleanUrl, {
                             headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' },
-                            timeout: 10000
+                            timeout: 8000
                         });
                         if (pageRes.ok) {
                             const html = await pageRes.text();
-                            if (html.length > bestHtml.length) bestHtml = html;
-                            const hasData = html.includes('profile_pic_url') || html.includes('edge_followed_by');
-                            console.log(`[Instagram] UA="${ua.substring(0, 25)}..." → ${html.length} bytes, hasData=${hasData}`);
+                            const hasData = html.includes('profile_pic_url') || html.includes('edge_followed_by') || html.includes('seguidores');
                             if (hasData) { bestHtml = html; break; }
                         }
-                    } catch (e) {
-                        console.log(`[Instagram] UA failed: ${(e as any).message}`);
-                    }
+                    } catch (e) { }
                 }
             }
 
@@ -455,6 +515,26 @@ export const socialController = {
                         if (candidate && candidate.toLowerCase() !== 'instagram' && candidate.toLowerCase() !== 'login') {
                             name = candidate;
                         }
+                    }
+                }
+
+                // 🚀 TAG-AGNOSTIC BRUTE FORCE: Ignore nested tags and spaces
+                if (!followers) {
+                    // This regex looks for a number, followed by optional tags/spaces, followed by "seguidores" or "followers"
+                    const bruteFol = bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*seguidores/i) ||
+                                    bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*followers/i);
+                    if (bruteFol) {
+                        followers = bruteFol[1];
+                        console.log(`[Instagram] Brute Tag-Agnostic found followers: ${followers}`);
+                    }
+                }
+
+                if (!avatarUrl) {
+                    // Scan for any scontent link that looks like a profile picture, ignoring tags
+                    const brutePic = bestHtml.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+/i);
+                    if (brutePic) {
+                        avatarUrl = brutePic[0].replace(/\\/g, '').replace(/&amp;/g, '&');
+                        console.log(`[Instagram] Brute found avatar URL: ${avatarUrl.substring(0, 50)}...`);
                     }
                 }
 
