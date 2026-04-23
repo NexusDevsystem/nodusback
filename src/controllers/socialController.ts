@@ -451,6 +451,40 @@ export const socialController = {
                     }
                 }
 
+                // 🚀 TAG-AGNOSTIC BRUTE FORCE: Ignore nested tags and spaces
+                if (!followers) {
+                    // Look for the "title" pattern provided by the user: <span title="407">
+                    const titleMatch = bestHtml.match(/title\s*=\s*["'](\d+)["']/i);
+                    if (titleMatch && (bestHtml.includes('seguidores') || bestHtml.includes('followers'))) {
+                        followers = titleMatch[1];
+                        console.log(`[Instagram] Brute Title-Match found: ${followers}`);
+                    }
+                    
+                    if (!followers) {
+                        const bruteFol = bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*seguidores/i) ||
+                                        bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*followers/i);
+                        if (bruteFol) {
+                            followers = bruteFol[1];
+                            console.log(`[Instagram] Brute Tag-Agnostic found: ${followers}`);
+                        }
+                    }
+                }
+
+                if (!avatarUrl) {
+                    // HARVESTER: Find ANY scontent link that looks like a profile picture
+                    const allCdnLinks = bestHtml.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+\.jpg[^"'\s\\]*/gi);
+                    if (allCdnLinks) {
+                        // Pick the first one that isn't static
+                        for (const link of allCdnLinks) {
+                            if (!link.includes('static')) {
+                                avatarUrl = link.replace(/\\/g, '').replace(/&amp;/g, '&');
+                                console.log(`[Instagram] Brute Harvester found: ${avatarUrl.substring(0, 50)}...`);
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 // og:meta tags via cheerio
                 const $ = cheerio.load(bestHtml);
                 const pageTitle = $('title').text() || '';
@@ -469,8 +503,7 @@ export const socialController = {
                                 const src = $(el).attr('src');
                                 const alt = $(el).attr('alt') || '';
                                 if (src && src.includes('scontent') && (
-                                    src.includes('/t51.2885-19/') || 
-                                    src.includes('/v/t51.82787-19/') ||
+                                    src.includes('t51') || 
                                     alt.toLowerCase().includes('foto do perfil') ||
                                     alt.toLowerCase().includes('profile picture')
                                 )) {
