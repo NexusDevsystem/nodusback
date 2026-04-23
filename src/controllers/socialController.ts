@@ -388,9 +388,16 @@ export const socialController = {
             console.log(`[Instagram] Final: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
 
             const followersText = followers ? `${followers} Seguidores` : '';
+
+            // Wrap avatar through backend proxy to avoid browser CORS errors with Instagram CDN
+            const backendBase = process.env.BACKEND_URL || 'https://api.nodus.my';
+            const proxiedAvatar = avatarUrl
+                ? `${backendBase}/api/social/proxy-image?url=${encodeURIComponent(avatarUrl)}`
+                : false;
+
             const result = {
                 name, display_name: name, username, platform: 'instagram', profileUrl: cleanUrl,
-                avatarUrl: avatarUrl || false, avatar_url: avatarUrl || false,
+                avatarUrl: proxiedAvatar, avatar_url: proxiedAvatar,
                 followers: followersText,
                 follower_count: parseFollowerCount(followersText)
             };
@@ -400,7 +407,7 @@ export const socialController = {
                 try {
                     const updates: any = {};
                     if (followers) updates.subtitle = followersText;
-                    if (avatarUrl) updates.image = avatarUrl;
+                    if (avatarUrl) updates.image = proxiedAvatar; // save proxied URL
                     const { data: updatedLink } = await supabase.from('links').update(updates).eq('id', linkId).select('userId').single();
                     if (updatedLink?.userId) {
                         const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
@@ -914,5 +921,42 @@ export const socialController = {
             const html = `<html><head><title>${post.title}</title><meta property="og:image" content="${post.imageUrl}"><script>window.location.href = "https://nodus.my/blog/${slug}";</script></head><body>Redirecting...</body></html>`;
             res.send(html);
         } catch (e) { res.status(500).send('Error'); }
+    },
+
+    /**
+     * Image proxy — serves Instagram/CDN images through the server to bypass browser CORS.
+     * GET /api/social/proxy-image?url=<encoded_cdn_url>
+     */
+    async proxyImage(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url required' });
+
+            // Only allow Instagram CDN and known safe origins
+            const allowed = ['scontent', 'cdninstagram.com', 'fbcdn.net', 'cdntiktok.com', 'tiktokcdn.com', 'static-cdn.jtvnw.net'];
+            const isAllowed = allowed.some(d => url.includes(d));
+            if (!isAllowed) return res.status(403).json({ error: 'Domain not allowed' });
+
+            const imgRes = await safeFetch(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Referer': 'https://www.instagram.com/',
+                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                },
+                timeout: 10000
+            });
+
+            if (!imgRes.ok) return res.status(502).json({ error: 'Upstream error' });
+
+            const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+            const buffer = await imgRes.arrayBuffer();
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Cache-Control', 'public, max-age=86400'); // cache 24h no browser
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.send(Buffer.from(buffer));
+        } catch (e) {
+            res.status(500).json({ error: 'Proxy error' });
+        }
     }
 };
