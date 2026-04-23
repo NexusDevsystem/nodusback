@@ -328,17 +328,24 @@ export const socialController = {
             // 🔍 Extract data from whatever HTML we got
             if (bestHtml) {
                 // 🧹 CLEANUP: Instagram embeds are heavily escaped. Normalize everything first.
-                bestHtml = bestHtml
-                    .replace(/\\u0026/g, '&')
-                    .replace(/\\n/g, '\n')
-                    .replace(/\\"/g, '"')
-                    .replace(/\\\\/g, '\\')
-                    .replace(/\\\//g, '/');
+                // We do a multi-pass replace to handle double/triple escapes like \\\" or \\\/
+                let cleaned = bestHtml;
+                for (let i = 0; i < 3; i++) {
+                    cleaned = cleaned
+                        .replace(/\\u0026/g, '&')
+                        .replace(/\\n/g, '\n')
+                        .replace(/\\"/g, '"')
+                        .replace(/\\\\/g, '\\')
+                        .replace(/\\\//g, '/');
+                }
+                
+                // Use the cleaned HTML for matching
+                const searchHtml = cleaned;
 
                 // 🎯 "JUST THE NUMBER" Strategy: Direct extraction without over-engineering
-                const simpleFol = bestHtml.match(/followers_count":\s*(\d+)/i) ||
-                                 bestHtml.match(/edge_followed_by":\s*\{"count":\s*(\d+)/i) ||
-                                 bestHtml.match(/edge_followed_by":\s*(\d+)/i);
+                const simpleFol = searchHtml.match(/followers_count["']?\s*[:=]\s*(\\?["'])?(\d+)/i) ||
+                                 searchHtml.match(/edge_followed_by["']?\s*[:=]\s*\{[^}]*count["']?\s*[:=]\s*(\\?["'])?(\d+)/i) ||
+                                 searchHtml.match(/edge_followed_by["']?\s*[:=]\s*(\\?["'])?(\d+)/i);
                 
                 if (simpleFol) {
                     const rawCount = parseInt(simpleFol[1]);
@@ -355,11 +362,10 @@ export const socialController = {
                     if (fallbackFol) followers = fallbackFol[1].toUpperCase();
                 }
 
-                const picMatch = bestHtml.match(/profile_pic_url(?:_hd)?["'\\]+\s*:\s*["'\\]+(https:[^"']+)/i) ||
-                                bestHtml.match(/https:\\\/\\\/scontent[^"'\s)]+\.jpg/i) ||
-                                bestHtml.match(/https:\/\/scontent[^"'\s)]+\.jpg/i);
+                const picMatch = searchHtml.match(/profile_pic_url(?:_hd)?["'\\ ]+\s*[:=]\s*["'\\ ]+(https:[^"' \n]+)/i) ||
+                                searchHtml.match(/https:\/\/scontent[^"'\s)]+\.jpg/i);
                 if (picMatch) {
-                    const candidate = (picMatch[1] || picMatch[0]).replace(/\\u0026/g, '&').replace(/\\/g, '');
+                    const candidate = (picMatch[1] || picMatch[0]).replace(/&amp;/g, '&');
                     if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
                         avatarUrl = candidate;
                         console.log(`[Instagram] Found avatar: ${avatarUrl.substring(0, 50)}...`);
@@ -368,7 +374,7 @@ export const socialController = {
 
                 // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON (found in embeds)
                 // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON
-                const contextMatch = bestHtml.match(/[\\]*["']contextJSON[\\]*["']\s*:\s*[\\]*["'](.+?)[\\]*["']\s*[,}]/);
+                const contextMatch = searchHtml.match(/["']contextJSON["']\s*:\s*["'](.+?)["']\s*[,}]/);
                 if (contextMatch) {
                     try {
                         // Unescape the JSON string inside the HTML
@@ -422,6 +428,34 @@ export const socialController = {
                         const candidate = ogTitle.split(' (')[0].split('•')[0].replace('Instagram photos and videos', '').trim();
                         if (candidate && candidate.toLowerCase() !== 'instagram' && candidate.toLowerCase() !== 'login') {
                             name = candidate;
+                        }
+                    }
+                }
+
+                // 🦅 SCAVENGER MODE: If everything else fails, scan the WHOLE text for anything that looks like a user profile
+                if (!followers || !avatarUrl) {
+                    const allNumbers = searchHtml.matchAll(/["']?followers(?:_count)?["']?\s*[:=]\s*["']?(\d+)/gi);
+                    for (const m of allNumbers) {
+                        const val = parseInt(m[1]);
+                        if (val > 0 && !followers) {
+                             if (val >= 1000000) followers = (val / 1000000).toFixed(1).replace('.0', '') + 'M';
+                             else if (val >= 1000) followers = (val / 1000).toFixed(1).replace('.0', '') + 'K';
+                             else followers = val.toString();
+                             console.log(`[Instagram] Scavenger found followers: ${followers}`);
+                             break;
+                        }
+                    }
+
+                    if (!avatarUrl) {
+                        const allCdnImages = searchHtml.matchAll(/https:\/\/scontent[^"'\s)]+\.jpg/gi);
+                        for (const m of allCdnImages) {
+                            const url = m[0].replace(/&amp;/g, '&');
+                            // Profile pictures usually have a specific pattern in the URL
+                            if (!url.includes('static.cdninstagram.com') && (url.includes('/t51.2885-19/') || url.includes('/v/t51.82787-19/'))) {
+                                avatarUrl = url;
+                                console.log(`[Instagram] Scavenger found avatar (profile pattern): ${avatarUrl.substring(0, 50)}...`);
+                                break;
+                            }
                         }
                     }
                 }
