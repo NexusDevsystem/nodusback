@@ -404,13 +404,19 @@ export const socialController = {
                         const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src') || $('header img').attr('src');
                         avatarUrl = (ogImage && !ogImage.includes('static.cdninstagram.com')) ? ogImage : (embedPic || avatarUrl);
                         
-                        // Last resort Cheerio: Scan ALL images for scontent pattern
+                        // Last resort Cheerio: Scan ALL images for scontent pattern or profile alt text
                         if (!avatarUrl) {
                             $('img').each((i, el) => {
                                 const src = $(el).attr('src');
-                                if (src && src.includes('scontent') && (src.includes('/t51.2885-19/') || src.includes('/v/t51.82787-19/'))) {
+                                const alt = $(el).attr('alt') || '';
+                                if (src && src.includes('scontent') && (
+                                    src.includes('/t51.2885-19/') || 
+                                    src.includes('/v/t51.82787-19/') ||
+                                    alt.toLowerCase().includes('foto do perfil') ||
+                                    alt.toLowerCase().includes('profile picture')
+                                )) {
                                     avatarUrl = src;
-                                    console.log(`[Instagram] Cheerio found avatar via img scan: ${avatarUrl.substring(0, 50)}...`);
+                                    console.log(`[Instagram] Cheerio found avatar via img/alt scan: ${avatarUrl.substring(0, 50)}...`);
                                     return false; // break
                                 }
                             });
@@ -423,12 +429,22 @@ export const socialController = {
                         // 🇧🇷 Deep Portuguese/English Fallback: Check for "seguidores" or "followers" in any tag
                         $('*').each((i, el) => {
                             const text = $(el).text().trim();
+                            const title = $(el).attr('title') || '';
+                            
+                            // Exact match from user: <span title="407">...</span> seguidores
+                            if (title && /^\d+$/.test(title) && (text.includes('seguidores') || text.includes('followers'))) {
+                                followers = title;
+                                console.log(`[Instagram] Cheerio found followers via title attribute: ${followers}`);
+                                return false;
+                            }
+
                             if (text.toLowerCase().includes('seguidores') || text.toLowerCase().includes('followers')) {
-                                // Found the label, look for the number in the text or parent
-                                const numMatch = text.match(/([\d.,]+[KMB]?)/) || $(el).parent().text().match(/([\d.,]+[KMB]?)/);
+                                // Found the label, look for the number in the text, title, or parent
+                                const numMatch = text.match(/([\d.,]+[KMB]?)/) || title.match(/([\d.,]+[KMB]?)/) || $(el).parent().text().match(/([\d.,]+[KMB]?)/);
                                 if (numMatch && !followers) {
                                     followers = numMatch[1];
-                                    console.log(`[Instagram] Cheerio found followers via label: ${followers}`);
+                                    console.log(`[Instagram] Cheerio found followers via label scan: ${followers}`);
+                                    return false;
                                 }
                             }
                         });
