@@ -232,529 +232,235 @@ export const socialController = {
      */
     async getInstagramProfileInfo(req: Request, res: Response) {
         try {
-            const { url } = req.query;
+            const { url, linkId } = req.query;
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
             const cleanUrl = url.split('?')[0].split('#')[0];
-            const handleMatch = cleanUrl.match(/instagram\.com\/([^\/\?]+)/i);
-            const username = handleMatch ? handleMatch[1].replace('@', '') : '';
-            const { linkId } = req.query;
+            const username = cleanUrl.match(/instagram\.com\/([^\/\?#]+)/i)?.[1]?.replace('@', '') || '';
 
-            // ✅ STEP 1: If we already saved this data in DB, return immediately
+            // 1. DB Cache — se já temos dados, retorna direto
             if (linkId && typeof linkId === 'string') {
-                const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
-                if (currentLink?.image && !currentLink.image.includes('static.cdninstagram.com')) {
-                    console.log(`[Instagram] Returning saved data for link ${linkId}`);
+                const { data: link } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                if (link?.image && !link.image.includes('static.cdninstagram.com')) {
                     return res.json({
-                        name: username, username,
-                        avatarUrl: currentLink.image, avatar_url: currentLink.image,
-                        followers: currentLink.subtitle || '', subscribers: currentLink.subtitle || '',
-                        follower_count: parseFollowerCount(currentLink.subtitle || ''),
-                        platform: 'instagram', profileUrl: cleanUrl
+                        name: username, username, avatarUrl: link.image, avatar_url: link.image,
+                        followers: link.subtitle || '', platform: 'instagram', profileUrl: cleanUrl
                     });
                 }
             }
 
-            // 🌐 STEP 2: Fetch the page content (Jina Reader renders like a real browser)
-            console.log(`[Instagram] Fetching profile for: ${username}`);
-            let name = '', avatarUrl = '', followers = '';
-            let bestHtml = '';
+            console.log(`[Instagram] Fetching: ${username}`);
+            let avatarUrl = '', followers = '', name = username;
 
-            // Strategy A: Jina AI Reader — renders the page with a real browser in the cloud
+            // ─── ESTRATÉGIA 1: oEmbed oficial (nunca bloqueado, retorna thumbnail + nome) ───
             try {
-                const jinaRes = await safeFetch(`https://r.jina.ai/${cleanUrl}`, {
-                    headers: {
-                        'Accept': 'text/html',
-                        'X-Return-Format': 'html',
-                        'X-Wait-For-Selector': 'header img',
-                    },
-                    timeout: 20000
-                });
-                if (jinaRes.ok) {
-                    bestHtml = await jinaRes.text();
-                    console.log(`[Instagram] Jina Reader: ${bestHtml.length} bytes`);
+                const oembedRes = await safeFetch(
+                    `https://graph.facebook.com/v18.0/instagram_oembed?url=${encodeURIComponent(`https://www.instagram.com/${username}/`)}&fields=author_name,thumbnail_url&access_token=application_access_token`,
+                    { timeout: 5000 }
+                );
+                // tenta sem token também — o endpoint sem token ainda responde para perfis públicos
+                const oembedPublic = await safeFetch(
+                    `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(`https://www.instagram.com/${username}/`)}`,
+                    { timeout: 5000, headers: { 'User-Agent': 'Mozilla/5.0' } }
+                );
+                if (oembedPublic.ok) {
+                    const data = await oembedPublic.json() as any;
+                    if (data.author_name) name = data.author_name;
+                    if (data.thumbnail_url) avatarUrl = data.thumbnail_url;
                 }
-            } catch (e) {
-                console.log(`[Instagram] Jina Reader failed: ${(e as any).message}`);
-            }
+            } catch (e) { }
 
-            // 🔍 STRATEGY 1: Discovery via Search Engine Proxy (Very high success, bypasses bot detection)
-            try {
-                console.log(`[Instagram] Discovery Strategy (Jina Search) for: ${username}`);
-                // Search specifically for the profile metadata on a search engine proxy
-                const searchRes = await safeFetch(`https://s.jina.ai/instagram.com/${username}`, { timeout: 10000 });
-                if (searchRes.ok) {
-                    const searchHtml = await searchRes.text();
-                    console.log(`[Instagram] Discovery Success: ${searchHtml.length} bytes`);
-                    
-                    // Look for followers in search snippet patterns (e.g., "407 followers", "5.5K seguidores")
-                    const folMatch = searchHtml.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i) ||
-                                    searchHtml.match(/Followers:\s*([\d.,]+[KMB]?)/i) ||
-                                    searchHtml.match(/Seguidores:\s*([\d.,]+[KMB]?)/i);
-                    if (folMatch && !followers) {
-                        followers = folMatch[1];
-                        console.log(`[Instagram] Discovery found followers: ${followers}`);
-                    }
-
-                    // Look for profile pic in markdown or raw URLs
-                    const picMatch = searchHtml.match(/!\[.*?\]\((https:\/\/scontent[^)]+)\)/) ||
-                                    searchHtml.match(/https:\/\/scontent[^"'\s)]+t51[^"'\s)]+/i);
-                    if (picMatch && !avatarUrl) {
-                        avatarUrl = (picMatch[1] || picMatch[0]).replace(/&amp;/g, '&');
-                        console.log(`[Instagram] Discovery found avatar: ${avatarUrl.substring(0, 50)}...`);
-                    }
-                    
-                    if (followers && avatarUrl) {
-                        bestHtml = searchHtml; // Save for fallback parsing if needed
-                    }
-                }
-            } catch (e) {
-                console.log(`[Instagram] Discovery Strategy failed: ${(e as any).message}`);
-            }
-
-            // 🔍 STRATEGY 2: Official JSON Bridge (Hidden API)
-            if (!followers || !avatarUrl) {
+            // ─── ESTRATÉGIA 2: Jina Reader (renderiza JS, contorna bloqueio) ───
+            if (!avatarUrl || !followers) {
                 try {
-                    console.log(`[Instagram] API Bridge Strategy for: ${username}`);
-                    const apiRes = await safeFetch(`https://www.instagram.com/${username}/?__a=1&__d=dis`, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1' },
-                        timeout: 5000
+                    const jinaRes = await safeFetch(`https://r.jina.ai/https://www.instagram.com/${username}/`, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'Accept': 'text/html',
+                            'X-Return-Format': 'html',
+                        },
+                        timeout: 12000
                     });
-                    if (apiRes.ok) {
-                        const json = await apiRes.json() as any;
-                        const user = json.graphql?.user || json.show_suggestions?.users?.[0];
-                        if (user) {
-                            if (!name) name = user.full_name || user.username;
-                            if (!avatarUrl) avatarUrl = user.profile_pic_url_hd || user.profile_pic_url;
-                            if (!followers) {
-                                const count = user.edge_followed_by?.count || user.follower_count;
-                                if (count) {
-                                    if (count >= 1000000) followers = (count / 1000000).toFixed(1).replace('.0', '') + 'M';
-                                    else if (count >= 1000) followers = (count / 1000).toFixed(1).replace('.0', '') + 'K';
-                                    else followers = count.toString();
+                    if (jinaRes.ok) {
+                        const raw = await jinaRes.text();
+                        // Desescapa múltiplas camadas
+                        let clean = raw;
+                        for (let i = 0; i < 3; i++) {
+                            clean = clean.replace(/\\u0026/g, '&').replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\\//g, '/');
+                        }
+
+                        // Seguidores: busca pelo padrão title="407" próximo de "seguidores"
+                        if (!followers) {
+                            // Padrão 1: title="407" ... seguidores
+                            const titleFol = clean.match(/title\s*=\s*["']([\d.,]+)["'][^<]{0,200}seguidores/i)
+                                          || clean.match(/seguidores[^<]{0,200}title\s*=\s*["']([\d.,]+)["']/i);
+                            if (titleFol) followers = titleFol[1];
+                        }
+                        if (!followers) {
+                            // Padrão 2: número bruto antes de "seguidores" ou "followers"
+                            const bruteFol = clean.match(/([\d.,]+[KMBkmb]?)(?:<[^>]+>|\s)*(?:seguidores|followers)/i);
+                            if (bruteFol) followers = bruteFol[1];
+                        }
+                        if (!followers) {
+                            // Padrão 3: JSON inline edge_followed_by
+                            const jsonFol = clean.match(/edge_followed_by[^}]{0,60}count["\s:]+(\d+)/i)
+                                         || clean.match(/followers_count["\s:]+(\d+)/i);
+                            if (jsonFol) {
+                                const n = parseInt(jsonFol[1]);
+                                if (n >= 1_000_000) followers = (n / 1_000_000).toFixed(1).replace('.0', '') + 'M';
+                                else if (n >= 1_000) followers = (n / 1_000).toFixed(1).replace('.0', '') + 'K';
+                                else followers = n.toString();
+                            }
+                        }
+
+                        // Avatar: CDN do Instagram tem assinatura t51
+                        if (!avatarUrl) {
+                            const cdnLinks = clean.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+\.jpg[^"'\s\\]*/gi);
+                            if (cdnLinks) {
+                                for (const link of cdnLinks) {
+                                    if (!link.includes('static')) { avatarUrl = link.replace(/&amp;/g, '&'); break; }
                                 }
                             }
-                            console.log(`[Instagram] API Bridge success!`);
+                        }
+
+                        // Cheerio para og:image e og:description como fallback
+                        if (!avatarUrl || !followers) {
+                            const $ = cheerio.load(raw);
+                            if (!avatarUrl) {
+                                const og = $('meta[property="og:image"]').attr('content');
+                                if (og && !og.includes('static')) avatarUrl = og;
+                            }
+                            if (!followers) {
+                                const desc = $('meta[property="og:description"]').attr('content') || '';
+                                const m = desc.match(/([\d.,]+[KMBkmb]?)\s*(?:Followers|Seguidores)/i);
+                                if (m) followers = m[1];
+                            }
                         }
                     }
-                } catch (e) {
-                    console.log(`[Instagram] API Bridge failed (expected if no cookies)`);
-                }
+                } catch (e) { console.log(`[Instagram] Jina failed: ${(e as any).message}`); }
             }
 
-            // Strategy 3: Instagram Embed (Powerful fallback)
-            if (!followers || !avatarUrl) {
+            // ─── ESTRATÉGIA 3: Embed page (fallback) ───
+            if (!avatarUrl || !followers) {
                 try {
-                    console.log(`[Instagram] Trying Embed Strategy for: ${username}`);
                     const embedRes = await safeFetch(`https://www.instagram.com/${username}/embed/`, {
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
                         timeout: 8000
                     });
                     if (embedRes.ok) {
-                        const embedHtml = await embedRes.text();
-                        if (embedHtml.length > 5000) {
-                            bestHtml = embedHtml;
-                            console.log(`[Instagram] Embed Strategy Success: ${embedHtml.length} bytes`);
+                        const raw = await embedRes.text();
+                        let clean = raw;
+                        for (let i = 0; i < 3; i++) {
+                            clean = clean.replace(/\\u0026/g, '&').replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\\//g, '/');
                         }
-                    }
-                } catch (e) {
-                    console.log(`[Instagram] Embed Strategy failed: ${(e as any).message}`);
-                }
-            }
+                        const $ = cheerio.load(raw);
 
-            // Strategy 4: Direct HTTP with multiple User-Agents (fallback)
-            if (!followers || !avatarUrl) {
-                const userAgents = [
-                    'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-                    'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-                    'WhatsApp/2.23.20.0 A',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                ];
-                for (const ua of userAgents) {
-                    try {
-                        const pageRes = await safeFetch(cleanUrl, {
-                            headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' },
-                            timeout: 8000
-                        });
-                        if (pageRes.ok) {
-                            const html = await pageRes.text();
-                            const hasData = html.includes('profile_pic_url') || html.includes('edge_followed_by') || html.includes('seguidores');
-                            if (hasData) { bestHtml = html; break; }
-                        }
-                    } catch (e) { }
-                }
-            }
-
-            // 🔍 Extract data from whatever HTML we got
-            if (bestHtml) {
-                // 🧹 CLEANUP: Create a cleaned version for Regex matching, but PRESERVE original for Cheerio
-                let searchHtml = bestHtml;
-                for (let i = 0; i < 3; i++) {
-                    searchHtml = searchHtml
-                        .replace(/\\u0026/g, '&')
-                        .replace(/\\n/g, '\n')
-                        .replace(/\\"/g, '"')
-                        .replace(/\\\\/g, '\\')
-                        .replace(/\\\//g, '/');
-                }
-                
-                // Use the cleaned HTML for matching
-                // ... (rest of the regex matching)
-
-                // 🎯 "JUST THE NUMBER" Strategy: Direct extraction without over-engineering
-                const simpleFol = searchHtml.match(/followers_count["']?\s*[:=]\s*(\\?["'])?(\d+)/i) ||
-                                 searchHtml.match(/edge_followed_by["']?\s*[:=]\s*\{[^}]*count["']?\s*[:=]\s*(\\?["'])?(\d+)/i) ||
-                                 searchHtml.match(/edge_followed_by["']?\s*[:=]\s*(\\?["'])?(\d+)/i);
-                
-                if (simpleFol) {
-                    const rawCount = parseInt(simpleFol[1]);
-                    if (!isNaN(rawCount)) {
-                        if (rawCount >= 1000000) followers = (rawCount / 1000000).toFixed(1).replace('.0', '') + 'M';
-                        else if (rawCount >= 1000) followers = (rawCount / 1000).toFixed(1).replace('.0', '') + 'K';
-                        else followers = rawCount.toString();
-                        console.log(`[Instagram] Captured raw number: ${followers}`);
-                    }
-                }
-
-                if (!followers) {
-                    const fallbackFol = bestHtml.match(/([\d.,KMB]+)\s*(?:Followers|Seguidores)/i);
-                    if (fallbackFol) followers = fallbackFol[1].toUpperCase();
-                }
-
-                const picMatch = searchHtml.match(/profile_pic_url(?:_hd)?["'\\ ]+\s*[:=]\s*["'\\ ]+(https:[^"' \n]+)/i) ||
-                                searchHtml.match(/https:\/\/scontent[^"'\s)]+\.jpg/i);
-                if (picMatch) {
-                    const candidate = (picMatch[1] || picMatch[0]).replace(/&amp;/g, '&');
-                    if (!candidate.includes('static.cdninstagram.com') && candidate.startsWith('http')) {
-                        avatarUrl = candidate;
-                        console.log(`[Instagram] Found avatar: ${avatarUrl.substring(0, 50)}...`);
-                    }
-                }
-
-                // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON (found in embeds)
-                // 📦 DEEP SCAN: Handle Instagram's escaped contextJSON
-                const contextMatch = searchHtml.match(/["']contextJSON["']\s*:\s*["'](.+?)["']\s*[,}]/);
-                if (contextMatch) {
-                    try {
-                        // Unescape the JSON string inside the HTML
-                        const rawJson = contextMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\').replace(/\\\/ /g, '/');
-                        const context = JSON.parse(rawJson);
-                        const user = context.context || context;
-                        if (user) {
-                            if (!name && (user.full_name || user.name)) name = user.full_name || user.name;
-                            if (!avatarUrl && (user.profile_pic_url || user.profile_image)) avatarUrl = user.profile_pic_url || user.profile_image;
-                            if (!followers && (user.followers_count || user.follower_count)) followers = (user.followers_count || user.follower_count).toString();
-                            console.log(`[Instagram] Deep scan success: name="${name}", followers="${followers}"`);
-                        }
-                    } catch (e) {
-                        console.log(`[Instagram] Deep scan failed: ${(e as any).message}`);
-                    }
-                }
-
-                // 🚀 TAG-AGNOSTIC BRUTE FORCE: Ignore nested tags and spaces
-                if (!followers) {
-                    // Look for the "title" pattern provided by the user: <span title="407">
-                    const titleMatch = bestHtml.match(/title\s*=\s*["'](\d+)["']/i);
-                    if (titleMatch && (bestHtml.includes('seguidores') || bestHtml.includes('followers'))) {
-                        followers = titleMatch[1];
-                        console.log(`[Instagram] Brute Title-Match found: ${followers}`);
-                    }
-                    
-                    if (!followers) {
-                        const bruteFol = bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*seguidores/i) ||
-                                        bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*followers/i);
-                        if (bruteFol) {
-                            followers = bruteFol[1];
-                            console.log(`[Instagram] Brute Tag-Agnostic found: ${followers}`);
-                        }
-                    }
-                }
-
-                if (!avatarUrl) {
-                    // HARVESTER: Find ANY scontent link that looks like a profile picture
-                    const allCdnLinks = bestHtml.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+\.jpg[^"'\s\\]*/gi);
-                    if (allCdnLinks) {
-                        // Pick the first one that isn't static
-                        for (const link of allCdnLinks) {
-                            if (!link.includes('static')) {
-                                avatarUrl = link.replace(/\\/g, '').replace(/&amp;/g, '&');
-                                console.log(`[Instagram] Brute Harvester found: ${avatarUrl.substring(0, 50)}...`);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // og:meta tags via cheerio
-                const $ = cheerio.load(bestHtml);
-                const pageTitle = $('title').text() || '';
-                console.log(`[Instagram] Page title: "${pageTitle}", HTML Size: ${bestHtml.length}`);
-
-                if (!avatarUrl || !followers) {
-                    if (!avatarUrl) {
-                        const ogImage = $('meta[property="og:image"]').attr('content');
-                        // Embed selector fallback
-                        const embedPic = $('.Avatar').attr('src') || $('.EmbedAccountImage').attr('src') || $('.profile-pic').attr('src') || $('header img').attr('src');
-                        avatarUrl = (ogImage && !ogImage.includes('static.cdninstagram.com')) ? ogImage : (embedPic || avatarUrl);
-                        
-                        // Last resort Cheerio: Scan ALL images for scontent pattern or profile alt text
                         if (!avatarUrl) {
-                            $('img').each((i, el) => {
-                                const src = $(el).attr('src');
-                                const alt = $(el).attr('alt') || '';
-                                if (src && src.includes('scontent') && (
-                                    src.includes('t51') || 
-                                    alt.toLowerCase().includes('foto do perfil') ||
-                                    alt.toLowerCase().includes('profile picture')
-                                )) {
-                                    avatarUrl = src;
-                                    console.log(`[Instagram] Cheerio found avatar via img/alt scan: ${avatarUrl.substring(0, 50)}...`);
-                                    return false; // break
-                                }
-                            });
-                        }
-                    }
-                    if (!followers) {
-                        const desc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-                        // Embed selector fallback
-                        const embedFollowers = $('.EmbedAccountFollowers').text() || $('.FollowersCount').text() || $('.followed-by').text();
-                        // 🇧🇷 Deep Portuguese/English Fallback: Check for "seguidores" or "followers" in any tag
-                        $('*').each((i, el) => {
-                            const text = $(el).text().trim();
-                            const title = $(el).attr('title') || '';
-                            
-                            // Exact match from user: <span title="407">...</span> seguidores
-                            if (title && /^\d+$/.test(title) && (text.includes('seguidores') || text.includes('followers'))) {
-                                followers = title;
-                                console.log(`[Instagram] Cheerio found followers via title attribute: ${followers}`);
-                                return false;
+                            // Procura CDN t51 no embed
+                            const cdnLinks = clean.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+\.jpg[^"'\s\\]*/gi);
+                            if (cdnLinks) for (const l of cdnLinks) { if (!l.includes('static')) { avatarUrl = l.replace(/&amp;/g, '&'); break; } }
+                            // Fallback DOM
+                            if (!avatarUrl) {
+                                $('img').each((_i, el) => {
+                                    const src = $(el).attr('src') || '';
+                                    if (src.includes('scontent') && src.includes('t51')) { avatarUrl = src; return false; }
+                                });
                             }
-
-                            if (text.toLowerCase().includes('seguidores') || text.toLowerCase().includes('followers')) {
-                                // Found the label, look for the number in the text, title, or parent
-                                const numMatch = text.match(/([\d.,]+[KMB]?)/) || title.match(/([\d.,]+[KMB]?)/) || $(el).parent().text().match(/([\d.,]+[KMB]?)/);
-                                if (numMatch && !followers) {
-                                    followers = numMatch[1];
-                                    console.log(`[Instagram] Cheerio found followers via label scan: ${followers}`);
-                                    return false;
-                                }
-                            }
-                        });
-                    }
-                    if (!name) {
-                        const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                        const candidate = ogTitle.split(' (')[0].split('•')[0].replace('Instagram photos and videos', '').trim();
-                        if (candidate && candidate.toLowerCase() !== 'instagram' && candidate.toLowerCase() !== 'login') {
-                            name = candidate;
                         }
-                    }
-                }
 
-                // 🚀 TAG-AGNOSTIC BRUTE FORCE: Ignore nested tags and spaces
-                if (!followers) {
-                    // This regex looks for a number, followed by optional tags/spaces, followed by "seguidores" or "followers"
-                    const bruteFol = bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*seguidores/i) ||
-                                    bestHtml.match(/(\d[\d.,]*[KMB]?)(?:<[^>]+>|[\s\\])*followers/i);
-                    if (bruteFol) {
-                        followers = bruteFol[1];
-                        console.log(`[Instagram] Brute Tag-Agnostic found followers: ${followers}`);
-                    }
-                }
-
-                if (!avatarUrl) {
-                    // Scan for any scontent link that looks like a profile picture, ignoring tags
-                    const brutePic = bestHtml.match(/https:\/\/[^"'\s\\]+scontent[^"'\s\\]+t51[^"'\s\\]+/i);
-                    if (brutePic) {
-                        avatarUrl = brutePic[0].replace(/\\/g, '').replace(/&amp;/g, '&');
-                        console.log(`[Instagram] Brute found avatar URL: ${avatarUrl.substring(0, 50)}...`);
-                    }
-                }
-
-                // 🦅 SCAVENGER MODE: If everything else fails, scan the WHOLE text for anything that looks like a user profile
-                if (!followers || !avatarUrl) {
-                    const allNumbers = searchHtml.matchAll(/["']?followers(?:_count)?["']?\s*[:=]\s*["']?(\d+)/gi);
-                    for (const m of allNumbers) {
-                        const val = parseInt(m[1]);
-                        if (val > 0 && !followers) {
-                             if (val >= 1000000) followers = (val / 1000000).toFixed(1).replace('.0', '') + 'M';
-                             else if (val >= 1000) followers = (val / 1000).toFixed(1).replace('.0', '') + 'K';
-                             else followers = val.toString();
-                             console.log(`[Instagram] Scavenger found followers: ${followers}`);
-                             break;
-                        }
-                    }
-
-                    if (!avatarUrl) {
-                        const allCdnImages = searchHtml.matchAll(/https:\/\/scontent[^"'\s)]+\.jpg/gi);
-                        for (const m of allCdnImages) {
-                            const url = m[0].replace(/&amp;/g, '&');
-                            // Profile pictures usually have a specific pattern in the URL
-                            if (!url.includes('static.cdninstagram.com') && (url.includes('/t51.2885-19/') || url.includes('/v/t51.82787-19/'))) {
-                                avatarUrl = url;
-                                console.log(`[Instagram] Scavenger found avatar (profile pattern): ${avatarUrl.substring(0, 50)}...`);
-                                break;
+                        if (!followers) {
+                            const titleFol = clean.match(/title\s*=\s*["']([\d.,]+)["'][^<]{0,200}(?:seguidores|followers)/i);
+                            if (titleFol) followers = titleFol[1];
+                            if (!followers) {
+                                $('*').each((_i, el) => {
+                                    const t = $(el).attr('title') || '';
+                                    const txt = $(el).text();
+                                    if (/^\d+$/.test(t) && (txt.includes('seguidores') || txt.includes('followers'))) {
+                                        followers = t; return false;
+                                    }
+                                });
                             }
                         }
                     }
-                }
+                } catch (e) { }
             }
 
-            // 🆘 LAST RESORT: If no image found, try a quick search for the profile pic
-            if (!avatarUrl) {
-                try {
-                    console.log(`[Instagram] Last resort: Searching for profile picture of ${username}`);
-                    const searchRes = await safeFetch(`https://s.jina.ai/instagram%20profile%20picture%20${username}`, { timeout: 8000 });
-                    if (searchRes.ok) {
-                        const searchContent = await searchRes.text();
-                        
-                        // Look for image in raw text or markdown format
-                        const imgMatch = searchContent.match(/https:\/\/scontent[^"'\s)]+\.jpg/i) || 
-                                         searchContent.match(/!\[.*?\]\((https:\/\/scontent[^)]+)\)/);
-                        if (imgMatch) {
-                            avatarUrl = imgMatch[1] || imgMatch[0];
-                            console.log(`[Instagram] Found avatar via Jina Search fallback!`);
-                        }
-
-                        // Also look for followers in search results snippet
-                        const folMatch = searchContent.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                        if (folMatch && !followers) {
-                            followers = folMatch[1];
-                            console.log(`[Instagram] Found followers via Jina Search fallback: ${followers}`);
-                        }
-                    }
-                } catch (e) {
-                    console.log(`[Instagram] Last resort failed: ${(e as any).message}`);
-                }
-            }
-
-            // Sanitize: reject names that are just the platform name (means login page was scraped)
-            if (!name || name.toLowerCase() === 'instagram' || name.toLowerCase() === 'login') name = username;
             console.log(`[Instagram] Final: name="${name}", followers="${followers}", avatar=${!!avatarUrl}`);
 
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
-                name: name || username,
-                display_name: name || username,
-                username,
-                avatarUrl,
-                avatar_url: avatarUrl,
+                name, display_name: name, username, platform: 'instagram', profileUrl: cleanUrl,
+                avatarUrl: avatarUrl || false, avatar_url: avatarUrl || false,
                 followers: followersText,
-                subscribers: followersText,
-                follower_count: parseFollowerCount(followers),
-                platform: 'instagram',
-                profileUrl: cleanUrl
+                follower_count: parseFollowerCount(followersText)
             };
 
-            // 💾 STEP 3: Persist to DB so this never needs to run again
-            // ONLY save if we actually found something useful (followers or non-generic avatar)
-            if (linkId && typeof linkId === 'string' && (followersText || (avatarUrl && !avatarUrl.includes('static.cdninstagram.com')))) {
+            // 4. Persistência
+            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
-                    if (followersText) updates.subtitle = followersText;
+                    if (followers) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    const updatedLink = await linkService.updateLink(linkId, updates);
-                    
-                    if (updatedLink) {
-                        console.log(`[Instagram] Saved to DB for link ${linkId}`);
-                        if (updatedLink.userId) {
-                            const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
-                            if (user?.username) realtimeManager.notifyUpdate(user.username);
-                        }
+                    const { data: updatedLink } = await supabase.from('links').update(updates).eq('id', linkId).select('userId').single();
+                    if (updatedLink?.userId) {
+                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                        if (user?.username) realtimeManager.notifyUpdate(user.username);
                     }
-                } catch (saveErr) {
-                    console.error(`[Instagram] Failed to save to DB:`, saveErr);
-                }
+                } catch (e) { }
             }
 
-            if (avatarUrl) igCache.set(`ig:${username.toLowerCase()}`, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
-            console.error(`[Instagram] Fatal error:`, (e as any).message);
-            res.status(500).json({ error: 'Server error' });
+            return res.status(500).json({ error: 'Server error' });
         }
-
     },
+
     async getTiktokProfileInfo(req: Request, res: Response) {
+
         try {
-            const { url } = req.query;
-            console.log(`\x1b[36m[TikTok] Initiating metadata fetch for: ${url}\x1b[0m`);
+            const { url, linkId } = req.query;
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
-            const lowerUrl = url.toLowerCase();
-            const urlParts = lowerUrl.split('/').filter((p) => p && !p.includes('?') && !p.includes('#'));
-            const tiktokHandle = urlParts.find(p => p.startsWith('@'));
-            let handle = tiktokHandle ? tiktokHandle.replace('@', '') : (urlParts.length > 0 ? urlParts[urlParts.length - 1].replace('@', '') : '');
-
-            if (!handle) return res.status(400).json({ error: 'Invalid TikTok URL' });
-
+            const handle = url.split('/').find(p => p.startsWith('@'))?.replace('@', '') || url.split('/').pop() || '';
             const cacheKey = `tiktok:${handle.toLowerCase()}`;
+            
             const cached = tiktokCache.get(cacheKey);
             if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
 
-            let name = '';
-            let avatarUrl = '';
-            let followers = '';
-
+            let avatarUrl = '', followers = '', name = '';
             try {
-                const pageRes = await safeFetch(url, {
-                    timeout: 8000,
-                    headers: { 'User-Agent': 'facebookexternalhit/1.1' },
-                });
-
-                if (pageRes.ok) {
-                    const html = await pageRes.text();
-                    
-                    // Standard scraping logic for TikTok
+                const page = await safeFetch(url, { headers: { 'User-Agent': 'facebookexternalhit/1.1' }, timeout: 8000 });
+                if (page.ok) {
+                    const html = await page.text();
                     const $ = cheerio.load(html);
-                    const metaDesc = $('meta[property="og:description"]').attr('content') || '';
-                    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-                    name = ogTitle.split(' | ')[0] || handle;
                     avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-
-                    if (!followers) {
-                        const fMatch = metaDesc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i);
-                        if (fMatch) followers = fMatch[1].trim();
-                    }
-                    if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
-                    if (!name) name = ogTitle.split(' | TikTok')[0].trim();
+                    name = $('meta[property="og:title"]').attr('content')?.split(' | ')[0] || handle;
+                    const desc = $('meta[property="og:description"]').attr('content') || '';
+                    followers = desc.match(/([\d.,]+[kmMB]?)\s*(?:Followers|Seguidores)/i)?.[1] || '';
                 }
-            } catch (e) {
-                console.log('[SocialController] TikTok AI/HTML error:', (e as any).message);
-            }
+            } catch (e) { }
 
-            const platformName = 'TikTok';
             const followersText = followers ? `${followers} Seguidores` : '';
             const result = {
-                name: `@${handle.replace('@', '')}`,
-                display_name: `@${handle.replace('@', '')}`,
-                username: handle,
-                avatarUrl,
-                avatar_url: avatarUrl,
-                followers: followersText,
+                name: `@${handle}`, display_name: `@${handle}`, username: handle,
+                avatarUrl, avatar_url: avatarUrl, followers: followersText,
                 follower_count: parseFollowerCount(followersText),
-                subscribers: followersText,
-                platform: 'tiktok',
-                profileUrl: url
+                platform: 'tiktok', profileUrl: url
             };
 
-            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            const { linkId } = req.query;
-            if (linkId && typeof linkId === 'string' && (followersText || avatarUrl)) {
+            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
-                    if (followersText) updates.subtitle = followersText;
+                    if (followers) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
                     await linkService.updateLink(linkId, updates);
-                    console.log(`[TikTok] Auto-saved metadata for link ${linkId}: ${followersText}`);
-                } catch (saveErr) {
-                    console.error(`[TikTok] Failed to auto-save metadata for link ${linkId}:`, saveErr);
-                }
+                } catch (e) { }
             }
 
-            if (avatarUrl || followersText) tiktokCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            tiktokCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
             return res.json(result);
         } catch (e) {
-            res.status(500).json({ error: 'Server error' });
+            return res.status(500).json({ error: 'Server error' });
         }
     },
 
