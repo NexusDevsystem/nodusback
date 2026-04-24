@@ -72,9 +72,9 @@ export const syncFeed = async (userId: string) => {
         // Update profile data in the integration
         const updatedProfile = {
             ...integration.profile_data,
-            username: profileDataRaw.username || integration.profile_data.username,
-            avatar_url: profileDataRaw.profile_picture_url || integration.profile_data.avatar_url,
-            follower_count: profileDataRaw.followers_count || integration.profile_data.follower_count,
+            username: profileDataRaw.username !== undefined ? profileDataRaw.username : integration.profile_data.username,
+            avatar_url: profileDataRaw.profile_picture_url || profileDataRaw.avatar_url || integration.profile_data.avatar_url,
+            follower_count: profileDataRaw.followers_count !== undefined ? profileDataRaw.followers_count : integration.profile_data.follower_count,
             media: mediaList
         };
 
@@ -316,10 +316,10 @@ export const handleCallback = async (code: string, userId: string, backendBaseUr
         const profileData = {
             username: profileDataRaw.username || 'instagram_user',
             display_name: profileDataRaw.name || profileDataRaw.username || 'instagram_user',
-            avatar_url: profileDataRaw.profile_picture_url || null,
-            follower_count: profileDataRaw.followers_count || null,
-            follows_count: profileDataRaw.follows_count || null,
-            media_count: profileDataRaw.media_count || null,
+            avatar_url: profileDataRaw.profile_picture_url || profileDataRaw.avatar_url || null,
+            follower_count: profileDataRaw.followers_count !== undefined ? profileDataRaw.followers_count : null,
+            follows_count: profileDataRaw.follows_count !== undefined ? profileDataRaw.follows_count : null,
+            media_count: profileDataRaw.media_count !== undefined ? profileDataRaw.media_count : null,
             account_type: profileDataRaw.account_type || null,
             channel_id: profileDataRaw.id || igUserId,
         };
