@@ -37,7 +37,7 @@ export const socialController = {
      */
     async getYoutubeChannelInfo(req: Request, res: Response) {
         try {
-            const { url } = req.query;
+            const { url, linkId } = req.query;
             if (!url || typeof url !== 'string') {
                 return res.status(400).json({ error: 'URL is required' });
             }
@@ -57,32 +57,16 @@ export const socialController = {
             let name = '';
             let avatarUrl = '';
             let subscribers = '';
+            let browseId = '';
+            let latestVideo = null;
 
-            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
-            const { linkId } = req.query;
-            if (linkId && typeof linkId === 'string') {
-                try {
-                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
-                    if (currentLink?.subtitle && currentLink?.image) {
-                        console.log(`[YouTube] Link ${linkId} already has metadata. Skipping.`);
-                        return res.json({
-                            name: 'YouTube Channel',
-                            avatarUrl: currentLink.image,
-                            subscribers: currentLink.subtitle,
-                            platform: 'youtube',
-                            channelUrl: url
-                        });
-                    }
-                } catch (err) {
-                    console.error('[YouTube] Pre-check failed:', err);
-                }
-            }
+            // Extract initial browseId if present in URL
+            const channelMatch = url.match(/\/channel\/([^/?#]+)/);
+            if (channelMatch) browseId = channelMatch[1];
 
             // Strategy 0: InnerTube
             try {
                 const handleMatch = url.match(/\/(@[^/?#]+)/);
-                const channelIdMatch = url.match(/\/channel\/([^/?#]+)/);
-                let browseId = channelIdMatch?.[1];
                 const handle = handleMatch?.[1];
 
                 const innerTubeContext = {
@@ -131,8 +115,6 @@ export const socialController = {
 
                     if (innerTubeRes.ok) {
                         const data: any = await innerTubeRes.json();
-                        const header = data?.header?.c4TabbedHeaderRenderer || data?.header?.pageHeaderRenderer?.content?.pageHeaderViewModel;
-
                         if (data?.header?.c4TabbedHeaderRenderer) {
                             const hdr = data.header.c4TabbedHeaderRenderer;
                             name = hdr.title || '';
@@ -177,6 +159,7 @@ export const socialController = {
                         const $ = cheerio.load(html);
                         if (!name) name = $('meta[property="og:title"]').attr('content') || $('title').text().replace(/ - YouTube$/, '').trim() || '';
                         if (!avatarUrl) avatarUrl = $('meta[property="og:image"]').attr('content') || '';
+                        if (!browseId) browseId = $('meta[itemprop="channelId"]').attr('content') || '';
 
                         if (!subscribers) {
                             const metaDesc = $('meta[name="description"]').attr('content') || '';
@@ -189,25 +172,50 @@ export const socialController = {
                 }
             }
 
+            // 📺 Fetch Latest Video via RSS
+            if (browseId) {
+                try {
+                    const rssRes = await safeFetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${browseId}`, { timeout: 5000 });
+                    if (rssRes.ok) {
+                        const xml = await rssRes.text();
+                        const $xml = cheerio.load(xml, { xmlMode: true });
+                        const firstEntry = $xml('entry').first();
+                        if (firstEntry.length) {
+                            latestVideo = {
+                                id: (firstEntry.find('yt\\:videoId').text() || firstEntry.find('videoId').text()).trim(),
+                                title: firstEntry.find('title').text().trim(),
+                                url: firstEntry.find('link').attr('href'),
+                                published: firstEntry.find('published').text()
+                            };
+                        }
+                    }
+                } catch (rssErr) {
+                    console.error('[YouTube] RSS fetch failed:', rssErr);
+                }
+            }
+
             const subscribersText = subscribers ? `${subscribers} inscritos` : '';
 
-            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            if (linkId && typeof linkId === 'string' && (subscribersText || avatarUrl)) {
+            // 💾 AUTO-SAVE: If linkId is provided, persist the metadata
+            if (linkId && typeof linkId === 'string' && (subscribersText || avatarUrl || latestVideo)) {
                 try {
                     const updates: any = {};
                     if (subscribersText) updates.subtitle = subscribersText;
                     if (avatarUrl) updates.image = avatarUrl;
                     
+                    // Fetch existing metadata to merge
+                    const { data: existingLink } = await supabase.from('links').select('metadata').eq('id', linkId).maybeSingle();
+                    updates.metadata = { ...(existingLink?.metadata || {}), latestVideo };
+                    
                     const updatedLink = await linkService.updateLink(linkId, updates);
-                    console.log(`[YouTube] Auto-saved metadata for link ${linkId}: ${subscribersText}`);
-
+                    
                     // 📢 Notify Realtime Manager
                     if (updatedLink && updatedLink.userId) {
                         const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
                         if (user?.username) realtimeManager.notifyUpdate(user.username);
                     }
                 } catch (saveErr) {
-                    console.error(`[YouTube] Failed to auto-save metadata for link ${linkId}:`, saveErr);
+                    console.error(`[YouTube] Failed to auto-save metadata:`, saveErr);
                 }
             }
 
@@ -215,6 +223,7 @@ export const socialController = {
                 name: name || '',
                 avatarUrl,
                 subscribers: subscribersText,
+                latestVideo,
                 platform: 'youtube',
                 channelUrl: url
             });

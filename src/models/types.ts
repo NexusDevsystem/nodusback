@@ -86,6 +86,8 @@ export interface LinkItemDB {
     password_hash?: string | null;
     provider_account_id?: string | null;
     show_countdown?: boolean;
+    metadata?: any | null;
+    youtube_display_mode?: 'classic' | 'latest' | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -250,6 +252,8 @@ export interface LinkItem {
     isPasswordProtected?: boolean;
     provider_account_id?: string | null;
     showCountdown?: boolean;
+    metadata?: any;
+    youtubeDisplayMode?: 'classic' | 'latest';
 }
 
 export interface EventItem {
@@ -459,6 +463,8 @@ export function linkDbToApi(db: LinkItemDB): LinkItem {
         isPasswordProtected: db.is_password_protected || false,
         provider_account_id: db.provider_account_id || null,
         showCountdown: db.show_countdown || false,
+        metadata: db.metadata || null,
+        youtubeDisplayMode: db.youtube_display_mode as any || 'classic',
         // NOTE: password_hash is NEVER included in the API response
     };
 }
@@ -485,6 +491,8 @@ export function linkApiToDb(api: Partial<LinkItem>, userId: string): Partial<Lin
         is_password_protected: api.isPasswordProtected ?? false,
         provider_account_id: api.provider_account_id ?? null,
         show_countdown: api.showCountdown ?? false,
+        metadata: api.metadata,
+        youtube_display_mode: api.youtubeDisplayMode,
         // NOTE: password_hash is set separately from linkPassword in the controller
     };
 
