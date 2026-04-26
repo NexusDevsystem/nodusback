@@ -166,6 +166,7 @@ export const analyticsService = {
             fingerprint: fingerprint || null
         };
 
+        // 1. Insert into clicks table for detailed history
         const { error } = await supabase
             .from('clicks')
             .insert(payload);
@@ -173,6 +174,18 @@ export const analyticsService = {
         if (error) {
             console.error('❌ [Analytics] trackView FAILED:', JSON.stringify(error));
             throw new Error(`Failed to track view: ${error.message}`);
+        }
+
+        // 2. Increment UNIQUE visitors count in users table via RPC
+        if (fingerprint) {
+            try {
+                await supabase.rpc('increment_profile_visitors', { 
+                    profile_id: userId, 
+                    visitor_fingerprint: fingerprint 
+                });
+            } catch (e) {
+                console.error('Visitor increment failed:', e);
+            }
         }
 
         console.log(`✅ [Analytics] View tracked successfully`);

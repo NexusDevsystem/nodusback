@@ -87,14 +87,18 @@ export const profileService = {
         
         // 📈 Increment view count (public only)
         if (triggerSync && data.id) {
-            // Using a self-invoking async function to safely fire and forget in TS
-            (async () => {
-                try {
-                    await supabase.rpc('increment_profile_views', { profile_id: data.id });
-                } catch (e) {
-                    console.error('View increment failed:', e);
+            try {
+                // We await this so the very first visitor sees '1' instead of '0'
+                await supabase.rpc('increment_profile_views', { profile_id: data.id });
+                // Manually increment the local object to avoid a second DB roundtrip
+                if (typeof data.views_count === 'number') {
+                    data.views_count++;
+                } else {
+                    data.views_count = 1;
                 }
-            })();
+            } catch (e) {
+                console.error('View increment failed:', e);
+            }
         }
 
         const profile = profileService._checkPlanExpiration(dbToApi(data as UserProfileDB));

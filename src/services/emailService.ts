@@ -46,14 +46,14 @@ export const sendPasswordResetEmail = async (to: string, code: string, name: str
  */
 export const sendIncompleteLinkEmail = async (to: string, name: string, missingLinks: string) => {
     try {
-        const serviceId = process.env.EMAILJS_LINKS_SERVICE_ID || 'service_5sa2bdj';
-        const templateId = process.env.EMAILJS_LINKS_TEMPLATE_ID || 'template_yx0g3hf';
+        const serviceId = process.env.EMAILJS_LINKS_SERVICE_ID;
+        const templateId = process.env.EMAILJS_LINKS_TEMPLATE_ID;
         
         const publicKey = process.env.EMAILJS_PUBLIC_KEY;
         const privateKey = process.env.EMAILJS_PRIVATE_KEY;
 
-        if (!publicKey || !privateKey) {
-            console.warn('⚠️ [EmailJS] Missing Public/Private keys. Skipping email.');
+        if (!publicKey || !privateKey || !serviceId || !templateId) {
+            console.warn('⚠️ [EmailJS] Missing Public/Private keys or Service/Template IDs. Skipping email.');
             return true;
         }
 

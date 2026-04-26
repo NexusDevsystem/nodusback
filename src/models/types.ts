@@ -58,6 +58,7 @@ export interface UserProfileDB {
     last_incomplete_notification_at?: string | null;
     likes_count?: number;
     views_count?: number;
+    visitors_count?: number;
 }
 
 export interface LinkItemDB {
@@ -221,6 +222,7 @@ export interface UserProfile {
     onboardingDismissed?: boolean;
     likesCount?: number;
     viewsCount?: number;
+    visitorsCount?: number;
 }
 
 export interface LinkItem {
@@ -367,7 +369,8 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         onboardingDismissed: !!dbProfile.onboarding_dismissed,
         plan_type: dbProfile.plan_type,
         likesCount: dbProfile.likes_count || 0,
-        viewsCount: dbProfile.views_count || 0
+        viewsCount: dbProfile.views_count || 0,
+        visitorsCount: dbProfile.visitors_count || 0
     };
 }
 
@@ -427,6 +430,7 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.plan_type !== undefined) dbProfile.plan_type = apiProfile.plan_type;
     if (apiProfile.likesCount !== undefined) dbProfile.likes_count = apiProfile.likesCount;
     if (apiProfile.viewsCount !== undefined) dbProfile.views_count = apiProfile.viewsCount;
+    if (apiProfile.visitorsCount !== undefined) dbProfile.visitors_count = apiProfile.visitorsCount;
 
     return dbProfile;
 }
