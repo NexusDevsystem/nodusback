@@ -84,9 +84,14 @@ export const profileService = {
         }
 
         if (!data) return null;
+        
+        // 📈 Increment view count (public only)
+        if (triggerSync && data.id) {
+            supabase.rpc('increment_profile_views', { profile_id: data.id }).then(() => {}).catch(() => {});
+        }
 
-        const profile = this._checkPlanExpiration(dbToApi(data as UserProfileDB));
-        return await this._attachIntegrations(profile, triggerSync);
+        const profile = profileService._checkPlanExpiration(dbToApi(data as UserProfileDB));
+        return await profileService._attachIntegrations(profile, triggerSync);
     },
 
     // Get profile by user_id (authenticated access)
@@ -102,8 +107,8 @@ export const profileService = {
             return null;
         }
 
-        const profile = this._checkPlanExpiration(dbToApi(data as UserProfileDB));
-        return await this._attachIntegrations(profile);
+        const profile = profileService._checkPlanExpiration(dbToApi(data as UserProfileDB));
+        return await profileService._attachIntegrations(profile);
     },
 
     // Get profile by email
@@ -253,11 +258,31 @@ export const profileService = {
         return !data; // Available if no data found (or if data found is from the excluded user)
     },
 
+    // Increment likes for a profile
+    async likeProfile(username: string): Promise<number | null> {
+        const { data: profile } = await supabase
+            .from('users')
+            .select('id, likes_count')
+            .ilike('username', username)
+            .maybeSingle();
+
+        if (!profile) return null;
+
+        const { error } = await supabase.rpc('increment_profile_likes', { profile_id: profile.id });
+        
+        if (error) {
+            console.error('[ProfileService] Error incrementing likes:', error.message);
+            return null;
+        }
+
+        return (profile.likes_count || 0) + 1;
+    },
+
     // Bootstrap data for Editor (Profile + Links + Products + Stores)
     async getBootstrapData(userId: string) {
         // Run all queries in parallel for maximum speed
         const [profile, links, products, stores] = await Promise.all([
-            this.getProfileByUserId(userId),
+            profileService.getProfileByUserId(userId),
             linkService.getLinksByProfileId(userId, false),
             productService.getProductsByProfileId(userId, false),
             storeService.getStoresByProfileId(userId, false)
@@ -275,7 +300,7 @@ export const profileService = {
     async getPublicBootstrapData(username: string) {
         // 1. Get profile first as we need the user_id for links/products
         // Now passing true to permit background social syncing for public views if data is stale
-        const profile = await this.getProfileByUsername(username, true);
+        const profile = await profileService.getProfileByUsername(username, true);
         if (!profile) return null;
 
         // 2. Fetch links, products and stores in parallel using the user_id (publicView = true)

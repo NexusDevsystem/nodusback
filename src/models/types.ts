@@ -56,6 +56,8 @@ export interface UserProfileDB {
     has_copied_url?: boolean;
     onboarding_dismissed?: boolean;
     last_incomplete_notification_at?: string | null;
+    likes_count?: number;
+    views_count?: number;
 }
 
 export interface LinkItemDB {
@@ -217,6 +219,8 @@ export interface UserProfile {
     hasFirstLink?: boolean;
     hasCopiedUrl?: boolean;
     onboardingDismissed?: boolean;
+    likesCount?: number;
+    viewsCount?: number;
 }
 
 export interface LinkItem {
@@ -361,7 +365,9 @@ export function dbToApi(dbProfile: UserProfileDB): UserProfile {
         hasFirstLink: !!dbProfile.has_first_link,
         hasCopiedUrl: !!dbProfile.has_copied_url,
         onboardingDismissed: !!dbProfile.onboarding_dismissed,
-        plan_type: dbProfile.plan_type
+        plan_type: dbProfile.plan_type,
+        likesCount: dbProfile.likes_count || 0,
+        viewsCount: dbProfile.views_count || 0
     };
 }
 
@@ -419,6 +425,8 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.hasCopiedUrl !== undefined) dbProfile.has_copied_url = apiProfile.hasCopiedUrl;
     if (apiProfile.onboardingDismissed !== undefined) dbProfile.onboarding_dismissed = apiProfile.onboardingDismissed;
     if (apiProfile.plan_type !== undefined) dbProfile.plan_type = apiProfile.plan_type;
+    if (apiProfile.likesCount !== undefined) dbProfile.likes_count = apiProfile.likesCount;
+    if (apiProfile.viewsCount !== undefined) dbProfile.views_count = apiProfile.viewsCount;
 
     return dbProfile;
 }

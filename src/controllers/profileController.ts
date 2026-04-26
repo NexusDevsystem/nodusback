@@ -157,6 +157,23 @@ export const profileController = {
             console.error('Error dismissing onboarding:', error);
             res.status(500).json({ error: 'Failed to dismiss onboarding' });
         }
+    },
+
+    // Like a profile
+    async likeProfile(req: AuthRequest, res: Response) {
+        try {
+            const { username } = req.params;
+            const likesCount = await profileService.likeProfile(username);
+            
+            if (likesCount === null) {
+                return res.status(404).json({ error: 'Profile not found' });
+            }
+
+            res.json({ success: true, likesCount });
+        } catch (error) {
+            console.error('[ProfileController] Error liking profile:', error);
+            res.status(500).json({ error: 'Failed to like profile' });
+        }
     }
 };
 

@@ -8,6 +8,7 @@ const router = Router();
 // Public routes
 router.get('/public/:username', profileController.getPublicProfile);
 router.get('/public-bootstrap/:username', profileController.getPublicBootstrap);
+router.post('/public/like/:username', profileController.likeProfile);
 router.get('/check-username/:username', optionalAuthMiddleware, profileController.checkUsername);
 
 // REALTIME SSE ENDPOINT (No keys needed on front)
