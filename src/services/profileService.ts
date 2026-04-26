@@ -85,21 +85,8 @@ export const profileService = {
 
         if (!data) return null;
         
-        // 📈 Increment view count (public only)
-        if (triggerSync && data.id) {
-            try {
-                // We await this so the very first visitor sees '1' instead of '0'
-                await supabase.rpc('increment_profile_views', { profile_id: data.id });
-                // Manually increment the local object to avoid a second DB roundtrip
-                if (typeof data.views_count === 'number') {
-                    data.views_count++;
-                } else {
-                    data.views_count = 1;
-                }
-            } catch (e) {
-                console.error('View increment failed:', e);
-            }
-        }
+        // View counting is now handled exclusively by the trackPageView endpoint 
+        // to ensure uniqueness and prevent counting preview/admin views.
 
         const profile = profileService._checkPlanExpiration(dbToApi(data as UserProfileDB));
         return await profileService._attachIntegrations(profile, triggerSync);
