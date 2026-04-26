@@ -176,16 +176,13 @@ export const analyticsService = {
             throw new Error(`Failed to track view: ${error.message}`);
         }
 
-        // 2. Increment UNIQUE visitors count in users table via RPC
-        if (fingerprint) {
-            try {
-                await supabase.rpc('increment_profile_visitors', { 
-                    profile_id: userId, 
-                    visitor_fingerprint: fingerprint 
-                });
-            } catch (e) {
-                console.error('Visitor increment failed:', e);
-            }
+        // 2. Increment views count in users table via RPC
+        try {
+            await supabase.rpc('increment_profile_views', { 
+                profile_id: userId
+            });
+        } catch (e) {
+            console.error('View increment failed:', e);
         }
 
         console.log(`✅ [Analytics] View tracked successfully`);
