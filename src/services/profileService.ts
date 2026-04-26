@@ -87,7 +87,14 @@ export const profileService = {
         
         // 📈 Increment view count (public only)
         if (triggerSync && data.id) {
-            supabase.rpc('increment_profile_views', { profile_id: data.id }).then(() => {}).catch(() => {});
+            // Using a self-invoking async function to safely fire and forget in TS
+            (async () => {
+                try {
+                    await supabase.rpc('increment_profile_views', { profile_id: data.id });
+                } catch (e) {
+                    console.error('View increment failed:', e);
+                }
+            })();
         }
 
         const profile = profileService._checkPlanExpiration(dbToApi(data as UserProfileDB));
@@ -258,26 +265,6 @@ export const profileService = {
         return !data; // Available if no data found (or if data found is from the excluded user)
     },
 
-    // Increment likes for a profile
-    async likeProfile(username: string): Promise<number | null> {
-        const { data: profile } = await supabase
-            .from('users')
-            .select('id, likes_count')
-            .ilike('username', username)
-            .maybeSingle();
-
-        if (!profile) return null;
-
-        const { error } = await supabase.rpc('increment_profile_likes', { profile_id: profile.id });
-        
-        if (error) {
-            console.error('[ProfileService] Error incrementing likes:', error.message);
-            return null;
-        }
-
-        return (profile.likes_count || 0) + 1;
-    },
-
     // Bootstrap data for Editor (Profile + Links + Products + Stores)
     async getBootstrapData(userId: string) {
         // Run all queries in parallel for maximum speed
@@ -316,5 +303,36 @@ export const profileService = {
             products,
             stores
         };
+    },
+
+    // Like a profile by username
+    async likeProfile(username: string): Promise<number | null> {
+        // 1. Find profile first
+        const { data: profile, error: findError } = await supabase
+            .from('users')
+            .select('id')
+            .ilike('username', username)
+            .maybeSingle();
+
+        if (findError || !profile) return null;
+
+        // 2. Increment likes using RPC (atomic)
+        const { error: rpcError } = await supabase.rpc('increment_profile_likes', { 
+            profile_id: profile.id 
+        });
+
+        if (rpcError) {
+            console.error('Error in likeProfile RPC:', rpcError);
+            throw rpcError;
+        }
+
+        // Return the NEW like count
+        const { data: updatedProfile } = await supabase
+            .from('users')
+            .select('likes_count')
+            .eq('id', profile.id)
+            .single();
+
+        return updatedProfile?.likes_count || 0;
     }
 };
