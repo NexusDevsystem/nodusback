@@ -432,9 +432,10 @@ export function apiToDb(apiProfile: Partial<UserProfile>): Partial<UserProfileDB
     if (apiProfile.hasCopiedUrl !== undefined) dbProfile.has_copied_url = apiProfile.hasCopiedUrl;
     if (apiProfile.onboardingDismissed !== undefined) dbProfile.onboarding_dismissed = apiProfile.onboardingDismissed;
     if (apiProfile.plan_type !== undefined) dbProfile.plan_type = apiProfile.plan_type;
-    if (apiProfile.likesCount !== undefined) dbProfile.likes_count = apiProfile.likesCount;
-    if (apiProfile.viewsCount !== undefined) dbProfile.views_count = apiProfile.viewsCount;
-    if (apiProfile.visitorsCount !== undefined) dbProfile.visitors_count = apiProfile.visitorsCount;
+    // These fields are read-only and should not be updated via profile update
+    // if (apiProfile.likesCount !== undefined) dbProfile.likes_count = apiProfile.likesCount;
+    // if (apiProfile.viewsCount !== undefined) dbProfile.views_count = apiProfile.viewsCount;
+    // if (apiProfile.visitorsCount !== undefined) dbProfile.visitors_count = apiProfile.visitorsCount;
 
     return dbProfile;
 }
