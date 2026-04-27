@@ -64,7 +64,7 @@ export const FREE_FONT_FAMILIES = new Set<string>([
 // ---------------------------------------------------------------------------
 // PRO Layouts
 // ---------------------------------------------------------------------------
-export const PRO_LAYOUTS = new Set<string>(['compact', 'banner']);
+export const PRO_LAYOUTS = new Set<string>(['compact', 'banner', 'perfil']);
 
 // ---------------------------------------------------------------------------
 // PRO Header Styles
@@ -79,6 +79,8 @@ export const PRO_CUSTOM_COLOR_FIELDS = [
     'customTextColor',
     'customCollectionTextColor',
     'customButtonTextColor',
+    'customSecondaryColor',
+    'bannerBlurColor',
 ] as const;
 
 // ---------------------------------------------------------------------------
