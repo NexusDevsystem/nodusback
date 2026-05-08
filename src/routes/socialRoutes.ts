@@ -21,6 +21,9 @@ router.get('/twitch', socialController.getTwitchProfileInfo);
 // GET /api/social/kick?url=<channel_url>
 router.get('/kick', socialController.getKickProfileInfo);
 
+// GET /api/social/x?url=<profile_url>
+router.get('/x', socialController.getXProfileInfo);
+
 // GET /api/social/metadata?url=<profile_url>
 router.get('/metadata', socialController.getSocialMetadata);
 

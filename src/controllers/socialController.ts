@@ -14,6 +14,7 @@ const tiktokCache = new Map<string, { data: any, expiresAt: number }>();
 
 const twitchCache = new Map<string, { data: any; expiresAt: number }>();
 const kickCache = new Map<string, { data: any; expiresAt: number }>();
+const xCache = new Map<string, { data: any; expiresAt: number }>();
 
 function parseFollowerCount(str: string): number {
     if (!str) return 0;
@@ -661,6 +662,132 @@ export const socialController = {
     },
 
     /**
+     * Fetches metadata for X (Twitter) profiles.
+     */
+    async getXProfileInfo(req: Request, res: Response) {
+        try {
+            const { url } = req.query;
+            console.log(`\x1b[36m[X/Twitter] Initiating metadata fetch for: ${url}\x1b[0m`);
+            if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
+
+            const match = url.match(/(?:x|twitter)\.com\/([^/?#\s]+)/i);
+            const username = match ? match[1].replace('@', '').toLowerCase() : null;
+
+            if (!username || username === 'home' || username === 'explore' || username === 'notifications' || username === 'messages') {
+                return res.status(400).json({ error: 'Invalid X profile URL' });
+            }
+
+            const cacheKey = `x:${username}`;
+            const cached = xCache.get(cacheKey);
+            if (cached && cached.expiresAt > Date.now()) return res.json(cached.data);
+
+            console.log(`[X/Twitter] Fetching metadata for: ${username}`);
+
+            let name = '', avatarUrl = '', followers = '';
+
+            const { linkId } = req.query;
+            // 🔍 PRE-CHECK: If we already have good data in DB, skip scraping
+            if (linkId && typeof linkId === 'string') {
+                try {
+                    const { data: currentLink } = await supabase.from('links').select('subtitle, image').eq('id', linkId).maybeSingle();
+                    if (currentLink?.subtitle && currentLink?.image) {
+                        return res.json({
+                            name: username,
+                            display_name: username,
+                            username,
+                            avatarUrl: currentLink.image,
+                            followers: currentLink.subtitle,
+                            platform: 'x',
+                            profileUrl: url
+                        });
+                    }
+                } catch (err) {}
+            }
+
+            // Strategy: Scrape via Social bot headers (works better for X meta tags)
+            try {
+                const scrapeRes = await safeFetch(url, {
+                    headers: { 'User-Agent': 'facebookexternalhit/1.1' },
+                    timeout: 8000
+                });
+                if (scrapeRes.ok) {
+                    const html = await scrapeRes.text();
+                    const $ = cheerio.load(html);
+                    
+                    // Meta tags are usually available for bots
+                    name = $('meta[property="og:title"]').attr('content')?.split(' (')[0] || 
+                           $('meta[name="twitter:title"]').attr('content')?.split(' (')[0] || 
+                           $('title').text().split(' (')[0] || 
+                           username;
+
+                    avatarUrl = $('meta[property="og:image"]').attr('content') || 
+                                $('meta[name="twitter:image"]').attr('content') || 
+                                $('link[rel="apple-touch-icon"]').attr('href') || '';
+                    
+                    // description usually contains followers count like "1.2M Followers"
+                    const desc = $('meta[property="og:description"]').attr('content') || 
+                                 $('meta[name="twitter:description"]').attr('content') || 
+                                 $('meta[name="description"]').attr('content') || '';
+                    
+                    // Regex variants for followers (X often changes labels/translations)
+                    const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores|inscritos|subscribers)/i);
+                    if (fMatch) {
+                        followers = fMatch[1].trim();
+                    } else {
+                        // Try a more aggressive search for numerical stats in the description
+                        const statsMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
+                        if (statsMatch) followers = statsMatch[1].trim();
+                    }
+
+                    // Clean up avatar URL (sometimes they have resizing params)
+                    if (avatarUrl && avatarUrl.includes('_normal')) {
+                        avatarUrl = avatarUrl.replace('_normal', '_400x400'); // Get higher res
+                    }
+                }
+            } catch (e) {
+                console.error(`[X/Twitter] Scrape Error for ${username}:`, (e as any).message);
+            }
+
+            const followersText = followers ? `${followers} Seguidores` : '';
+            const result = {
+                name: name || username,
+                display_name: name || username,
+                username,
+                avatarUrl,
+                avatar_url: avatarUrl,
+                followers: followersText,
+                follower_count: parseFollowerCount(followersText),
+                platform: 'x',
+                profileUrl: url
+            };
+
+            // 💾 AUTO-SAVE
+            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+                try {
+                    const updates: any = {};
+                    if (followersText) updates.subtitle = followersText;
+                    if (avatarUrl) updates.image = avatarUrl;
+                    
+                    const updatedLink = await linkService.updateLink(linkId, updates);
+                    
+                    if (updatedLink && updatedLink.userId) {
+                        const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
+                        if (user?.username) realtimeManager.notifyUpdate(user.username);
+                    }
+                } catch (saveErr) {}
+            }
+
+            if (avatarUrl) {
+                xCache.set(cacheKey, { data: result, expiresAt: Date.now() + CACHE_TTL_MS });
+            }
+
+            return res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: 'X integration error' });
+        }
+    },
+
+    /**
      * Unified search.
      */
     async getSocialMetadata(req: Request, res: Response) {
@@ -685,6 +812,10 @@ export const socialController = {
         if (lowerUrl.includes('kick.com')) {
             console.log('[SocialMetadata] Routing to Kick handler');
             return socialController.getKickProfileInfo(req, res);
+        }
+        if (lowerUrl.includes('x.com') || lowerUrl.includes('twitter.com')) {
+            console.log('[SocialMetadata] Routing to X/Twitter handler');
+            return socialController.getXProfileInfo(req, res);
         }
 
         try {
