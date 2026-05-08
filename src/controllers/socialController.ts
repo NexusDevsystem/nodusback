@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
+import { exec } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 import { profileService } from '../services/profileService.js';
 import { blogService } from '../services/blogService.js';
 import { linkService } from '../services/linkService.js';
@@ -670,7 +673,7 @@ export const socialController = {
             console.log(`\x1b[36m[X/Twitter] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
-            const match = url.match(/(?:x|twitter)\.com\/([^/?#\s]+)/i);
+            const match = url.match(/(?:x|twitter|mobile\.x|mobile\.twitter)\.com\/([^/?#\s]+)/i);
             const username = match ? match[1].replace('@', '').toLowerCase() : null;
 
             if (!username || username === 'home' || username === 'explore' || username === 'notifications' || username === 'messages') {
@@ -704,48 +707,36 @@ export const socialController = {
                 } catch (err) {}
             }
 
-            // Strategy: Scrape via Social bot headers (works better for X meta tags)
+            // Strategy: Use the Python Scrapling script for better bypass
             try {
-                const scrapeRes = await safeFetch(url, {
-                    headers: { 'User-Agent': 'facebookexternalhit/1.1' },
-                    timeout: 8000
+                console.log(`[X/Twitter] Calling Scrapling python script for ${username}...`);
+                const scriptPath = path.join(process.cwd(), 'backend', 'src', 'utils', 'x_scraper.py');
+                
+                const pythonResult = await new Promise<any>((resolve) => {
+                    exec(`python "${scriptPath}" "${url}"`, (error, stdout, stderr) => {
+                        if (error) {
+                            console.error(`[X/Twitter] Python Script Error:`, stderr);
+                            resolve(null);
+                            return;
+                        }
+                        try {
+                            const result = JSON.parse(stdout.split('\n').filter(l => l.trim().startsWith('{')).pop() || '{}');
+                            resolve(result);
+                        } catch (e) {
+                            console.error(`[X/Twitter] Python Parsing Error:`, stdout);
+                            resolve(null);
+                        }
+                    });
                 });
-                if (scrapeRes.ok) {
-                    const html = await scrapeRes.text();
-                    const $ = cheerio.load(html);
-                    
-                    // Meta tags are usually available for bots
-                    name = $('meta[property="og:title"]').attr('content')?.split(' (')[0] || 
-                           $('meta[name="twitter:title"]').attr('content')?.split(' (')[0] || 
-                           $('title').text().split(' (')[0] || 
-                           username;
 
-                    avatarUrl = $('meta[property="og:image"]').attr('content') || 
-                                $('meta[name="twitter:image"]').attr('content') || 
-                                $('link[rel="apple-touch-icon"]').attr('href') || '';
-                    
-                    // description usually contains followers count like "1.2M Followers"
-                    const desc = $('meta[property="og:description"]').attr('content') || 
-                                 $('meta[name="twitter:description"]').attr('content') || 
-                                 $('meta[name="description"]').attr('content') || '';
-                    
-                    // Regex variants for followers (X often changes labels/translations)
-                    const fMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:followers|seguidores|inscritos|subscribers)/i);
-                    if (fMatch) {
-                        followers = fMatch[1].trim();
-                    } else {
-                        // Try a more aggressive search for numerical stats in the description
-                        const statsMatch = desc.match(/([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)/i);
-                        if (statsMatch) followers = statsMatch[1].trim();
-                    }
-
-                    // Clean up avatar URL (sometimes they have resizing params)
-                    if (avatarUrl && avatarUrl.includes('_normal')) {
-                        avatarUrl = avatarUrl.replace('_normal', '_400x400'); // Get higher res
-                    }
+                if (pythonResult && pythonResult.status === 'success') {
+                    name = pythonResult.name || name;
+                    avatarUrl = pythonResult.avatarUrl || avatarUrl;
+                    followers = pythonResult.followers || followers;
+                    console.log(`[X/Twitter] Scrapling success: Name=${!!name}, Avatar=${!!avatarUrl}, Followers=${!!followers}`);
                 }
             } catch (e) {
-                console.error(`[X/Twitter] Scrape Error for ${username}:`, (e as any).message);
+                console.error(`[X/Twitter] Python Execution Error:`, (e as any).message);
             }
 
             const followersText = followers ? `${followers} Seguidores` : '';
