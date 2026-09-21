@@ -7,6 +7,7 @@ export const blogService = {
             .from('blog_posts')
             .select('*')
             .eq('slug', slug)
+            .eq('is_published', true)
             .maybeSingle();
 
         if (error) throw error;

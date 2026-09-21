@@ -15,7 +15,8 @@ export const announcementController = {
             }
             res.json(announcement);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[Announcements] Failed to load active announcement:', error);
+            res.status(500).json({ error: 'Failed to load announcement' });
         }
     },
 
@@ -31,7 +32,8 @@ export const announcementController = {
             await announcementService.dismiss(id, userId);
             res.json({ success: true });
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[Announcements] Failed to dismiss announcement:', error);
+            res.status(500).json({ error: 'Failed to dismiss announcement' });
         }
     },
 
@@ -40,7 +42,8 @@ export const announcementController = {
             const announcements = await announcementService.getAll();
             res.json(announcements);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[Announcements] Failed to list announcements:', error);
+            res.status(500).json({ error: 'Failed to list announcements' });
         }
     },
 
@@ -50,7 +53,8 @@ export const announcementController = {
             const announcement = await announcementService.create(dbAnnouncement);
             res.status(201).json(announcement);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[Announcements] Failed to create announcement:', error);
+            res.status(500).json({ error: 'Failed to create announcement' });
         }
     },
 
@@ -61,7 +65,8 @@ export const announcementController = {
             const announcement = await announcementService.update(id, dbUpdates);
             res.json(announcement);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[Announcements] Failed to update announcement:', error);
+            res.status(500).json({ error: 'Failed to update announcement' });
         }
     },
 
@@ -71,7 +76,8 @@ export const announcementController = {
             await announcementService.delete(id);
             res.status(204).send();
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[Announcements] Failed to delete announcement:', error);
+            res.status(500).json({ error: 'Failed to delete announcement' });
         }
     }
 };

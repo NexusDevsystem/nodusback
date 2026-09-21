@@ -22,11 +22,22 @@ export const leadController = {
         try {
             const { profileId, email, name } = req.body;
 
-            if (!profileId || !email) {
+            if (typeof profileId !== 'string' || typeof email !== 'string' || (name !== undefined && typeof name !== 'string')) {
+                return res.status(400).json({ error: 'Dados de inscrição inválidos' });
+            }
+
+            const normalizedEmail = email.trim().toLowerCase();
+            const normalizedName = typeof name === 'string' ? name.trim() : undefined;
+
+            if (!profileId.trim() || !normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
                 return res.status(400).json({ error: 'Profile ID and email are required' });
             }
 
-            const lead = await leadService.createLead(profileId, email, name);
+            if (normalizedEmail.length > 254 || (normalizedName && normalizedName.length > 100)) {
+                return res.status(400).json({ error: 'Dados de inscrição excedem o limite permitido' });
+            }
+
+            const lead = await leadService.createLead(profileId.trim(), normalizedEmail, normalizedName);
 
             if (!lead) {
                 return res.status(500).json({ error: 'Failed to create lead' });
@@ -41,8 +52,12 @@ export const leadController = {
     // Delete a lead
     async deleteLead(req: AuthRequest, res: Response) {
         try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
             const { id } = req.params;
-            const deleted = await leadService.deleteLead(id);
+            const deleted = await leadService.deleteLead(req.profileId, id);
 
             if (!deleted) {
                 return res.status(404).json({ error: 'Lead not found' });

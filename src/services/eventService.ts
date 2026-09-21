@@ -57,7 +57,7 @@ export const eventService = {
     },
 
     // Update an event
-    async updateEvent(eventId: string, updates: Partial<EventItem>): Promise<EventItem | null> {
+    async updateEvent(userId: string, eventId: string, updates: Partial<EventItem>): Promise<EventItem | null> {
         if (!isValidUUID(eventId)) {
             console.warn(`[eventService] updateEvent: invalid UUID "${eventId}", skipping.`);
             return null;
@@ -77,6 +77,7 @@ export const eventService = {
             .from('events')
             .update(dbUpdates)
             .eq('id', eventId)
+            .eq('user_id', userId)
             .select()
             .single();
 
@@ -89,22 +90,25 @@ export const eventService = {
     },
 
     // Delete an event
-    async deleteEvent(eventId: string): Promise<boolean> {
+    async deleteEvent(userId: string, eventId: string): Promise<boolean> {
         if (!isValidUUID(eventId)) {
             console.warn(`[eventService] deleteEvent: invalid UUID "${eventId}", skipping.`);
             return false;
         }
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('events')
             .delete()
-            .eq('id', eventId);
+            .eq('id', eventId)
+            .eq('user_id', userId)
+            .select('id')
+            .maybeSingle();
 
         if (error) {
             console.error('Error deleting event:', error);
             return false;
         }
 
-        return true;
+        return Boolean(data);
     },
 
     // Bulk update events for a collection
@@ -116,8 +120,28 @@ export const eventService = {
             return [];
         }
 
-        // 1. Delete existing for this collection
-        await supabase.from('events').delete().eq('collection_id', collectionId);
+        // The collection must belong to the authenticated user before any
+        // delete/insert is performed.
+        const { data: collection, error: collectionError } = await supabase
+            .from('links')
+            .select('id')
+            .eq('id', collectionId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (collectionError || !collection) {
+            if (collectionError) {
+                console.error('Error validating event collection ownership:', collectionError);
+            }
+            return [];
+        }
+
+        // 1. Delete only existing events owned by this user for this collection
+        await supabase
+            .from('events')
+            .delete()
+            .eq('collection_id', collectionId)
+            .eq('user_id', userId);
 
         if (events.length === 0) return [];
 

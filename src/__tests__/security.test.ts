@@ -276,6 +276,60 @@ describe('🌐 SSRF Protection (Proxy Upload)', () => {
     });
 });
 
+describe('🌐 SSRF and OAuth boundary protection', () => {
+    test('should reject music URLs that only contain a supported hostname in the path', async () => {
+        const res = await request(app)
+            .get('/api/music/metadata')
+            .query({ url: 'https://attacker.example/spotify.com/track/123' });
+
+        expect(res.status).toBe(400);
+    });
+
+    test('should require authentication to start an OAuth flow', async () => {
+        const res = await request(app).get('/api/integrations/twitch/auth-url');
+        expect(res.status).toBe(401);
+    });
+
+    test('should reject a music hostname that is only a lookalike subdomain', async () => {
+        const res = await request(app)
+            .get('/api/music/metadata')
+            .query({ url: 'https://attacker.tiktok.com.evil.example/video/123' });
+
+        expect(res.status).toBe(400);
+    });
+});
+
+describe('🧱 Public abuse boundaries', () => {
+    test('should reject malformed public lead data before touching the database', async () => {
+        const res = await request(app)
+            .post('/api/leads')
+            .send({ profileId: { $ne: null }, email: 'not-an-email' });
+
+        expect(res.status).toBe(400);
+    });
+
+    test('should reject malformed password reset codes', async () => {
+        const res = await request(app)
+            .post('/api/auth/verify-reset')
+            .send({ email: 'user@example.com', code: 'not-a-code' });
+
+        expect(res.status).toBe(400);
+    });
+
+    test('should reject deeply nested payloads', async () => {
+        let payload: any = { value: 'ok' };
+        for (let index = 0; index < 22; index += 1) payload = { nested: payload };
+
+        const res = await request(app)
+            .post('/api/links')
+            .set('Authorization', 'Bearer fake-token')
+            .send(payload);
+
+        expect(res.status).toBe(400);
+        expect(res.body.code).toBe('INPUT_LIMIT_EXCEEDED');
+    });
+});
+
 // ─── 7. HEALTH CHECK ─────────────────────────────────────────────────────────
 
 describe('🏥 Health & Baseline', () => {

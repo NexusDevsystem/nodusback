@@ -81,8 +81,8 @@ export const ensureTwitchLink = async (userId: string, twitchUsername: string) =
 /**
  * Generates the Twitch Auth URL
  */
-export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
-    const state = Buffer.from(JSON.stringify({ userId, origin: origin || 'production' })).toString('base64');
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string, stateOverride?: string) => {
+    const state = stateOverride || Buffer.from(JSON.stringify({ userId, origin: origin || 'production' })).toString('base64');
 
     const { CLIENT_ID, REDIRECT_URI } = getTwitchConfig();
 

@@ -10,6 +10,69 @@ import * as kickService from './kickService.js';
 import * as youtubeService from './youtubeService.js';
 import { enforcePlanRestrictions } from './planGuard.js';
 
+// Fields that a user is allowed to change through PUT /api/profile/me.
+// Billing, role, verification and authentication fields are intentionally
+// excluded and may only be changed by dedicated server-side flows.
+const USER_EDITABLE_PROFILE_FIELDS = new Set<string>([
+    'username',
+    'name',
+    'bio',
+    'avatarUrl',
+    'cellphone',
+    'userCategory',
+    'themeId',
+    'fontFamily',
+    'buttonStyle',
+    'buttonStyleType',
+    'buttonRoundness',
+    'buttonShadow',
+    'customBackground',
+    'customTextColor',
+    'customSolidColor',
+    'customButtonColor',
+    'enableBlur',
+    'fontSize',
+    'bioFontSize',
+    'fontWeight',
+    'fontItalic',
+    'customSecondaryColor',
+    'customButtonTextColor',
+    'customCollectionTextColor',
+    'headerLayout',
+    'headerStyle',
+    'logoUrl',
+    'avatarSize',
+    'seoTitle',
+    'seoDescription',
+    'paymentMethods',
+    'referralSource',
+    'bannerBlurColor',
+    'hideBranding',
+    'showStoreShortcutOnLinks',
+    'hasCopiedUrl',
+    'onboardingDismissed',
+    'onboardingCompleted'
+]);
+
+function sanitizeUserProfileUpdates(updates: Partial<UserProfile>): Partial<UserProfile> {
+    const sanitized: Record<string, unknown> = {};
+    const rejectedFields: string[] = [];
+
+    for (const [field, value] of Object.entries(updates || {})) {
+        if (USER_EDITABLE_PROFILE_FIELDS.has(field)) {
+            sanitized[field] = value;
+        } else {
+            rejectedFields.push(field);
+        }
+    }
+
+    if (rejectedFields.length > 0) {
+        console.warn(`[ProfileService] Ignored protected profile fields: ${rejectedFields.join(', ')}`);
+    }
+
+    return sanitized as Partial<UserProfile>;
+}
+
 export const profileService = {
     // Helper to check and react to plan expiration (Business Rules - Nodus.my)
     _checkPlanExpiration(profile: UserProfile): UserProfile {
@@ -143,7 +206,8 @@ export const profileService = {
 
     // Update profile
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
-        console.log(`[ProfileService] Updating profile for user ${userId}:`, JSON.stringify(updates));
+        const safeUpdates = sanitizeUserProfileUpdates(updates);
+        console.log(`[ProfileService] Updating profile for user ${userId}:`, JSON.stringify(safeUpdates));
 
         // ── Step 1: Load the current profile from DB ──────────────────────────
         // We always need the current profile to:
@@ -154,7 +218,7 @@ export const profileService = {
         // ── Step 2: Enforce plan restrictions BEFORE touching anything ────────
         // This strips PRO-only fields from `updates` if the user is FREE.
         // This happens server-side and cannot be bypassed by the client.
-        const guardResult = enforcePlanRestrictions(currentProfile?.plan_type, updates as Record<string, any>);
+        const guardResult = enforcePlanRestrictions(currentProfile?.plan_type, safeUpdates as Record<string, any>);
         if (guardResult.strippedFields.length > 0) {
             console.warn(
                 `[PlanGuard] Stripped PRO fields from userId=${userId} (plan=${currentProfile?.plan_type}): ` +
@@ -163,8 +227,8 @@ export const profileService = {
         }
 
         // ── Step 3: Username 7-day restriction ───────────────────────────────
-        if (updates.username) {
-            if (currentProfile && currentProfile.username && currentProfile.username.toLowerCase() !== updates.username.toLowerCase()) {
+        if (safeUpdates.username) {
+            if (currentProfile && currentProfile.username && currentProfile.username.toLowerCase() !== safeUpdates.username.toLowerCase()) {
                 if (currentProfile.usernameUpdatedAt) {
                     const lastUpdate = new Date(currentProfile.usernameUpdatedAt);
                     const now = new Date();
@@ -175,15 +239,25 @@ export const profileService = {
                         throw new Error(`O nome de usuário só pode ser alterado a cada 7 dias. Faltam ${remainingDays} ${remainingDays === 1 ? 'dia' : 'dias'}.`);
                     }
                 }
-                updates.usernameUpdatedAt = new Date().toISOString();
+                // usernameUpdatedAt is server-controlled and is added directly
+                // to the DB payload below; it is never accepted from the client.
             }
         }
 
-        const dbUpdates = apiToDb(updates);
+        const dbUpdates = apiToDb(safeUpdates);
+
+        if (
+            safeUpdates.username &&
+            currentProfile &&
+            currentProfile.username &&
+            currentProfile.username.toLowerCase() !== safeUpdates.username.toLowerCase()
+        ) {
+            dbUpdates.username_updated_at = new Date().toISOString();
+        }
 
         // ── Step 4: ONBOARDING: Track profile pic ───────────────────────────
-        if (updates.avatarUrl !== undefined) {
-            dbUpdates.has_profile_pic = !!updates.avatarUrl;
+        if (safeUpdates.avatarUrl !== undefined) {
+            dbUpdates.has_profile_pic = !!safeUpdates.avatarUrl;
         }
 
         console.log(`[ProfileService] Converted DB updates for ${userId}:`, JSON.stringify(dbUpdates));

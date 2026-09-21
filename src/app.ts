@@ -35,14 +35,21 @@ app.get('/arquivo/*', fileController.getFileRedirect);
 app.set('trust proxy', 1);
 
 // 1. CORS Configuration
-const allowedOrigins = [
+const allowedOrigins = new Set([
     ...(process.env.ALLOWED_ORIGINS || '').split(','),
+    ...(process.env.FRONTEND_ALLOWED_ORIGINS || '').split(','),
     process.env.CORS_ORIGIN,
     process.env.FRONTEND_URL,
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173'
-].filter(Boolean) as string[];
+].filter(Boolean).map(origin => {
+    try {
+        return new URL(String(origin).trim()).origin;
+    } catch {
+        return '';
+    }
+}).filter(Boolean));
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -51,15 +58,7 @@ app.use(cors({
             return callback(null, true);
         }
 
-        // Allow any localhost origin
-        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-            return callback(null, true);
-        }
-
-        const isAllowed = allowedOrigins.includes(origin) ||
-            origin.includes('nodus.my') ||
-            origin.includes('nodus.app') ||
-            origin.endsWith('.vercel.app');
+        const isAllowed = allowedOrigins.has(origin);
 
         if (isAllowed) {
             callback(null, true);
@@ -69,7 +68,7 @@ app.use(cors({
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'abacatepay-signature'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'abacatepay-signature', 'x-webhook-signature', 'x-abacate-signature', 'x-signature', 'Cache-Control', 'Pragma'],
     credentials: true,
     maxAge: 86400
 }));
@@ -160,7 +159,7 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 // 🏥 Health Check Route (Required for Railway)
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Routes removed for clean restart
@@ -182,15 +181,9 @@ app.use('/api/verification', verificationRoutes);
 app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/announcements', announcementRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
 // Root endpoint
 app.get('/', (req, res) => {
-    console.log('[DEBUG] Root endpoint hit');
-    res.json({ message: 'Nodus Backend API', version: '1.1.0-debug', env: process.env.NODE_ENV || 'production' });
+    res.json({ message: 'Nodus Backend API', version: '1.1.0' });
 });
 
 // 404 Handler
@@ -203,7 +196,9 @@ app.use((req, res) => {
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('❌ ERRO CRÍTICO NO SERVIDOR:', err.message);
     if (err.stack) console.error(err.stack);
-    res.status(err.status || 500).json({ error: true, message: err.message || 'Erro Interno do Servidor', path: req.path });
+    const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
+    const message = status < 500 ? (err.message || 'Requisição inválida') : 'Erro interno do servidor';
+    res.status(status).json({ error: true, message });
 });
 
 export default app;

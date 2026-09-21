@@ -20,6 +20,17 @@ export const leadService = {
 
     // Create a new lead
     async createLead(userId: string, email: string, name?: string): Promise<any | null> {
+        const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (profileError || !profile) {
+            if (profileError) console.error('Error validating lead profile:', profileError);
+            return null;
+        }
+
         const { data, error } = await supabase
             .from('leads')
             .insert({
@@ -27,7 +38,7 @@ export const leadService = {
                 email,
                 name,
             })
-            .select()
+            .select('id, email, name, timestamp')
             .single();
 
         if (error) {
@@ -39,17 +50,20 @@ export const leadService = {
     },
 
     // Delete a lead
-    async deleteLead(leadId: string): Promise<boolean> {
-        const { error } = await supabase
-            .from('newsletter_leads')
+    async deleteLead(userId: string, leadId: string): Promise<boolean> {
+        const { data, error } = await supabase
+            .from('leads')
             .delete()
-            .eq('id', leadId);
+            .eq('id', leadId)
+            .eq('user_id', userId)
+            .select('id')
+            .maybeSingle();
 
         if (error) {
             console.error('Error deleting lead:', error);
             return false;
         }
 
-        return true;
+        return Boolean(data);
     }
 };

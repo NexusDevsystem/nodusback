@@ -6,20 +6,20 @@ const router = express.Router();
 
 router.get('/me', authMiddleware, integrationController.getMyIntegrations);
 
-router.get('/tiktok/auth-url', integrationController.getTikTokAuthUrl);
+router.get('/tiktok/auth-url', authMiddleware, integrationController.getTikTokAuthUrl);
 router.get('/tiktok/callback', integrationController.handleTikTokCallback);
 
-router.get('/instagram/auth-url', integrationController.getInstagramAuthUrl);
+router.get('/instagram/auth-url', authMiddleware, integrationController.getInstagramAuthUrl);
 router.get('/instagram/callback', integrationController.handleInstagramCallback);
 router.post('/instagram/switch', authMiddleware, integrationController.switchInstagramAccount);
 
-router.get('/twitch/auth-url', integrationController.getTwitchAuthUrl);
+router.get('/twitch/auth-url', authMiddleware, integrationController.getTwitchAuthUrl);
 router.get('/twitch/callback', integrationController.handleTwitchCallback);
 
-router.get('/youtube/auth-url', integrationController.getYoutubeAuthUrl);
+router.get('/youtube/auth-url', authMiddleware, integrationController.getYoutubeAuthUrl);
 router.get('/youtube/callback', integrationController.handleYoutubeCallback);
 
-router.get('/kick/auth-url', integrationController.getKickAuthUrl);
+router.get('/kick/auth-url', authMiddleware, integrationController.getKickAuthUrl);
 router.get('/kick/callback', integrationController.handleKickCallback);
 router.post('/kick/connect', authMiddleware, integrationController.connectKickAccount);
 

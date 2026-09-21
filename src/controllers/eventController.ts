@@ -44,7 +44,7 @@ export const eventController = {
             const { id } = req.params;
             const updates = req.body;
 
-            const event = await eventService.updateEvent(id, updates);
+            const event = await eventService.updateEvent(req.userId, id, updates);
             if (!event) return res.status(404).json({ error: 'Event not found' });
 
             res.json(event);
@@ -60,9 +60,9 @@ export const eventController = {
             if (!req.userId) return res.status(401).json({ error: 'Unauthorized' });
 
             const { id } = req.params;
-            const success = await eventService.deleteEvent(id);
+            const success = await eventService.deleteEvent(req.userId, id);
 
-            if (!success) return res.status(500).json({ error: 'Failed to delete event' });
+            if (!success) return res.status(404).json({ error: 'Event not found' });
             res.status(204).send();
         } catch (error: any) {
             console.error('Error deleting event:', error);

@@ -43,7 +43,7 @@ export const productService = {
     },
 
     // Update a product
-    async updateProduct(productId: string, updates: Partial<Product>): Promise<Product | null> {
+    async updateProduct(userId: string, productId: string, updates: Partial<Product>): Promise<Product | null> {
         const dbUpdates: Partial<ProductDB> = {};
         if (updates.name !== undefined) dbUpdates.name = updates.name;
         if (updates.price !== undefined) dbUpdates.price = updates.price;
@@ -55,6 +55,7 @@ export const productService = {
             .from('products')
             .update(dbUpdates)
             .eq('id', productId)
+            .eq('user_id', userId)
             .select()
             .single();
 
@@ -67,18 +68,21 @@ export const productService = {
     },
 
     // Delete a product
-    async deleteProduct(productId: string): Promise<boolean> {
-        const { error } = await supabase
+    async deleteProduct(userId: string, productId: string): Promise<boolean> {
+        const { data, error } = await supabase
             .from('products')
             .delete()
-            .eq('id', productId);
+            .eq('id', productId)
+            .eq('user_id', userId)
+            .select('id')
+            .maybeSingle();
 
         if (error) {
             console.error('Error deleting product:', error);
             return false;
         }
 
-        return true;
+        return Boolean(data);
     },
 
     // Replace all products for a profile (bulk update)

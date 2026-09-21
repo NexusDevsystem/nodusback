@@ -21,6 +21,7 @@
   },
   "testMatch": ["**/__tests__/**/*.test.ts"],
   "verbose": true,
+  "modulePathIgnorePatterns": ["<rootDir>/dist/"],
   "forceExit": true,
   "testTimeout": 30000
 }

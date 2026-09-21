@@ -4,6 +4,45 @@ import { AbacateService } from '../services/abacateService.js';
 import { UserProfileDB, dbToApi } from '../models/types.js';
 import crypto from 'crypto';
 
+const processedWebhookEvents = new Map<string, number>();
+const WEBHOOK_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const getWebhookSignature = (req: Request): string | null => {
+    const value = req.headers['x-webhook-signature']
+        || req.headers['x-abacate-signature']
+        || req.headers['x-signature'];
+    return Array.isArray(value) ? value[0] : (value ? String(value) : null);
+};
+
+const isValidWebhookSignature = (req: Request, secret: string): boolean => {
+    const received = getWebhookSignature(req)?.replace(/^sha256=/i, '').trim();
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+    const body = rawBody || Buffer.from(JSON.stringify(req.body || {}));
+    const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
+
+    if (!received || received.length !== expected.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(received, 'utf8'), Buffer.from(expected, 'utf8'));
+};
+
+const getWebhookEventId = (payload: any): string => String(
+    payload.id
+    || payload.eventId
+    || payload.data?.id
+    || payload.data?.billing?.id
+    || payload.data?.billing?.externalId
+    || ''
+).trim();
+
+const rememberWebhookEvent = (eventId: string): boolean => {
+    const now = Date.now();
+    for (const [id, timestamp] of processedWebhookEvents) {
+        if (now - timestamp > WEBHOOK_REPLAY_WINDOW_MS) processedWebhookEvents.delete(id);
+    }
+    if (processedWebhookEvents.has(eventId)) return false;
+    processedWebhookEvents.set(eventId, now);
+    return true;
+};
+
 export class BillingController {
     /**
      * User wants to buy a plan.
@@ -44,7 +83,7 @@ export class BillingController {
             res.json({ url: checkoutUrl });
         } catch (error: any) {
             console.error('[CHECKOUT] Erro:', error.message);
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'Não foi possível iniciar o checkout.' });
         }
     }
 
@@ -53,14 +92,26 @@ export class BillingController {
      */
     static async webhook(req: Request, res: Response) {
         const expectedSecret = process.env.ABACATE_PAY_WEBHOOK_SECRET;
-        const webhookSecret = req.query.webhookSecret;
+        if (!expectedSecret) {
+            console.error('[WEBHOOK] ABACATE_PAY_WEBHOOK_SECRET is not configured');
+            return res.status(503).json({ error: 'Webhook not configured' });
+        }
 
-        if (expectedSecret && webhookSecret !== expectedSecret) {
+        if (!isValidWebhookSignature(req, expectedSecret)) {
             console.warn('[WEBHOOK] Assinatura inválida');
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
         const payload = req.body;
+        const eventId = getWebhookEventId(payload);
+        if (!eventId) {
+            console.warn('[WEBHOOK] Event ID ausente');
+            return res.status(400).json({ error: 'Missing event ID' });
+        }
+        if (!rememberWebhookEvent(eventId)) {
+            return res.status(200).json({ received: true, duplicate: true });
+        }
+
         if (payload.event !== 'billing.paid') {
             return res.sendStatus(200);
         }
@@ -85,8 +136,8 @@ export class BillingController {
         if (!customerId || customerId === 'null' || customerId === 'undefined') customerId = "";
 
         if (!customerEmail && !customerId) {
-            console.error('[WEBHOOK] Identificadores ausentes no payload:', JSON.stringify(payload, null, 2));
-            return res.sendStatus(200);
+            console.error('[WEBHOOK] Identificadores ausentes no payload');
+            return res.status(400).json({ error: 'Missing customer identifier' });
         }
 
         // 2. Busca de Usuário (Prioridade E-mail)
@@ -125,6 +176,8 @@ export class BillingController {
             .eq('id', user.id);
 
         if (updateError) {
+            // Permite que o provedor reenvie o evento depois de uma falha transitória.
+            processedWebhookEvents.delete(eventId);
             console.error('[WEBHOOK] Falha ao atualizar Supabase:', updateError.message);
         } else {
             console.log(`[WEBHOOK] SUCESSO: Plano ${planType} ativado para ${user.email}`);
@@ -286,7 +339,7 @@ export class BillingController {
             res.json(dbToApi(user as UserProfileDB));
         } catch (error: any) {
             console.error('[RECONCILE] Erro critico:', error.message);
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'Não foi possível sincronizar a assinatura.' });
         }
     }
     /**
@@ -299,7 +352,8 @@ export class BillingController {
                 env: process.env.NODE_ENV || 'development'
             });
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            console.error('[BILLING] Failed to load configuration:', error);
+            res.status(500).json({ error: 'Não foi possível carregar a configuração de cobrança.' });
         }
     }
 }

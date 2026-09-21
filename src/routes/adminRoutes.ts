@@ -26,7 +26,8 @@ router.get('/users/emails', authMiddleware, (req: AuthRequest, res: any, next) =
         if (error) throw error;
         res.json(data.map((u: any) => u.email));
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        console.error('[Admin] Failed to list user emails:', err);
+        res.status(500).json({ error: 'Falha ao carregar emails' });
     }
 });
 

@@ -46,17 +46,15 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
         if (error) {
             console.error('❌ Supabase error creating task:', error);
-            return res.status(error.code === '42P01' ? 404 : 500).json({ 
-                error: `Erro no banco de dados: ${error.message}`,
-                code: error.code,
-                detail: error.details
+            return res.status(error.code === '42P01' ? 404 : 500).json({
+                error: error.code === '42P01' ? 'Recurso não disponível.' : 'Não foi possível criar a sugestão.'
             });
         }
 
         return res.status(201).json(data);
     } catch (error: any) {
         console.error('❌ Crash creating roadmap task:', error);
-        return res.status(500).json({ error: error.message || 'Failed to create roadmap task' });
+        return res.status(500).json({ error: 'Falha ao criar sugestão.' });
     }
 };
 

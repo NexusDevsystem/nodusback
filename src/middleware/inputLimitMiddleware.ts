@@ -6,6 +6,9 @@ import { Request, Response, NextFunction } from 'express';
  * This is a secondary layer to the global 2MB limit in express.json.
  */
 const MAX_STRING_LENGTH = 10000; // 10k chars is plenty for any legitimate Nodus field
+const MAX_NESTING_DEPTH = 20;
+const MAX_ARRAY_ITEMS = 1000;
+const MAX_OBJECT_KEYS = 200;
 const FIELD_LIMITS: Record<string, number> = {
     'url': 2048,           // Standard safe URL length
     'name': 250,           // User/Link/Product name
@@ -21,8 +24,11 @@ const FIELD_LIMITS: Record<string, number> = {
     'customBackground': 500000, // Backgrounds can be larger
 };
 
-const validateLimits = (data: any): string | null => {
+const validateLimits = (data: any, depth = 0): string | null => {
     if (typeof data !== 'object' || data === null) return null;
+    if (depth > MAX_NESTING_DEPTH) return 'Payload excede a profundidade máxima permitida.';
+    if (Array.isArray(data) && data.length > MAX_ARRAY_ITEMS) return 'Payload contém itens demais.';
+    if (!Array.isArray(data) && Object.keys(data).length > MAX_OBJECT_KEYS) return 'Payload contém campos demais.';
 
     for (const key in data) {
         const value = data[key];
@@ -34,7 +40,7 @@ const validateLimits = (data: any): string | null => {
             }
         } else if (typeof value === 'object' && value !== null) {
             // Recursive check for nested objects/arrays
-            const error = validateLimits(value);
+            const error = validateLimits(value, depth + 1);
             if (error) return error;
         }
     }

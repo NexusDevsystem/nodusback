@@ -19,8 +19,8 @@ const SCOPES = [
 /**
  * Generate the Google OAuth URL
  */
-export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
-    const state = Buffer.from(JSON.stringify({ userId, origin })).toString('base64');
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string, stateOverride?: string) => {
+    const state = stateOverride || Buffer.from(JSON.stringify({ userId, origin })).toString('base64');
 
     // Always prefer the fixed YOUTUBE_REDIRECT_URI env var if set.
     // The dynamic backendBaseUrl can be wrong (http vs https) in production environments like Railway.

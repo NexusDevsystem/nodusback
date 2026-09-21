@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { createHash, randomInt } from 'node:crypto';
 import { supabase } from '../config/supabaseClient.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 
@@ -16,6 +17,17 @@ const FINAL_JWT_SECRET = JWT_SECRET;
 const FINAL_RESET_SECRET = RESET_SECRET;
 
 const SALT_ROUNDS = 12;
+const consumedResetTokens = new Map<string, number>();
+
+const resetTokenWasConsumed = (token: string) => {
+    const expiresAt = consumedResetTokens.get(token);
+    if (!expiresAt) return false;
+    if (expiresAt <= Date.now()) {
+        consumedResetTokens.delete(token);
+        return false;
+    }
+    return true;
+};
 
 export const register = async (req: Request, res: Response) => {
     try {
@@ -182,9 +194,10 @@ export const login = async (req: Request, res: Response) => {
 export const requestPasswordReset = async (req: Request, res: Response) => {
     try {
         const { email } = req.body;
-        if (!email) return res.status(400).json({ error: 'Email é obrigatório.' });
+        if (typeof email !== 'string' || !email.trim()) return res.status(400).json({ error: 'Email é obrigatório.' });
 
         const sanitizedEmail = email.toLowerCase().trim();
+        const genericResponse = { message: 'Se o email estiver cadastrado, enviaremos um código de recuperação.' };
 
         // Check if user exists and is an email user
         const { data: user, error: userError } = await supabase
@@ -193,17 +206,22 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
             .eq('email', sanitizedEmail)
             .maybeSingle();
 
-        if (userError || !user) {
-            // For security, don't reveal if email exists or not exactly, but here we keep it friendly
-            return res.status(404).json({ error: 'Nenhuma conta encontrada com este email.' });
+        if (userError) {
+            console.error('Failed to look up password reset account:', userError);
+            return res.status(200).json(genericResponse);
+        }
+
+        if (!user) {
+            return res.status(200).json(genericResponse);
         }
 
         if (user.auth_provider === 'google') {
-            return res.status(400).json({ error: 'Esta conta utiliza login pelo Google.' });
+            return res.status(200).json(genericResponse);
         }
 
         // Generate 6 digit code
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const code = randomInt(100000, 1000000).toString();
+        const codeDigest = createHash('sha256').update(code).digest('hex');
 
         // Expire in 15 mins
         const expiresAt = new Date();
@@ -222,7 +240,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
             .insert({
                 user_id: user.id,
                 email: sanitizedEmail,
-                code,
+                code: codeDigest,
                 expires_at: expiresAt.toISOString(),
                 used: false
             });
@@ -250,16 +268,19 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
 export const verifyResetCode = async (req: Request, res: Response) => {
     try {
         const { email, code } = req.body;
-        if (!email || !code) return res.status(400).json({ error: 'Email e código são obrigatórios.' });
+        if (typeof email !== 'string' || typeof code !== 'string' || !email.trim() || !/^\d{6}$/.test(code)) {
+            return res.status(400).json({ error: 'Email e código são obrigatórios.' });
+        }
 
         const sanitizedEmail = email.toLowerCase().trim();
+        const codeDigest = createHash('sha256').update(code).digest('hex');
 
         // Find active OTP
         const { data: otpRecords, error: otpError } = await supabase
             .from('auth_otps')
             .select('*')
             .eq('email', sanitizedEmail)
-            .eq('code', code)
+            .eq('code', codeDigest)
             .eq('used', false)
             .gte('expires_at', new Date().toISOString())
             .order('created_at', { ascending: false })
@@ -299,7 +320,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     try {
         const { resetToken, newPassword } = req.body;
 
-        if (!resetToken || !newPassword) {
+        if (typeof resetToken !== 'string' || typeof newPassword !== 'string' || !resetToken || !newPassword) {
             return res.status(400).json({ error: 'Dados insuficientes para redefinição.' });
         }
 
@@ -310,13 +331,17 @@ export const resetPassword = async (req: Request, res: Response) => {
         // Verify token
         let decoded: any;
         try {
-            decoded = jwt.verify(resetToken, FINAL_RESET_SECRET);
+            decoded = jwt.verify(resetToken, FINAL_RESET_SECRET, { algorithms: ['HS256'] });
         } catch (err) {
             return res.status(401).json({ error: 'Sessão de redefinição inválida ou expirada.' });
         }
 
         if (decoded.purpose !== 'password_reset') {
             return res.status(401).json({ error: 'Token inválido.' });
+        }
+
+        if (typeof decoded.userId !== 'string' || resetTokenWasConsumed(resetToken)) {
+            return res.status(401).json({ error: 'Token inválido ou já utilizado.' });
         }
 
         // Hash new password
@@ -331,6 +356,13 @@ export const resetPassword = async (req: Request, res: Response) => {
         if (updateError) {
             console.error('Failed to update password:', updateError);
             return res.status(500).json({ error: 'Erro ao salvar a nova senha.' });
+        }
+
+        consumedResetTokens.set(resetToken, Date.now() + 15 * 60 * 1000);
+        if (consumedResetTokens.size > 10000) {
+            for (const [token, expiresAt] of consumedResetTokens) {
+                if (expiresAt <= Date.now()) consumedResetTokens.delete(token);
+            }
         }
 
         return res.status(200).json({ message: 'Senha redefinida com sucesso. Faça login.' });

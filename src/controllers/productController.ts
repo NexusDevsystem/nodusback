@@ -64,8 +64,12 @@ export const productController = {
     // Update a product
     async updateProduct(req: AuthRequest, res: Response) {
         try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
             const { id } = req.params;
-            const product = await productService.updateProduct(id, req.body);
+            const product = await productService.updateProduct(req.profileId, id, req.body);
 
             if (!product) {
                 return res.status(404).json({ error: 'Product not found' });
@@ -80,8 +84,12 @@ export const productController = {
     // Delete a product
     async deleteProduct(req: AuthRequest, res: Response) {
         try {
+            if (!req.profileId) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
             const { id } = req.params;
-            const deleted = await productService.deleteProduct(id);
+            const deleted = await productService.deleteProduct(req.profileId, id);
 
             if (!deleted) {
                 return res.status(404).json({ error: 'Product not found' });
@@ -129,6 +137,9 @@ export const productController = {
             res.json(savedStores);
         } catch (error) {
             console.error('Error replacing stores:', error);
+            if ((error as { code?: string }).code === 'OWNERSHIP_VIOLATION') {
+                return res.status(403).json({ error: 'You do not own one or more stores' });
+            }
             res.status(500).json({ error: 'Failed to replace stores' });
         }
     }

@@ -7,6 +7,7 @@ import { supabase } from '../config/supabaseClient.js';
 import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
 import axios from 'axios';
+import { randomUUID } from 'node:crypto';
 
 
 // Extend Express Request interface to include user and file
@@ -92,7 +93,7 @@ const fileController = {
             }
 
             // Generate a unique SHORT filename to avoid giant URLs
-            const shortId = Math.random().toString(36).substring(2, 7); // 5 random chars
+            const shortId = randomUUID().replace(/-/g, '').substring(0, 10);
             const baseName = path.basename(multerReq.file.originalname, originalExt)
                 .substring(0, 12) // Limit original name length to 12 chars
                 .replace(/[^a-zA-Z0-9]/g, '_');
@@ -100,7 +101,15 @@ const fileController = {
             const fileName = `${baseName}-${shortId}${finalExt}`;
             const folder = (req.query.folder as string) || '';
             const type = (req.query.type as string) || 'user_upload';
-            const storageFolder = folder ? `${folder}/` : '';
+            const allowedAssetTypes = new Set(['user_upload', 'blog', 'internal']);
+            if (!allowedAssetTypes.has(type)) {
+                return res.status(400).json({ error: true, message: 'Tipo de arquivo inválido.' });
+            }
+            if (folder && (!/^[a-zA-Z0-9_-]{1,40}$/.test(folder) || folder === '.' || folder === '..')) {
+                return res.status(400).json({ error: true, message: 'Pasta de upload inválida.' });
+            }
+            const storageFolderName = type === 'blog' ? 'blog' : folder;
+            const storageFolder = storageFolderName ? `${storageFolderName}/` : '';
             const filePath = `${userId}/${storageFolder}${fileName}`;
 
             // Upload to Supabase Storage
@@ -153,7 +162,7 @@ const fileController = {
         } catch (error: any) {
             console.error('Upload error:', error);
             const status = error.message?.includes('Invalid file type') ? 400 : 500;
-            res.status(status).json({ error: true, message: error.message || 'Error uploading file' });
+            res.status(status).json({ error: true, message: status === 400 ? error.message : 'Error uploading file' });
         }
     },
 
@@ -274,7 +283,7 @@ const fileController = {
             res.json({ success: true, url: publicUrl });
         } catch (error: any) {
             console.error('Sync blog card error:', error);
-            res.status(500).json({ error: true, message: error.message });
+            res.status(500).json({ error: true, message: 'Erro ao sincronizar cartão do blog.' });
         }
     },
 
@@ -315,7 +324,7 @@ const fileController = {
             res.json({ success: true, url: publicUrl });
         } catch (error: any) {
             console.error('Sync profile card error:', error);
-            res.status(500).json({ error: true, message: error.message });
+            res.status(500).json({ error: true, message: 'Erro ao sincronizar cartão do perfil.' });
         }
     },
 
@@ -347,7 +356,10 @@ const fileController = {
 
             // Reconstruct the original Supabase Cloud URl
             const storageFolder = asset.asset_type === 'blog' ? 'blog/' : '';
-            const supabaseUrl = process.env.SUPABASE_URL || 'https://gadqvlcijsmgtbwydvay.supabase.co';
+            const supabaseUrl = process.env.SUPABASE_URL;
+            if (!supabaseUrl) {
+                return res.status(503).send('Armazenamento não configurado.');
+            }
             const cloudUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${asset.user_id}/${storageFolder}${filename}`;
 
             // Perform 302 redirect to original cloud storage URL (fastest and most reliable)

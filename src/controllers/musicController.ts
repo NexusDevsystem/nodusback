@@ -2,6 +2,33 @@ import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
 import { ssrfFetch, safeFetch, SsrfError } from '../utils/ssrfGuard.js';
 
+type SupportedPlatform = 'spotify' | 'deezer' | 'tiktok' | 'youtube';
+
+const getSupportedPlatform = (rawUrl: string): SupportedPlatform | null => {
+    let parsed: URL;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        return null;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    if (new Set(['open.spotify.com', 'spotify.com', 'www.spotify.com']).has(hostname)) return 'spotify';
+    if (new Set(['deezer.com', 'www.deezer.com', 'api.deezer.com']).has(hostname)) return 'deezer';
+    if (new Set(['tiktok.com', 'www.tiktok.com', 'm.tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com']).has(hostname)) return 'tiktok';
+    if (new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be']).has(hostname)) return 'youtube';
+    return null;
+};
+
+const isShortLink = (rawUrl: string): boolean => {
+    try {
+        const hostname = new URL(rawUrl).hostname.toLowerCase();
+        return hostname === 'link.deezer.com' || hostname === 'deezer.page.link' || hostname === 'spotify.link';
+    } catch {
+        return false;
+    }
+};
+
 /**
  * Music Controller
  * Handles metadata for embeddable media content:
@@ -24,7 +51,7 @@ export const musicController = {
             let targetVideoUrl = '';
 
             // Resolve shortened links — user-supplied URL, must use SSRF guard
-            if (url.includes('link.deezer.com') || url.includes('deezer.page.link') || url.includes('spotify.link')) {
+            if (isShortLink(url)) {
                 try {
                     const result = await ssrfFetch(url, { timeout: 5000 });
                     targetUrl = result.finalUrl;
@@ -36,17 +63,13 @@ export const musicController = {
                 }
             }
 
-            const isSpotify = targetUrl.includes('spotify.com');
-            const isDeezer = targetUrl.includes('deezer.com');
-            const isTiktok = targetUrl.includes('tiktok.com');
-            const isYoutube = targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be');
-
-            if (!isSpotify && !isDeezer && !isTiktok && !isYoutube) {
+            let platform = getSupportedPlatform(targetUrl);
+            if (!platform) {
                 return res.status(400).json({ error: 'Unsupported platform' });
             }
 
             // Resolve TikTok shortened links — user-supplied URL, must use SSRF guard
-            if (isTiktok && (url.includes('/vm/') || url.includes('/vt/') || url.includes('/v/') || url.includes('/t/'))) {
+            if (platform === 'tiktok' && (url.includes('/vm/') || url.includes('/vt/') || url.includes('/v/') || url.includes('/t/'))) {
                 try {
                     const result = await ssrfFetch(url, {
                         timeout: 5000,
@@ -62,6 +85,14 @@ export const musicController = {
                 }
             }
 
+            platform = getSupportedPlatform(targetUrl);
+            if (!platform) return res.status(400).json({ error: 'Unsupported platform' });
+
+            const isSpotify = platform === 'spotify';
+            const isDeezer = platform === 'deezer';
+            const isTiktok = platform === 'tiktok';
+            const isYoutube = platform === 'youtube';
+
             let title = '';
             let artist = '';
             let thumbnailUrl = '';
@@ -76,7 +107,8 @@ export const musicController = {
 
             try {
                 if (oembedUrl) {
-                    const response = await fetch(oembedUrl, {
+                    const response = await safeFetch(oembedUrl, {
+                        timeout: 5000,
                         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
                     });
                     if (response.ok) {
@@ -102,7 +134,8 @@ export const musicController = {
             if (!title || !artist || !thumbnailUrl || isTiktok || isAlbumOrPlaylist) {
                 try {
                     const fetchUrl = encodeURI(targetUrl);
-                    const pageRes = await fetch(fetchUrl, {
+                    const pageRes = await safeFetch(fetchUrl, {
+                        timeout: 5000,
                         headers: {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -140,7 +173,8 @@ export const musicController = {
                                 console.log(`[Metadata] Detected Spotify ${entityType}: ${entityId}`);
 
                                 if (entityId && entityType) {
-                                    const embedRes = await fetch(`https://open.spotify.com/embed/${entityType}/${entityId}`, {
+                                    const embedRes = await safeFetch(`https://open.spotify.com/embed/${entityType}/${entityId}`, {
+                                        timeout: 5000,
                                         headers: {
                                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                                             'Referer': 'https://open.spotify.com/'
@@ -193,7 +227,8 @@ export const musicController = {
                                 console.log(`[Metadata] Detected Deezer ${entityType}: ${entityId}`);
 
                                 if (entityId && entityType) {
-                                    const apiRes = await fetch(`https://api.deezer.com/${entityType}/${entityId}`, {
+                                    const apiRes = await safeFetch(`https://api.deezer.com/${entityType}/${entityId}`, {
+                                        timeout: 5000,
                                         headers: { 'User-Agent': 'Mozilla/5.0' }
                                     });
                                     if (apiRes.ok) {
@@ -264,8 +299,6 @@ export const musicController = {
                 if (idMatch) videoId = idMatch[1];
             }
 
-            const platform = isSpotify ? 'spotify' : isDeezer ? 'deezer' : isTiktok ? 'tiktok' : 'youtube';
-
             return res.json({
                 title: title || 'Link Desconhecido',
                 artist: artist || '',
@@ -280,7 +313,7 @@ export const musicController = {
 
         } catch (error: any) {
             console.error('[MusicMetadata] Critical Error:', error);
-            res.status(500).json({ error: 'Internal server error', details: error.message });
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
 };

@@ -2,7 +2,7 @@ import { supabase } from '../config/supabaseClient.js';
 import { LinkItem, LinkItemDB, linkDbToApi, linkApiToDb } from '../models/types.js';
 import { eventService } from './eventService.js';
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { isLinkIncomplete, capitalize } from '../utils/linkValidation.js';
 import { sendIncompleteLinkEmail } from './emailService.js';
 import { validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
@@ -158,7 +158,7 @@ export const linkService = {
     },
 
     // Update a link
-    async updateLink(linkId: string, updates: Partial<LinkItem>): Promise<LinkItem | null> {
+    async updateLink(userId: string, linkId: string, updates: Partial<LinkItem>): Promise<LinkItem | null> {
         const dbUpdates: Partial<LinkItemDB> = {};
         if (updates.title !== undefined) dbUpdates.title = updates.title;
         if (updates.url !== undefined) dbUpdates.url = updates.url;
@@ -181,6 +181,7 @@ export const linkService = {
             .from('links')
             .update(dbUpdates)
             .eq('id', linkId)
+            .eq('user_id', userId)
             .select()
             .maybeSingle();
 
@@ -195,7 +196,19 @@ export const linkService = {
     },
 
     // Delete a link
-    async deleteLink(linkId: string): Promise<boolean> {
+    async deleteLink(userId: string, linkId: string): Promise<boolean> {
+        const { data: ownedLink, error: ownershipError } = await supabase
+            .from('links')
+            .select('id')
+            .eq('id', linkId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (ownershipError || !ownedLink) {
+            if (ownershipError) console.error('Error validating link ownership:', ownershipError);
+            return false;
+        }
+
         const { error: clicksError } = await supabase
             .from('clicks')
             .delete()
@@ -219,7 +232,7 @@ export const linkService = {
     },
 
     // Increment clicks and track event
-    async incrementClicks(id: string): Promise<void> {
+    async incrementClicks(id: string, fingerprint?: string): Promise<void> {
         try {
             let userId: string | null = null;
             let type: 'link' | 'product' = 'link';
@@ -248,6 +261,25 @@ export const linkService = {
 
             if (!userId) return;
 
+            if (fingerprint) {
+                const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+                let recentQuery = supabase
+                    .from('clicks')
+                    .select('id')
+                    .eq('user_id', userId)
+                    .eq('type', 'click')
+                    .eq('fingerprint', fingerprint)
+                    .gte('created_at', since)
+                    .limit(1);
+
+                recentQuery = type === 'link'
+                    ? recentQuery.eq('link_id', id)
+                    : recentQuery.eq('product_id', id);
+
+                const { data: recentClick } = await recentQuery.maybeSingle();
+                if (recentClick) return;
+            }
+
             const { error: incError } = await supabase.rpc(
                 type === 'link' ? 'increment_link_clicks' : 'increment_product_clicks',
                 { [type === 'link' ? 'link_id' : 'product_id']: id }
@@ -263,7 +295,8 @@ export const linkService = {
                 user_id: userId,
                 link_id: type === 'link' ? id : null,
                 product_id: type === 'product' ? id : null,
-                type: 'click'
+                type: 'click',
+                fingerprint: fingerprint || null
             });
 
         } catch (error) {
@@ -289,10 +322,13 @@ export const linkService = {
 
             const getValidId = (oldId?: string) => {
 
-                if (!oldId) return uuidv4();
-                if (UUID_REGEX.test(oldId)) return oldId;
+                if (!oldId) return randomUUID();
                 if (idMap.has(oldId)) return idMap.get(oldId)!;
-                const newId = uuidv4();
+                // Existing UUIDs are reusable only when they belong to this
+                // profile. Foreign IDs are remapped to a fresh UUID instead
+                // of being upserted across tenants.
+                if (UUID_REGEX.test(oldId) && existingIds.has(oldId)) return oldId;
+                const newId = randomUUID();
                 idMap.set(oldId, newId);
                 return newId;
             };
@@ -367,7 +403,7 @@ export const linkService = {
             const idsToDelete = Array.from(existingIds).filter(id => !activeIds.has(id));
             if (idsToDelete.length > 0) {
                 await supabase.from('clicks').delete().in('link_id', idsToDelete);
-                await supabase.from('links').delete().in('id', idsToDelete);
+                await supabase.from('links').delete().in('id', idsToDelete).eq('user_id', userId);
             }
 
             // 5. Start notification countdown if incomplete links found (Worker handles the sending)

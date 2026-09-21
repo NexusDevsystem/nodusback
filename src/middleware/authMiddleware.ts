@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabaseClient.js';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -12,6 +13,22 @@ if (!JWT_SECRET) {
 
 const FINAL_JWT_SECRET = JWT_SECRET;
 console.log(`🔐 Auth secret initialized (Length: ${FINAL_JWT_SECRET.length})`);
+
+const SUPERADMIN_EMAILS = new Set(
+    (process.env.SUPERADMIN_EMAILS || '')
+        .split(',')
+        .map(email => email.trim().toLowerCase())
+        .filter(Boolean)
+);
+const SUPERADMIN_USER_IDS = new Set(
+    (process.env.SUPERADMIN_USER_IDS || '')
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean)
+);
+
+const isSuperAdmin = (userId: string, email?: string) =>
+    SUPERADMIN_USER_IDS.has(userId) || SUPERADMIN_EMAILS.has((email || '').trim().toLowerCase());
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -42,7 +59,8 @@ export const authMiddleware = async (
 
         // --- 1. Try internal JWT first (email/password users) ---
         try {
-            const payload = jwt.verify(token, FINAL_JWT_SECRET) as { userId: string; email: string };
+            const payload = jwt.verify(token, FINAL_JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string; email: string };
+            if (typeof payload.userId !== 'string' || !payload.userId) throw new Error('Invalid JWT subject');
 
             // Valid internal token - look up profile directly in DB
             const { data: profile, error: profileError } = await supabase
@@ -60,7 +78,7 @@ export const authMiddleware = async (
             req.username = profile.username;
             req.email = payload.email;
             req.isImpersonated = (payload as any).isImpersonated === true;
-            req.role = (profile.username === 'nodus' || payload.email === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
+            req.role = isSuperAdmin(profile.id, payload.email) ? 'superadmin' : 'user';
             
             console.log(`✅ Auth (JWT): Request authorized for ${payload.email} (ID: ${profile.id}, Role: ${req.role})`);
             return next();
@@ -134,7 +152,7 @@ export const authMiddleware = async (
                 .from('users')
                 .insert({
                     email: sanitizedEmail,
-                    username: `${sanitizedEmail.split('@')[0]}_${Math.random().toString(36).substring(2, 7)}`,
+                    username: `${sanitizedEmail.split('@')[0]}_${randomUUID().slice(0, 6)}`,
                     name: email.split('@')[0], // Default name from email
                     onboarding_completed: false,
                     auth_provider: 'google',
@@ -162,7 +180,7 @@ export const authMiddleware = async (
         req.username = profile.username;
         req.email = sanitizedEmail;
         // In the future, role check can be profile.role === 'admin' 
-        req.role = (profile.username === 'nodus' || sanitizedEmail === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
+        req.role = isSuperAdmin(profile.id, sanitizedEmail) ? 'superadmin' : 'user';
 
         console.log(`✅ Auth: Request authorized for ${sanitizedEmail} (ID: ${profile.id}, Role: ${req.role})`);
 
@@ -190,7 +208,8 @@ export const optionalAuthMiddleware = async (
 
             // --- 1. Try internal JWT first ---
             try {
-                const payload = jwt.verify(token, FINAL_JWT_SECRET) as { userId: string; email: string };
+                const payload = jwt.verify(token, FINAL_JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string; email: string };
+                if (typeof payload.userId !== 'string' || !payload.userId) throw new Error('Invalid JWT subject');
                 const { data: profile } = await supabase
                     .from('users')
                     .select('id, username')
@@ -202,7 +221,7 @@ export const optionalAuthMiddleware = async (
                     req.profileId = profile.id;
                     req.username = profile.username;
                     req.email = payload.email;
-                    req.role = (profile.username === 'nodus' || payload.email === 'jaoomarcos75@gmail.com') ? 'superadmin' : 'user';
+                    req.role = isSuperAdmin(profile.id, payload.email) ? 'superadmin' : 'user';
                     return next();
                 }
             } catch (e) {

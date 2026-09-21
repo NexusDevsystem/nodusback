@@ -10,9 +10,8 @@ export const sendPasswordResetEmail = async (to: string, code: string, name: str
         const privateKey = process.env.EMAILJS_PRIVATE_KEY; // EmailJS Private Key for API calls
 
         if (!serviceId || !templateId || !publicKey || !privateKey) {
-            console.warn('⚠️ [EmailJS] Missing credentials in .env. Skipping actual email send. Code:', code);
-            console.log(`🔑 [DEBUG] OTP for ${to}: ${code}`);
-            return true; // Simulate success for dev
+            console.warn('⚠️ [EmailJS] Missing credentials in .env. Password reset email was not sent.');
+            return false;
         }
 
         const data = {
@@ -30,7 +29,8 @@ export const sendPasswordResetEmail = async (to: string, code: string, name: str
         };
 
         await axios.post('https://api.emailjs.com/api/v1.0/email/send', data, {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
         });
 
         console.log(`✅ [EmailJS] Password reset sent to ${to}`);
@@ -71,7 +71,8 @@ export const sendIncompleteLinkEmail = async (to: string, name: string, missingL
         };
 
         await axios.post('https://api.emailjs.com/api/v1.0/email/send', data, {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
         });
 
         console.log(`✅ [EmailJS] Incomplete link notification sent to ${to} (${missingLinks})`);

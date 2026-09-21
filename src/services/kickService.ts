@@ -88,13 +88,14 @@ export const ensureKickLink = async (userId: string, kickUsername: string) => {
 /**
  * Generates the Kick Auth URL with PKCE
  */
-export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string, stateOverride?: string, verifierOverride?: string) => {
     const { CLIENT_ID, REDIRECT_URI } = getKickConfig();
-    const verifier = generateCodeVerifier();
+    const verifier = verifierOverride || generateCodeVerifier();
     const challenge = generateCodeChallenge(verifier);
 
-    // Store verifier in state to retrieve it later in the callback
-    const state = Buffer.from(JSON.stringify({
+    // The controller provides a signed state in production. Keep the legacy
+    // fallback for callers outside the HTTP flow.
+    const state = stateOverride || Buffer.from(JSON.stringify({
         userId,
         verifier,
         origin: origin || 'production'

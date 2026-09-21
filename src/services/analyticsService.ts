@@ -158,8 +158,34 @@ export const analyticsService = {
     },
 
     // Track a page view event
-    async trackView(userId: string, fingerprint?: string): Promise<void> {
+    async trackView(userId: string, fingerprint?: string): Promise<boolean> {
         console.log(`📊 [Analytics] trackView: userId=${userId}${fingerprint ? `, fingerprint=${fingerprint}` : ''}`);
+
+        const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (profileError || !profile) {
+            throw new Error('Profile not found');
+        }
+
+        if (fingerprint) {
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const { data: recentView } = await supabase
+                .from('clicks')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('type', 'view')
+                .eq('fingerprint', fingerprint)
+                .gte('created_at', since)
+                .limit(1)
+                .maybeSingle();
+
+            if (recentView) return false;
+        }
+
         const payload = {
             user_id: userId,
             type: 'view',
@@ -186,6 +212,7 @@ export const analyticsService = {
         }
 
         console.log(`✅ [Analytics] View tracked successfully`);
+        return true;
     },
 
     // Track a custom event

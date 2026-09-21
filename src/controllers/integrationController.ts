@@ -1,25 +1,36 @@
 
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import * as tiktokService from '../services/tiktokService.js';
 import * as instagramService from '../services/instagramService.js';
 import * as twitchService from '../services/twitchService.js';
 import * as youtubeService from '../services/youtubeService.js';
 import * as kickService from '../services/kickService.js';
 import { supabase } from '../config/supabaseClient.js';
+import { AuthRequest } from '../middleware/authMiddleware.js';
+import {
+    consumeOAuthState,
+    createOAuthState,
+    defaultFrontendOrigin,
+    getBackendBaseUrl,
+    resolveFrontendOrigin
+} from '../utils/oauthState.js';
 
 
-export const getTikTokAuthUrl = (req: Request, res: Response) => {
+const createPkceVerifier = () => crypto.randomBytes(32).toString('base64url');
+
+export const getTikTokAuthUrl = (req: AuthRequest, res: Response) => {
     try {
-        const { userId, origin } = req.query;
+        const userId = req.userId;
+        const origin = resolveFrontendOrigin(req.query.origin as string | undefined);
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        const url = tiktokService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
+        const verifier = createPkceVerifier();
+        const state = createOAuthState('tiktok', userId, origin, verifier);
+        const url = tiktokService.getAuthUrl(userId, origin, getBackendBaseUrl(req), state, verifier);
         res.json({ url });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(400).json({ error: error.message || 'Invalid OAuth request' });
     }
 };
 
@@ -31,46 +42,27 @@ export const handleTikTokCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Missing code' });
         }
 
-        const parts = (state as string || '').split('_');
-        const userId = parts[1];
-        const verifier = parts[2];
-        const origin = parts[3];
-
-        if (!userId || !verifier) {
-            return res.status(400).json({ error: 'Invalid state or missing PKCE verifier' });
-        }
-
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        await tiktokService.handleCallback(code as string, userId, verifier, backendBaseUrl);
-
-        const defaultFrontendUrl = process.env.FRONTEND_URL;
-        if (!defaultFrontendUrl) throw new Error('FRONTEND_URL missing');
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/editor?success=tiktok`);
+        const stateData = consumeOAuthState(String(state || ''), 'tiktok');
+        if (!stateData.verifier) throw new Error('Missing PKCE verifier');
+        await tiktokService.handleCallback(code as string, stateData.userId, stateData.verifier, getBackendBaseUrl(req));
+        res.redirect(`${stateData.origin}/editor?success=tiktok`);
     } catch (error: any) {
         console.error('TikTok Callback error:', error);
-        const state = req.query.state as string;
-        const originFromState = state?.split('_')[3];
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (originFromState && originFromState !== 'production') ? originFromState : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/editor?error=tiktok`);
+        res.redirect(`${defaultFrontendOrigin()}/editor?error=tiktok`);
     }
 };
 
-export const getInstagramAuthUrl = (req: Request, res: Response) => {
+export const getInstagramAuthUrl = (req: AuthRequest, res: Response) => {
     try {
-        const { userId, origin } = req.query;
+        const userId = req.userId;
+        const origin = resolveFrontendOrigin(req.query.origin as string | undefined);
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        const url = instagramService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
+        const state = createOAuthState('instagram', userId, origin);
+        const url = instagramService.getAuthUrl(userId, origin, getBackendBaseUrl(req), state);
         res.json({ url });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(400).json({ error: error.message || 'Invalid OAuth request' });
     }
 };
 
@@ -82,106 +74,53 @@ export const handleInstagramCallback = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Missing code' });
         }
 
-        const parts = (state as string || '').split('_');
-        const userId = parts[1];
-        const origin = parts[2];
-
-        if (!userId) {
-            return res.status(400).json({ error: 'Invalid state or missing userId' });
-        }
-
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        await instagramService.handleCallback(code as string, userId, backendBaseUrl);
-
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/editor?success=instagram`);
+        const stateData = consumeOAuthState(String(state || ''), 'instagram');
+        await instagramService.handleCallback(code as string, stateData.userId, getBackendBaseUrl(req));
+        res.redirect(`${stateData.origin}/editor?success=instagram`);
     } catch (error: any) {
         console.error('Instagram Callback error:', error);
-        const state = req.query.state as string;
-        const originFromState = state?.split('_')[2];
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (originFromState && originFromState !== 'production') ? originFromState : defaultFrontendUrl;
-        res.redirect(`${redirectUrl}/editor?error=instagram`);
+        res.redirect(`${defaultFrontendOrigin()}/editor?error=instagram`);
     }
 };
 
-export const getTwitchAuthUrl = (req: Request, res: Response) => {
+export const getTwitchAuthUrl = (req: AuthRequest, res: Response) => {
     try {
-        const { userId, origin } = req.query;
+        const userId = req.userId;
+        const origin = resolveFrontendOrigin(req.query.origin as string | undefined);
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        const url = twitchService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
+        const state = createOAuthState('twitch', userId, origin);
+        const url = twitchService.getAuthUrl(userId, origin, getBackendBaseUrl(req), state);
         res.json({ url });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(400).json({ error: error.message || 'Invalid OAuth request' });
     }
 };
 
 export const handleTwitchCallback = async (req: Request, res: Response) => {
     try {
         const { code, state, error: authError } = req.query;
-        let origin = '';
-        let userId = '';
-
-        try {
-            if (state) {
-                const base64State = (state as string).replace(/ /g, '+');
-                const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-                origin = stateData.origin;
-                userId = stateData.userId;
-            }
-        } catch (e) { }
-
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
-
-        if (authError || !code) {
-            return res.redirect(`${redirectUrl}/editor?error=twitch_auth_denied`);
-        }
-
-        if (!userId) {
-            return res.redirect(`${redirectUrl}/editor?error=twitch_invalid_state`);
-        }
-
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        await twitchService.handleCallback(code as string, userId, backendBaseUrl);
-        res.redirect(`${redirectUrl}/editor?success=twitch`);
+        const stateData = consumeOAuthState(String(state || ''), 'twitch');
+        if (authError || !code) return res.redirect(`${stateData.origin}/editor?error=twitch_auth_denied`);
+        await twitchService.handleCallback(code as string, stateData.userId, getBackendBaseUrl(req));
+        res.redirect(`${stateData.origin}/editor?success=twitch`);
     } catch (error: any) {
         console.error('Twitch Callback error:', error);
-        const state = req.query.state as string;
-        let origin = '';
-        try {
-            if (state) {
-                const base64State = state.replace(/ /g, '+');
-                const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-                origin = stateData?.origin;
-            }
-        } catch (e) { }
-        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/editor?error=twitch`);
+        res.redirect(`${defaultFrontendOrigin()}/editor?error=twitch`);
     }
 };
 
-export const getYoutubeAuthUrl = (req: Request, res: Response) => {
+export const getYoutubeAuthUrl = (req: AuthRequest, res: Response) => {
     try {
-        const { userId, origin } = req.query;
+        const userId = req.userId;
+        const origin = resolveFrontendOrigin(req.query.origin as string | undefined);
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        const url = youtubeService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
+        const state = createOAuthState('youtube', userId, origin);
+        const url = youtubeService.getAuthUrl(userId, origin, getBackendBaseUrl(req), state);
         res.json({ url });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(400).json({ error: error.message || 'Invalid OAuth request' });
     }
 };
 
@@ -190,90 +129,41 @@ export const handleYoutubeCallback = async (req: Request, res: Response) => {
         const { code, state } = req.query;
         if (!code) return res.status(400).json({ error: 'Missing code' });
 
-        const safeState = (state as string || '').replace(/ /g, '+');
-        const stateData = JSON.parse(Buffer.from(safeState, 'base64').toString());
-        const { userId, origin } = stateData || {};
-
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        await youtubeService.handleCallback(code as string, userId, backendBaseUrl);
-
-        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/editor?success=youtube`);
+        const stateData = consumeOAuthState(String(state || ''), 'youtube');
+        await youtubeService.handleCallback(code as string, stateData.userId, getBackendBaseUrl(req));
+        res.redirect(`${stateData.origin}/editor?success=youtube`);
     } catch (error: any) {
         console.error('YouTube Callback error:', error);
-        const state = req.query.state as string;
-        let origin = '';
-        try {
-            if (state) {
-                const safeState = state.replace(/ /g, '+');
-                const stateData = JSON.parse(Buffer.from(safeState, 'base64').toString());
-                origin = stateData?.origin;
-            }
-        } catch (e) { }
-        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/editor?error=youtube`);
+        res.redirect(`${defaultFrontendOrigin()}/editor?error=youtube`);
     }
 };
 
-export const getKickAuthUrl = (req: Request, res: Response) => {
+export const getKickAuthUrl = (req: AuthRequest, res: Response) => {
     try {
-        const { userId, origin } = req.query;
+        const userId = req.userId;
+        const origin = resolveFrontendOrigin(req.query.origin as string | undefined);
         if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        const url = kickService.getAuthUrl(userId as string, origin as string, backendBaseUrl);
+        const verifier = createPkceVerifier();
+        const state = createOAuthState('kick', userId, origin, verifier);
+        const url = kickService.getAuthUrl(userId, origin, getBackendBaseUrl(req), state, verifier);
         res.json({ url });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(400).json({ error: error.message || 'Invalid OAuth request' });
     }
 };
 
 export const handleKickCallback = async (req: Request, res: Response) => {
     try {
         const { code, state, error: authError } = req.query;
-        let origin = '';
-        let userId = '';
-        let verifier = '';
-
-        try {
-            if (state) {
-                const base64State = (state as string).replace(/ /g, '+');
-                const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-                origin = stateData.origin;
-                userId = stateData.userId;
-                verifier = stateData.verifier;
-            }
-        } catch (e) { }
-
-        const defaultFrontendUrl = process.env.FRONTEND_URL || 'https://www.nodus.my';
-        const redirectUrl = (origin && origin !== 'production') ? origin : defaultFrontendUrl;
-
-        if (authError || !code) {
-            return res.redirect(`${redirectUrl}/editor?error=kick_auth_denied`);
-        }
-
-        const protocol = req.protocol === 'http' && req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-        const backendBaseUrl = `${protocol}://${req.get('host')}`;
-
-        await kickService.handleCallback(code as string, userId, verifier, backendBaseUrl);
-        res.redirect(`${redirectUrl}/editor?success=kick`);
+        const stateData = consumeOAuthState(String(state || ''), 'kick');
+        if (authError || !code) return res.redirect(`${stateData.origin}/editor?error=kick_auth_denied`);
+        if (!stateData.verifier) throw new Error('Missing PKCE verifier');
+        await kickService.handleCallback(code as string, stateData.userId, stateData.verifier, getBackendBaseUrl(req));
+        res.redirect(`${stateData.origin}/editor?success=kick`);
     } catch (error: any) {
         console.error('Kick Callback error:', error);
-        const state = req.query.state as string;
-        let origin = '';
-        try {
-            if (state) {
-                const base64State = state.replace(/ /g, '+');
-                const stateData = JSON.parse(Buffer.from(base64State, 'base64').toString());
-                origin = stateData?.origin;
-            }
-        } catch (e) { }
-        const redirectUrl = (origin && !origin.includes('localhost')) ? origin : 'https://www.nodus.my';
-        res.redirect(`${redirectUrl}/editor?error=kick`);
+        res.redirect(`${defaultFrontendOrigin()}/editor?error=kick`);
     }
 };
 
@@ -319,14 +209,14 @@ export const connectKickAccount = async (req: Request, res: Response) => {
         const { data, error } = await supabase
             .from('social_integrations')
             .upsert(integrationData, { onConflict: 'user_id,provider' })
-            .select()
+            .select('provider, provider_account_id, profile_data, expires_at, created_at, updated_at')
             .single();
 
         if (error) throw error;
         await kickService.ensureKickLink(userId, cleanUsername);
         res.json({ success: true, data });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Falha ao processar a integração.' });
     }
 };
 
@@ -334,7 +224,7 @@ export const handleInstagramDeauthorize = async (req: Request, res: Response) =>
     try {
         res.status(200).send('Deauthorized successfully');
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Falha ao processar a desautorização.' });
     }
 };
 
@@ -369,13 +259,13 @@ export const getMyIntegrations = async (req: Request, res: Response) => {
 
         const { data, error } = await supabase
             .from('social_integrations')
-            .select('*')
+            .select('provider, provider_account_id, profile_data, expires_at, created_at, updated_at')
             .eq('user_id', userId);
 
         if (error) throw error;
         res.json(data);
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Falha ao carregar integrações.' });
     }
 };
 
@@ -409,7 +299,7 @@ export const disconnectIntegration = async (req: Request, res: Response) => {
 
         res.json({ success: true });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Falha ao desconectar integração.' });
     }
 };
 
@@ -426,6 +316,6 @@ export const switchInstagramAccount = async (req: Request, res: Response) => {
         }
         res.json({ success: true, profile_data: updatedProfile });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Falha ao trocar a conta do Instagram.' });
     }
 };

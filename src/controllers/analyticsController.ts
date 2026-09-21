@@ -2,6 +2,11 @@ import { Response } from 'express';
 import { analyticsService } from '../services/analyticsService.js';
 import { linkService } from '../services/linkService.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
+import { createHash } from 'node:crypto';
+
+const requestFingerprint = (req: AuthRequest) => createHash('sha256')
+    .update(`${req.ip}|${req.get('user-agent') || ''}`)
+    .digest('hex');
 
 export const analyticsController = {
     async getAllAnalytics(req: AuthRequest, res: Response) {
@@ -21,7 +26,8 @@ export const analyticsController = {
             if (!req.profileId) {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
-            const days = req.query.days ? parseInt(req.query.days as string) : 14;
+            const requestedDays = req.query.days ? Number(req.query.days) : 14;
+            const days = Number.isFinite(requestedDays) ? Math.min(Math.max(Math.trunc(requestedDays), 1), 365) : 14;
             console.log(`📊 [Analytics] getSummary: profileId=${req.profileId}, days=${days}`);
 
             // Diagnostic: check event count
@@ -48,7 +54,7 @@ export const analyticsController = {
             console.log(`📊 [Analytics] trackClick (analytics route): linkId=${linkId}`);
 
             // Increment link clicks AND record analytics event
-            await linkService.incrementClicks(linkId);
+            await linkService.incrementClicks(linkId, requestFingerprint(req));
 
             res.status(201).json({ success: true });
         } catch (error: any) {
@@ -68,7 +74,7 @@ export const analyticsController = {
             console.log(`📊 [Analytics] trackClickPublic: itemId=${itemId}`);
 
             // This calls incrementClicks which handles both the counter and the analytics event
-            await linkService.incrementClicks(itemId);
+            await linkService.incrementClicks(itemId, requestFingerprint(req));
 
             res.status(201).json({ success: true });
         } catch (error: any) {
@@ -87,12 +93,12 @@ export const analyticsController = {
 
             console.log(`📊 [Analytics] trackView: profileId=${profileId}${fingerprint ? `, fingerprint=${fingerprint}` : ''}`);
 
-            await analyticsService.trackView(profileId, fingerprint);
+            const tracked = await analyticsService.trackView(profileId, fingerprint);
 
-            res.status(201).json({ success: true });
+            res.status(201).json({ success: true, deduplicated: !tracked });
         } catch (error: any) {
             console.error('❌ [Analytics] trackView error:', error?.message || error);
-            res.status(500).json({ error: 'Failed to track view', details: error?.message });
+            res.status(500).json({ error: 'Failed to track view' });
         }
     }
 };

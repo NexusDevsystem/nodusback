@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import * as cheerio from 'cheerio';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { profileService } from '../services/profileService.js';
@@ -10,6 +10,7 @@ import axios from 'axios';
 import { safeFetch, validateUserUrl, SsrfError } from '../utils/ssrfGuard.js';
 import { realtimeManager } from '../realtime/RealtimeManager.js';
 import { supabase } from '../config/supabaseClient.js';
+import { AuthRequest } from '../middleware/authMiddleware.js';
 
 // In-memory cache for social profiles (avoids hitting rate limits)
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -18,6 +19,8 @@ const tiktokCache = new Map<string, { data: any, expiresAt: number }>();
 const twitchCache = new Map<string, { data: any; expiresAt: number }>();
 const kickCache = new Map<string, { data: any; expiresAt: number }>();
 const xCache = new Map<string, { data: any; expiresAt: number }>();
+
+const getAuthenticatedUserId = (req: Request): string | undefined => (req as AuthRequest).userId;
 
 function parseFollowerCount(str: string): number {
     if (!str) return 0;
@@ -30,6 +33,22 @@ function parseFollowerCount(str: string): number {
     if (cleanStr.includes('b')) val *= 1000000000;
     return Math.floor(val);
 }
+
+const escapeHtml = (value: unknown): string => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const safeHttpsAsset = (value: unknown, fallback: string): string => {
+    try {
+        const parsed = new URL(String(value || ''));
+        return parsed.protocol === 'https:' ? parsed.toString() : fallback;
+    } catch {
+        return fallback;
+    }
+};
 
 /**
  * SOCIAL EXTRACTION CONTROLLER
@@ -201,17 +220,17 @@ export const socialController = {
             const subscribersText = subscribers ? `${subscribers} inscritos` : '';
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata
-            if (linkId && typeof linkId === 'string' && (subscribersText || avatarUrl || latestVideo)) {
+            if (linkId && typeof linkId === 'string' && getAuthenticatedUserId(req) && (subscribersText || avatarUrl || latestVideo)) {
                 try {
                     const updates: any = {};
                     if (subscribersText) updates.subtitle = subscribersText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    
+
                     // Fetch existing metadata to merge
                     const { data: existingLink } = await supabase.from('links').select('metadata').eq('id', linkId).maybeSingle();
                     updates.metadata = { ...(existingLink?.metadata || {}), latestVideo };
-                    
-                    const updatedLink = await linkService.updateLink(linkId, updates);
+
+                    const updatedLink = await linkService.updateLink(getAuthenticatedUserId(req)!, linkId, updates);
                     
                     // 📢 Notify Realtime Manager
                     if (updatedLink && updatedLink.userId) {
@@ -283,12 +302,12 @@ export const socialController = {
                 platform: 'tiktok', profileUrl: url
             };
 
-            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+            if (linkId && typeof linkId === 'string' && getAuthenticatedUserId(req) && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
                     if (followers) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    await linkService.updateLink(linkId, updates);
+                    await linkService.updateLink(getAuthenticatedUserId(req)!, linkId, updates);
                 } catch (e) { }
             }
 
@@ -462,14 +481,14 @@ export const socialController = {
             };
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata
-            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+            if (linkId && typeof linkId === 'string' && getAuthenticatedUserId(req) && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
                     const fText = followers ? `${followers} Seguidores` : '';
                     if (fText) updates.subtitle = fText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    
-                    const updatedLink = await linkService.updateLink(linkId, updates);
+
+                    const updatedLink = await linkService.updateLink(getAuthenticatedUserId(req)!, linkId, updates);
                     console.log(`[Twitch] Auto-saved metadata for link ${linkId}: ${fText}`);
 
                     // 📢 Notify Realtime Manager
@@ -636,12 +655,12 @@ export const socialController = {
             };
 
             // 💾 AUTO-SAVE: If linkId is provided, persist the metadata to the link's subtitle
-            if (linkId && typeof linkId === 'string' && (followersText || avatarUrl)) {
+            if (linkId && typeof linkId === 'string' && getAuthenticatedUserId(req) && (followersText || avatarUrl)) {
                 try {
                     const updates: any = {};
                     if (followersText) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
-                    const updatedLink = await linkService.updateLink(linkId, updates);
+                    const updatedLink = await linkService.updateLink(getAuthenticatedUserId(req)!, linkId, updates);
                     console.log(`[Kick] Auto-saved metadata for link ${linkId}: ${followersText}`);
 
                     // 📢 Notify Realtime Manager to refresh clients
@@ -668,13 +687,27 @@ export const socialController = {
      * Fetches metadata for X (Twitter) profiles.
      */
     async getXProfileInfo(req: Request, res: Response) {
+        console.log(`\x1b[35m[DEBUG] getXProfileInfo hit for URL: ${req.query.url}\x1b[0m`);
         try {
             const { url } = req.query;
             console.log(`\x1b[36m[X/Twitter] Initiating metadata fetch for: ${url}\x1b[0m`);
             if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL is required' });
 
-            const match = url.match(/(?:x|twitter|mobile\.x|mobile\.twitter)\.com\/([^/?#\s]+)/i);
-            const username = match ? match[1].replace('@', '').toLowerCase() : null;
+            let parsedUrl: URL;
+            try {
+                parsedUrl = new URL(url);
+                await validateUserUrl(url);
+            } catch (error) {
+                if (error instanceof SsrfError) return res.status(400).json({ error: error.message, code: error.code });
+                return res.status(400).json({ error: 'Invalid X profile URL' });
+            }
+
+            const allowedHosts = new Set(['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.x.com', 'mobile.twitter.com']);
+            if (!allowedHosts.has(parsedUrl.hostname.toLowerCase())) {
+                return res.status(400).json({ error: 'Invalid X profile URL' });
+            }
+
+            const username = parsedUrl.pathname.split('/').filter(Boolean)[0]?.replace('@', '').toLowerCase() || null;
 
             if (!username || username === 'home' || username === 'explore' || username === 'notifications' || username === 'messages') {
                 return res.status(400).json({ error: 'Invalid X profile URL' });
@@ -710,10 +743,12 @@ export const socialController = {
             // Strategy: Use the Python Scrapling script for better bypass
             try {
                 console.log(`[X/Twitter] Calling Scrapling python script for ${username}...`);
-                const scriptPath = path.join(process.cwd(), 'backend', 'src', 'utils', 'x_scraper.py');
+                const scriptPath = fs.existsSync(path.join(process.cwd(), 'src', 'utils', 'x_scraper.py'))
+                    ? path.join(process.cwd(), 'src', 'utils', 'x_scraper.py')
+                    : path.join(process.cwd(), 'backend', 'src', 'utils', 'x_scraper.py');
                 
                 const pythonResult = await new Promise<any>((resolve) => {
-                    exec(`python "${scriptPath}" "${url}"`, (error, stdout, stderr) => {
+                    execFile('python', [scriptPath, url], { timeout: 25000, maxBuffer: 2 * 1024 * 1024 }, (error, stdout, stderr) => {
                         if (error) {
                             console.error(`[X/Twitter] Python Script Error:`, stderr);
                             resolve(null);
@@ -753,14 +788,20 @@ export const socialController = {
             };
 
             // 💾 AUTO-SAVE
-            if (linkId && typeof linkId === 'string' && (followers || avatarUrl)) {
+            if (linkId && typeof linkId === 'string' && getAuthenticatedUserId(req) && (followers || avatarUrl)) {
                 try {
                     const updates: any = {};
                     if (followersText) updates.subtitle = followersText;
                     if (avatarUrl) updates.image = avatarUrl;
                     
-                    const updatedLink = await linkService.updateLink(linkId, updates);
-                    
+                    // Also update title if it's default
+                    const { data: currentLink } = await supabase.from('links').select('title').eq('id', linkId).maybeSingle();
+                    if (currentLink && (!currentLink.title || currentLink.title === 'Novo Link' || currentLink.title === 'Novo')) {
+                        updates.title = name || username;
+                    }
+
+                    const updatedLink = await linkService.updateLink(getAuthenticatedUserId(req)!, linkId, updates);
+
                     if (updatedLink && updatedLink.userId) {
                         const { data: user } = await supabase.from('users').select('username').eq('id', updatedLink.userId).maybeSingle();
                         if (user?.username) realtimeManager.notifyUpdate(user.username);
@@ -782,6 +823,7 @@ export const socialController = {
      * Unified search.
      */
     async getSocialMetadata(req: Request, res: Response) {
+        console.log(`\x1b[35m[DEBUG] getSocialMetadata hit for URL: ${req.query.url}\x1b[0m`);
         const { url } = req.query;
         if (!url || typeof url !== 'string') return res.status(400).json({ error: 'URL required' });
 
@@ -853,8 +895,9 @@ export const socialController = {
             const { username } = req.params;
             const profile = await profileService.getProfileByUsername(username);
             if (!profile) return res.status(404).send('Not found');
-            const ogImage = profile.avatarUrl || 'https://nodus.my/og-default.png';
-            const html = `<html><head><title>${profile.name}</title><meta property="og:image" content="${ogImage}"><script>window.location.href = "https://nodus.my/${username}";</script></head><body>Redirecting...</body></html>`;
+            const ogImage = safeHttpsAsset(profile.avatarUrl, 'https://nodus.my/og-default.png');
+            const safeUsername = encodeURIComponent(username);
+            const html = `<html><head><title>${escapeHtml(profile.name)}</title><meta property="og:image" content="${escapeHtml(ogImage)}"><script>window.location.href = "https://nodus.my/${safeUsername}";</script></head><body>Redirecting...</body></html>`;
             res.send(html);
         } catch (e) { res.status(500).send('Error'); }
     },
@@ -864,7 +907,9 @@ export const socialController = {
             const { slug } = req.params;
             const post = await blogService.getPostBySlug(slug);
             if (!post) return res.status(404).send('Not found');
-            const html = `<html><head><title>${post.title}</title><meta property="og:image" content="${post.imageUrl}"><script>window.location.href = "https://nodus.my/blog/${slug}";</script></head><body>Redirecting...</body></html>`;
+            const ogImage = safeHttpsAsset(post.imageUrl, 'https://nodus.my/og-default.png');
+            const safeSlug = encodeURIComponent(slug);
+            const html = `<html><head><title>${escapeHtml(post.title)}</title><meta property="og:image" content="${escapeHtml(ogImage)}"><script>window.location.href = "https://nodus.my/blog/${safeSlug}";</script></head><body>Redirecting...</body></html>`;
             res.send(html);
         } catch (e) { res.status(500).send('Error'); }
     }

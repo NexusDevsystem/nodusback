@@ -18,13 +18,12 @@ const generateCodeChallenge = (verifier: string) => {
 /**
  * Generates the TikTok Auth URL
  */
-export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
-    const csrfState = Math.random().toString(36).substring(7);
-    const verifier = generateCodeVerifier();
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string, stateOverride?: string, verifierOverride?: string) => {
+    const csrfState = crypto.randomBytes(16).toString('hex');
+    const verifier = verifierOverride || generateCodeVerifier();
     const challenge = generateCodeChallenge(verifier);
 
-    // csrf_userId_verifier_origin
-    const state = `${csrfState}_${userId}_${verifier}_${origin || 'production'}`;
+    const state = stateOverride || `${csrfState}_${userId}_${verifier}_${origin || 'production'}`;
 
     const finalRedirectUri = backendBaseUrl 
         ? `${backendBaseUrl}/api/integrations/tiktok/callback` 

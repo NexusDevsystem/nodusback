@@ -3,6 +3,8 @@ import { linkService } from '../services/linkService.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { supabase } from '../config/supabaseClient.js';
 import { createHash } from 'crypto';
+import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcrypt';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -91,7 +93,8 @@ export const linkController = {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            const link = await linkService.updateLink(id, req.body);
+            const link = await linkService.updateLink(req.profileId, id, req.body);
+            if (!link) return res.status(404).json({ error: 'Link not found' });
             res.json(link);
         } catch (error) {
             console.error('Error updating link:', error);
@@ -108,7 +111,8 @@ export const linkController = {
             }
 
 
-            const deleted = await linkService.deleteLink(id);
+            const deleted = await linkService.deleteLink(req.profileId, id);
+            if (!deleted) return res.status(404).json({ error: 'Link not found' });
             res.status(204).send();
         } catch (error) {
             console.error('Error deleting link:', error);
@@ -158,7 +162,10 @@ export const linkController = {
     async trackClick(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
-            await linkService.incrementClicks(id);
+            const fingerprint = createHash('sha256')
+                .update(`${req.ip}|${req.get('user-agent') || ''}`)
+                .digest('hex');
+            await linkService.incrementClicks(id, fingerprint);
             res.status(204).send();
         } catch (error) {
             console.error('Error tracking click:', error);
@@ -191,7 +198,7 @@ export const linkController = {
             }
 
             const userId = req.userId;
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            const uniqueSuffix = `${Date.now()}-${randomUUID()}`;
             const ext = path.extname(file.originalname);
             const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
             const filename = `thumb-${name}-${uniqueSuffix}${ext}`;
@@ -337,9 +344,21 @@ export const linkController = {
                 return res.status(400).json({ error: 'Este link não está protegido por senha' });
             }
 
-            // Compare SHA-256 hash
-            const inputHash = createHash('sha256').update(password).digest('hex');
-            if (inputHash !== link.password_hash) {
+            let passwordMatches = false;
+            if (link.password_hash.startsWith('$2')) {
+                passwordMatches = await bcrypt.compare(password, link.password_hash);
+            } else {
+                // Backward compatibility for legacy SHA-256 records. Successful
+                // verification upgrades the record to bcrypt below.
+                const inputHash = createHash('sha256').update(password).digest('hex');
+                passwordMatches = inputHash === link.password_hash;
+                if (passwordMatches) {
+                    const upgradedHash = await bcrypt.hash(password, 12);
+                    await supabase.from('links').update({ password_hash: upgradedHash }).eq('id', id);
+                }
+            }
+
+            if (!passwordMatches) {
                 return res.status(401).json({ error: 'Senha incorreta' });
             }
 

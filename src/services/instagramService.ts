@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabaseClient.js';
 import { SocialIntegrationDB } from '../models/types.js';
+import crypto from 'node:crypto';
 
 const APP_ID = process.env.INSTAGRAM_APP_ID;
 const APP_SECRET = process.env.INSTAGRAM_APP_SECRET;
@@ -9,9 +10,9 @@ const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
  * Generates the Instagram Login (for Business/Professional) Auth URL
  * We now make the redirect_uri dynamic to work both in dev and prod!
  */
-export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string) => {
-    const csrfState = Math.random().toString(36).substring(7);
-    const state = `${csrfState}_${userId}_${origin || 'production'}`;
+export const getAuthUrl = (userId: string, origin?: string, backendBaseUrl?: string, stateOverride?: string) => {
+    const csrfState = crypto.randomBytes(16).toString('hex');
+    const state = stateOverride || `${csrfState}_${userId}_${origin || 'production'}`;
 
     // IMPORTANT: In prod, backendBaseUrl should be your Railway URL
     // We try to use the backendBaseUrl first, then fallback to current process env

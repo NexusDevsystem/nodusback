@@ -81,10 +81,7 @@ export const profileController = {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            const updates = req.body;
-            delete updates.customCSS;
-
-            const profile = await profileService.updateProfile(req.userId, updates);
+            const profile = await profileService.updateProfile(req.userId, req.body);
 
             if (!profile) {
                 console.error(`[PROFILE] Profile not found or failed to update for userId: ${req.userId}`);
@@ -96,7 +93,9 @@ export const profileController = {
         } catch (error: any) {
             console.error('[PROFILE] Error updating profile:', error.message);
             const status = error.message?.includes('7 dias') ? 400 : 500;
-            res.status(status).json({ error: error.message || 'Failed to update profile' });
+            res.status(status).json({
+                error: status === 400 ? error.message : 'Failed to update profile'
+            });
         }
     },
 

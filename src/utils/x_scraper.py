@@ -9,51 +9,68 @@ logging.basicConfig(level=logging.ERROR)
 
 def scrape_x(url):
     try:
-        # Use StealthyFetcher for better bypass
+        # Use StealthyFetcher with longer wait
         fetcher = StealthyFetcher()
-        page = fetcher.fetch(url, headless=True)
-        
+        page = fetcher.fetch(url, headless=True, network_idle=True, timeout=20000)
+
         if not page:
             return {"error": "Failed to fetch page"}
 
-        # 1. Try Meta Tags first (fastest)
+        full_html = str(page)
+
+        # 1. Try to find the JSON data in the script tags (The most reliable source)
+        # Patterns for X's initial state
+        # Usually window.__INITIAL_STATE__ or similar
+        profile_data = {}
+
+        # Search for profile image pattern in the whole HTML as a fallback
+        # Profile images on X follow a pattern like pbs.twimg.com/profile_images/
+        avatar_match = re.search(r'https://pbs\.twimg\.com/profile_images/[\d]+/[^"\'\s]+', full_html)
+        avatar = avatar_match.group(0) if avatar_match else None
+
+        # Clean up avatar
+        if avatar:
+            # Remove any trailing characters like " or '
+            avatar = avatar.split('"')[0].split("'")[0]
+            if '_normal' in avatar:
+                avatar = avatar.replace('_normal', '_400x400')
+            elif '_200x200' in avatar:
+                avatar = avatar.replace('_200x200', '_400x400')
+
+        # 2. Extract name and description from meta tags or selectors
         name = page.css('meta[property="og:title"]::attr(content)').get()
         if name:
             name = name.split(' (')[0]
-            
-        avatar = page.css('meta[property="og:image"]::attr(content)').get()
-        if not avatar:
-            avatar = page.css('meta[name="twitter:image"]::attr(content)').get()
+        else:
+            name_el = page.css('[data-testid="UserName"] span::text').getall()
+            if name_el:
+                name = " ".join(name_el).strip()
             
         description = page.css('meta[property="og:description"]::attr(content)').get()
-
-        # 2. Rendered Selectors Fallback (if meta tags are missing or generic)
-        if not name or name == "X" or name == "Twitter":
-            name = page.css('[data-testid="UserName"] span::text').get()
-        
-        if not avatar or 'default_profile' in avatar:
-            # Try finding the large profile image in the rendered page
-            avatar = page.css('[data-testid="UserAvatar-Container"] img::attr(src)').get()
-            
         if not description:
-            description = page.css('[data-testid="UserDescription"]::text').get()
+            description_els = page.css('[data-testid="UserDescription"] ::text').getall()
+            if description_els:
+                description = " ".join(description_els).strip()
 
         # 3. Stats (Followers)
         followers = None
-        if description:
-            f_match = re.search(r'([\d.,]+[KMB]?)\s*(?:followers|seguidores|inscritos|subscribers)', description, re.I)
-            if f_match:
-                followers = f_match.group(1)
+        # Try to find followers in the text specifically
+        # Pattern: "X Followers" or "X Seguidores"
+        f_match = re.search(r'([\d.,]+[KMB]?)\s*(?:Followers|Seguidores)', full_html, re.I)
+        if f_match:
+            followers = f_match.group(1)
         
+        # If still no followers, try CSS selectors
         if not followers:
-            page_text = page.text
-            f_match = re.search(r'([\d.,]+[KMB]?)\s*(?:followers|seguidores|inscritos|subscribers)', page_text, re.I)
-            if f_match:
-                followers = f_match.group(1)
-        
-        # Clean avatar
-        if avatar and '_normal' in avatar:
-            avatar = avatar.replace('_normal', '_400x400')
+            followers_el = page.css('a[href$="/verified_followers"] span span::text').get() or \
+                           page.css('a[href$="/followers"] span span::text').get()
+            if followers_el:
+                followers = followers_el.strip()
+
+        # 4. Final check for avatar if still null or default
+        if not avatar or 'default_profile' in avatar:
+            avatar = page.css('a[href$="/photo"] img::attr(src)').get() or \
+                     page.css('[data-testid="UserAvatar-Container"] img::attr(src)').get()
 
         return {
             "name": name,

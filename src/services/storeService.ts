@@ -25,6 +25,33 @@ export const storeService = {
 
     async replaceAllStores(userId: string, stores: Store[]): Promise<Store[]> {
         try {
+            const existingStoreIds = Array.from(new Set(
+                stores
+                    .map(store => store.id)
+                    .filter((id): id is string => Boolean(id) && !id.startsWith('new-'))
+            ));
+
+            if (existingStoreIds.length > 0) {
+                const { data: ownedStores, error: ownershipError } = await supabase
+                    .from('stores')
+                    .select('id')
+                    .eq('user_id', userId)
+                    .in('id', existingStoreIds);
+
+                if (ownershipError) {
+                    console.error('Error validating store ownership:', ownershipError);
+                    throw ownershipError;
+                }
+
+                const ownedIds = new Set((ownedStores || []).map(store => store.id));
+                const foreignIds = existingStoreIds.filter(id => !ownedIds.has(id));
+                if (foreignIds.length > 0) {
+                    const ownershipError = new Error('STORE_OWNERSHIP_VIOLATION');
+                    (ownershipError as Error & { code?: string }).code = 'OWNERSHIP_VIOLATION';
+                    throw ownershipError;
+                }
+            }
+
             // Transform for DB
             const dbStores = stores.map((store, index) => ({
                 ...storeApiToDb(store, userId),
