@@ -1,31 +1,14 @@
 import { Router } from 'express';
-import { BillingController } from '../controllers/billingController.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// 🛒 CHECKOUT: Create a billing session (PROTECTED)
-// Users must be authenticated to buy a plan
-router.post('/p', authMiddleware, BillingController.checkout);
-
-// 🔔 WEBHOOK: Listener for AbacatePay events (PUBLIC)
-// This is the endpoint you must register in AbacatePay dashboard
-router.post('/webhook', BillingController.webhook);
-
-// 🚫 CANCEL: Support for cancellation (PROTECTED)
-router.post('/cancel', authMiddleware, BillingController.cancelSubscription);
-
-// 🔄 REACTIVATE: Support for restoring canceled subscription (PROTECTED)
-router.post('/reactivate', authMiddleware, BillingController.reactivateSubscription);
-
-// 🧾 INVOICES: Get payment history (PROTECTED)
-router.get('/invoices', authMiddleware, BillingController.getInvoices);
-
-// 🔀 RECONCILE: Manually sync plan (PROTECTED)
-// Used when the user comes back to the admin to check their status
-router.post('/auto-reconcile', authMiddleware, BillingController.autoReconcile);
-
-// ⚙️ CONFIG: Get public billing settings
-router.get('/config', BillingController.getConfig);
+// Billing routes disabled
+router.post('/p', (req, res) => res.status(200).json({ disabled: true, message: 'Billing desativado.' }));
+router.post('/webhook', (req, res) => res.status(200).json({ received: true }));
+router.post('/cancel', (req, res) => res.status(200).json({ success: true }));
+router.post('/reactivate', (req, res) => res.status(200).json({ success: true }));
+router.get('/invoices', (req, res) => res.status(200).json([]));
+router.post('/auto-reconcile', (req, res) => res.status(200).json({ success: true }));
+router.get('/config', (req, res) => res.status(200).json({ enabled: false }));
 
 export default router;

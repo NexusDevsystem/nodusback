@@ -49,7 +49,7 @@ export const checkAndNotifyIncompleteLinks = async () => {
             }
 
             // 3. Filter incomplete links (ignoring collections)
-            const incompleteLinks = (links || []).filter(l => 
+            const incompleteLinks = (links || []).filter((l: any) => 
                 l.type !== 'collection' && isLinkIncomplete(l.url || '', l.platform)
             );
 
@@ -58,7 +58,7 @@ export const checkAndNotifyIncompleteLinks = async () => {
                     console.log(`⏳ [Worker] ${user.email}: Link incompleto detectado. Próximo aviso em ${hoursRemaining.toFixed(1)}h`);
                 } else {
                     const platformNames = Array.from(new Set(
-                        incompleteLinks.map(l => l.platform ? capitalize(l.platform) : (l.title || 'Link Sem Nome'))
+                        incompleteLinks.map((l: any) => l.platform ? capitalize(l.platform) : (l.title || 'Link Sem Nome'))
                     )).join(', ');
 
                     console.log(`📧 [Worker] ${user.email}: 24h passadas. Enviando aviso para: ${platformNames}`);

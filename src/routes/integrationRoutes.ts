@@ -6,26 +6,16 @@ const router = express.Router();
 
 router.get('/me', authMiddleware, integrationController.getMyIntegrations);
 
-router.get('/tiktok/auth-url', authMiddleware, integrationController.getTikTokAuthUrl);
-router.get('/tiktok/callback', integrationController.handleTikTokCallback);
-
-router.get('/instagram/auth-url', authMiddleware, integrationController.getInstagramAuthUrl);
-router.get('/instagram/callback', integrationController.handleInstagramCallback);
-router.post('/instagram/switch', authMiddleware, integrationController.switchInstagramAccount);
-
+// Twitch Integration
 router.get('/twitch/auth-url', authMiddleware, integrationController.getTwitchAuthUrl);
 router.get('/twitch/callback', integrationController.handleTwitchCallback);
 
-router.get('/youtube/auth-url', authMiddleware, integrationController.getYoutubeAuthUrl);
-router.get('/youtube/callback', integrationController.handleYoutubeCallback);
-
+// Kick Integration
 router.get('/kick/auth-url', authMiddleware, integrationController.getKickAuthUrl);
 router.get('/kick/callback', integrationController.handleKickCallback);
 router.post('/kick/connect', authMiddleware, integrationController.connectKickAccount);
 
+// Generic Disconnect
 router.delete('/:provider', authMiddleware, integrationController.disconnectIntegration);
-router.get('/instagram/webhook', integrationController.handleInstagramWebhook);
-router.post('/instagram/webhook', integrationController.handleInstagramWebhook);
-router.post('/instagram/deauthorize', integrationController.handleInstagramDeauthorize);
 
 export default router;

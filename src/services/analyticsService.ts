@@ -39,7 +39,7 @@ export const analyticsService = {
         // Diagnostic: log raw events
         console.log(`📊 [Summary] Raw events returned: ${events?.length || 0}`);
         if (events && events.length > 0) {
-            events.slice(0, 5).forEach((e, i) => {
+            events.slice(0, 5).forEach((e: any, i: number) => {
                 console.log(`📊 [Summary] Event[${i}]: type="${e.type}", created_at="${e.created_at}", link_id=${e.link_id || 'null'}, product_id=${e.product_id || 'null'}`);
             });
         }
@@ -71,7 +71,7 @@ export const analyticsService = {
         let totalClicks = 0;
         const linkStats = new Map();
 
-        events?.forEach(event => {
+        events?.forEach((event: any) => {
             const ts = event.created_at;
             if (!ts) {
                 console.log(`📊 [Summary] Skipping event with null created_at`);

@@ -18,7 +18,7 @@ export const announcementService = {
                 .select('announcement_id')
                 .eq('user_id', userId);
             
-            const seenIds = (seenViews || []).map(v => v.announcement_id);
+            const seenIds = (seenViews || []).map((v: any) => v.announcement_id);
 
             // 2. Filter out dismissed announcements
             if (seenIds.length > 0) {

@@ -182,7 +182,7 @@ const fileController = {
 
             if (error) throw error;
 
-            const formattedFiles = dbFiles?.map(f => ({
+            const formattedFiles = dbFiles?.map((f: any) => ({
                 ...f,
                 url: f.url, // Directly use stored public URL
                 cloudUrl: f.url,

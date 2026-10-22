@@ -313,7 +313,7 @@ export const linkService = {
                 .eq('user_id', userId);
 
             if (fetchError) throw fetchError;
-            const existingIds = new Set((existingLinks || []).map(l => l.id));
+            const existingIds = new Set((existingLinks || []).map((l: any) => l.id));
             const activeIds = new Set<string>();
 
             const idMap = new Map<string, string>();
@@ -400,7 +400,7 @@ export const linkService = {
             }
 
             // 4. Cleanup deleted links
-            const idsToDelete = Array.from(existingIds).filter(id => !activeIds.has(id));
+            const idsToDelete = Array.from(existingIds).map(String).filter((id: string) => !activeIds.has(id));
             if (idsToDelete.length > 0) {
                 await supabase.from('clicks').delete().in('link_id', idsToDelete);
                 await supabase.from('links').delete().in('id', idsToDelete).eq('user_id', userId);

@@ -43,7 +43,7 @@ export const storeService = {
                     throw ownershipError;
                 }
 
-                const ownedIds = new Set((ownedStores || []).map(store => store.id));
+                const ownedIds = new Set((ownedStores || []).map((store: any) => store.id));
                 const foreignIds = existingStoreIds.filter(id => !ownedIds.has(id));
                 if (foreignIds.length > 0) {
                     const ownershipError = new Error('STORE_OWNERSHIP_VIOLATION');

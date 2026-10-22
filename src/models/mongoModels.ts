@@ -1,16 +1,15 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, SchemaOptions } from 'mongoose';
 import crypto from 'crypto';
 
-// --- HELPER OPTIONS ---
-const defaultOptions = {
-    timestamps: false, // We will manually manage created_at / updated_at or pass them from DB
+const defaultOptions: SchemaOptions = {
+    timestamps: false,
     versionKey: false,
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
 };
 
 // --- 1. USER SCHEMA ---
-export interface IUser extends Document {
+export interface IUser {
     _id: string;
     id: string;
     email: string;
@@ -142,13 +141,12 @@ const UserSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-UserSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+UserSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 2. LINK SCHEMA ---
-export interface ILink extends Document {
+export interface ILink {
     _id: string;
     id: string;
     user_id: string;
@@ -212,13 +210,12 @@ const LinkSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-LinkSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+LinkSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 3. PRODUCT SCHEMA ---
-export interface IProduct extends Document {
+export interface IProduct {
     _id: string;
     id: string;
     user_id: string;
@@ -252,13 +249,12 @@ const ProductSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-ProductSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+ProductSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 4. STORE SCHEMA ---
-export interface IStore extends Document {
+export interface IStore {
     _id: string;
     id: string;
     user_id: string;
@@ -288,13 +284,12 @@ const StoreSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-StoreSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+StoreSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 5. EVENT SCHEMA ---
-export interface IEvent extends Document {
+export interface IEvent {
     _id: string;
     id: string;
     user_id: string;
@@ -330,13 +325,12 @@ const EventSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-EventSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+EventSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 6. LEAD SCHEMA ---
-export interface ILead extends Document {
+export interface ILead {
     _id: string;
     id: string;
     user_id: string;
@@ -358,13 +352,12 @@ const LeadSchema = new Schema({
     created_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-LeadSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+LeadSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
-// --- 7. CLICK / ANALYTICS SCHEMA ---
-export interface IClick extends Document {
+// --- 7. CLICK SCHEMA ---
+export interface IClick {
     _id: string;
     id: string;
     user_id: string;
@@ -386,13 +379,12 @@ const ClickSchema = new Schema({
     created_at: { type: Date, default: Date.now, index: true }
 }, defaultOptions);
 
-ClickSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+ClickSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
-// --- 8. SOCIAL INTEGRATIONS SCHEMA ---
-export interface ISocialIntegration extends Document {
+// --- 8. SOCIAL INTEGRATION SCHEMA ---
+export interface ISocialIntegration {
     _id: string;
     id: string;
     user_id: string;
@@ -420,13 +412,12 @@ const SocialIntegrationSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-SocialIntegrationSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+SocialIntegrationSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 9. BLOG POST SCHEMA ---
-export interface IBlogPost extends Document {
+export interface IBlogPost {
     _id: string;
     id: string;
     title: string;
@@ -466,13 +457,12 @@ const BlogPostSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-BlogPostSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+BlogPostSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
-// --- 10. BLOG POST LIKES SCHEMA ---
-export interface IBlogPostLike extends Document {
+// --- 10. BLOG POST LIKE SCHEMA ---
+export interface IBlogPostLike {
     _id: string;
     id: string;
     post_id: string;
@@ -488,13 +478,8 @@ const BlogPostLikeSchema = new Schema({
     created_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-BlogPostLikeSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
-});
-
 // --- 11. AUTH OTP SCHEMA ---
-export interface IAuthOtp extends Document {
+export interface IAuthOtp {
     _id: string;
     id: string;
     email: string;
@@ -514,13 +499,8 @@ const AuthOtpSchema = new Schema({
     created_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-AuthOtpSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
-});
-
 // --- 12. ROADMAP TASK SCHEMA ---
-export interface IRoadmapTask extends Document {
+export interface IRoadmapTask {
     _id: string;
     id: string;
     title: string;
@@ -546,13 +526,12 @@ const RoadmapTaskSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-RoadmapTaskSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+RoadmapTaskSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 13. ANNOUNCEMENT SCHEMA ---
-export interface IAnnouncement extends Document {
+export interface IAnnouncement {
     _id: string;
     id: string;
     title: string;
@@ -580,13 +559,12 @@ const AnnouncementSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-AnnouncementSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+AnnouncementSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
 // --- 14. ANNOUNCEMENT VIEW SCHEMA ---
-export interface IAnnouncementView extends Document {
+export interface IAnnouncementView {
     _id: string;
     user_id: string;
     announcement_id: string;
@@ -601,7 +579,7 @@ const AnnouncementViewSchema = new Schema({
 }, defaultOptions);
 
 // --- 15. VERIFICATION REQUEST SCHEMA ---
-export interface IVerificationRequest extends Document {
+export interface IVerificationRequest {
     _id: string;
     id: string;
     user_id: string;
@@ -643,24 +621,23 @@ const VerificationRequestSchema = new Schema({
     updated_at: { type: Date, default: Date.now }
 }, defaultOptions);
 
-VerificationRequestSchema.pre('save', function (next) {
-    if (!this.id) this.id = this._id;
-    next();
+VerificationRequestSchema.pre('save', function () {
+    if (!this.id) this.id = String(this._id);
 });
 
-// --- MODELS EXPORTS (with collection names matching Supabase) ---
-export const UserModel = mongoose.models.User || mongoose.model<IUser>('User', UserSchema, 'users');
-export const LinkModel = mongoose.models.Link || mongoose.model<ILink>('Link', LinkSchema, 'links');
-export const ProductModel = mongoose.models.Product || mongoose.model<IProduct>('Product', ProductSchema, 'products');
-export const StoreModel = mongoose.models.Store || mongoose.model<IStore>('Store', StoreSchema, 'stores');
-export const EventModel = mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema, 'events');
-export const LeadModel = mongoose.models.Lead || mongoose.model<ILead>('Lead', LeadSchema, 'leads');
-export const ClickModel = mongoose.models.Click || mongoose.model<IClick>('Click', ClickSchema, 'clicks');
-export const SocialIntegrationModel = mongoose.models.SocialIntegration || mongoose.model<ISocialIntegration>('SocialIntegration', SocialIntegrationSchema, 'social_integrations');
-export const BlogPostModel = mongoose.models.BlogPost || mongoose.model<IBlogPost>('BlogPost', BlogPostSchema, 'blog_posts');
-export const BlogPostLikeModel = mongoose.models.BlogPostLike || mongoose.model<IBlogPostLike>('BlogPostLike', BlogPostLikeSchema, 'blog_post_likes');
-export const AuthOtpModel = mongoose.models.AuthOtp || mongoose.model<IAuthOtp>('AuthOtp', AuthOtpSchema, 'auth_otps');
-export const RoadmapTaskModel = mongoose.models.RoadmapTask || mongoose.model<IRoadmapTask>('RoadmapTask', RoadmapTaskSchema, 'roadmap_tasks');
-export const AnnouncementModel = mongoose.models.Announcement || mongoose.model<IAnnouncement>('Announcement', AnnouncementSchema, 'announcements');
-export const AnnouncementViewModel = mongoose.models.AnnouncementView || mongoose.model<IAnnouncementView>('AnnouncementView', AnnouncementViewSchema, 'announcement_views');
-export const VerificationRequestModel = mongoose.models.VerificationRequest || mongoose.model<IVerificationRequest>('VerificationRequest', VerificationRequestSchema, 'verification_requests');
+// --- MODELS EXPORTS ---
+export const UserModel = mongoose.models.User || mongoose.model('User', UserSchema, 'users');
+export const LinkModel = mongoose.models.Link || mongoose.model('Link', LinkSchema, 'links');
+export const ProductModel = mongoose.models.Product || mongoose.model('Product', ProductSchema, 'products');
+export const StoreModel = mongoose.models.Store || mongoose.model('Store', StoreSchema, 'stores');
+export const EventModel = mongoose.models.Event || mongoose.model('Event', EventSchema, 'events');
+export const LeadModel = mongoose.models.Lead || mongoose.model('Lead', LeadSchema, 'leads');
+export const ClickModel = mongoose.models.Click || mongoose.model('Click', ClickSchema, 'clicks');
+export const SocialIntegrationModel = mongoose.models.SocialIntegration || mongoose.model('SocialIntegration', SocialIntegrationSchema, 'social_integrations');
+export const BlogPostModel = mongoose.models.BlogPost || mongoose.model('BlogPost', BlogPostSchema, 'blog_posts');
+export const BlogPostLikeModel = mongoose.models.BlogPostLike || mongoose.model('BlogPostLike', BlogPostLikeSchema, 'blog_post_likes');
+export const AuthOtpModel = mongoose.models.AuthOtp || mongoose.model('AuthOtp', AuthOtpSchema, 'auth_otps');
+export const RoadmapTaskModel = mongoose.models.RoadmapTask || mongoose.model('RoadmapTask', RoadmapTaskSchema, 'roadmap_tasks');
+export const AnnouncementModel = mongoose.models.Announcement || mongoose.model('Announcement', AnnouncementSchema, 'announcements');
+export const AnnouncementViewModel = mongoose.models.AnnouncementView || mongoose.model('AnnouncementView', AnnouncementViewSchema, 'announcement_views');
+export const VerificationRequestModel = mongoose.models.VerificationRequest || mongoose.model('VerificationRequest', VerificationRequestSchema, 'verification_requests');
