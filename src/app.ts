@@ -43,6 +43,7 @@ const allowedOrigins = new Set([
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
+    'https://api.nodus.my',
     'http://n9f550sluxfpkvlgxvizddwt.200.141.22.21.sslip.io',
     'https://n9f550sluxfpkvlgxvizddwt.200.141.22.21.sslip.io'
 ].filter(Boolean).map(origin => {
